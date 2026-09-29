@@ -1086,6 +1086,38 @@ function matchRoute(array $profiles, string $host, array $ips, string $proto, in
   return ['proto' => $proto, 'port' => $port, 'l7' => $l7, 'profile' => null, 'steps' => $steps];
 }
 
+// Ограничение «16-20 КБ» (ТСПУ): к зарубежным хостингам соединение замирает после ~16–20 КБ или ~25 пакетов —
+// без RST, просто перестают приходить пакеты. Маленькая страница его не покажет, поэтому, как чекер
+// hyperion-cs/dpi-checkers (tcp-16-20), отправляем POST на 64 КБ в новом соединении.
+const VOLUME_BYTES = 65536;
+const VOLUME_SMALL = 24576;   // страница меньше — объёмом её не проверить, нужен POST
+const REASON_FREEZE = 'соединение зависает на объёме (после ~16–20 КБ)';
+
+// true — соединение замерло на объёме; false — прошло или результат не показателен
+function volumeFrozen(string $url): bool
+{
+  $ch = curl_init($url . (str_contains($url, '?') ? '&' : '?') . 't=' . mt_rand());
+  curl_setopt_array($ch, [
+    CURLOPT_POST => true,
+    CURLOPT_POSTFIELDS => random_bytes(VOLUME_BYTES),   // случайные данные — чтобы не сжимались
+    CURLOPT_HTTPHEADER => ['Expect:', 'Content-Type: application/octet-stream'],
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_FOLLOWLOCATION => false,
+    CURLOPT_CONNECTTIMEOUT => 5,
+    CURLOPT_TIMEOUT => 8,
+    CURLOPT_NOSIGNAL => 1,
+    CURLOPT_SSL_VERIFYPEER => false,
+    CURLOPT_SSL_VERIFYHOST => 0,
+    CURLOPT_USERAGENT => 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36',
+  ]);
+  curl_exec($ch);
+  // рукопожатие прошло (APPCONNECT), а ответа на 64 КБ нет. Если TLS не установился, CONNECT_TIME тоже 0 —
+  // по нему «TCP или TLS» не различить
+  $frozen = curl_errno($ch) === 28 && curl_getinfo($ch, CURLINFO_APPCONNECT_TIME) > 0;
+  curl_close($ch);
+  return $frozen;
+}
+
 function probe(string $host): array
 {
   $ch = curl_init('https://' . $host . '/');
@@ -1108,7 +1140,7 @@ function probe(string $host): array
     },
     CURLOPT_WRITEFUNCTION => function ($ch, $chunk) use (&$got) {
       $got += strlen($chunk);
-      return $got > 32768 ? 0 : strlen($chunk);
+      return $got > VOLUME_BYTES ? 0 : strlen($chunk);   // хватит: объём уже прошёл
     },
   ]);
   $t = microtime(true);
@@ -1116,20 +1148,25 @@ function probe(string $host): array
   $errno = curl_errno($ch);
   $err = curl_error($ch);
   curl_close($ch);
-  $ok = $code !== null;
-  $reason = null;
-  if (!$ok) {
-    $reason = match ($errno) {
-      6 => 'имя не разрешается (DNS)',
-      7 => 'не удалось подключиться',
-      28 => 'нет ответа (тайм-аут) — похоже на блокировку',
-      35 => 'обрыв при установке TLS — похоже на блокировку DPI',
-      52 => 'сервер ничего не ответил',
-      56 => 'соединение сброшено — похоже на блокировку DPI',
-      default => $err ?: "ошибка $errno",
-    };
+  $ms = (int)round((microtime(true) - $t) * 1000);
+  // ответ пришёл, но тело встало — это заморозка, а не рабочий сайт
+  if ($code !== null && $errno === 28) {
+    return ['ok' => false, 'code' => $code, 'ms' => $ms, 'reason' => REASON_FREEZE];
   }
-  return ['ok' => $ok, 'code' => $code, 'ms' => (int)round((microtime(true) - $t) * 1000), 'reason' => $reason];
+  if ($code !== null) {
+    $frozen = $got < VOLUME_SMALL && volumeFrozen('https://' . $host . '/');
+    return ['ok' => !$frozen, 'code' => $code, 'ms' => $ms, 'reason' => $frozen ? REASON_FREEZE : null];
+  }
+  $reason = match ($errno) {
+    6 => 'имя не разрешается (DNS)',
+    7 => 'не удалось подключиться',
+    28 => 'нет ответа (тайм-аут) — похоже на блокировку',
+    35 => 'обрыв при установке TLS — похоже на блокировку DPI',
+    52 => 'сервер ничего не ответил',
+    56 => 'соединение сброшено — похоже на блокировку DPI',
+    default => $err ?: "ошибка $errno",
+  };
+  return ['ok' => false, 'code' => null, 'ms' => $ms, 'reason' => $reason];
 }
 
 // ================= справочник и проверка синтаксиса =================
@@ -2584,21 +2621,39 @@ function testRules(string $mode, string $iface): void
 function curlProbe(string $host, bool $http): array
 {
   $url = ($http ? 'http://' : 'https://') . $host . '/';
-  $cmd = 'curl -4 -sk -o /dev/null -w "%{http_code} %{time_total}" --local-port ' . str_replace(':', '-', TEST_PORTS)
-    . ' --connect-timeout 4 -m 7 -A ' . escapeshellarg('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130 Safari/537.36') . ' ' . escapeshellarg($url);
+  // Начальный порт — случайный: curl берёт первый свободный, и соединения подряд шли бы с одного и того же
+  // порта к тому же серверу — на следующее может повлиять остаток прошлого (conntrack, состояние у провайдера).
+  $curl = function () {
+    [$lo, $hi] = array_map('intval', explode(':', TEST_PORTS));
+    return 'curl -4 -sk -o /dev/null --local-port ' . mt_rand($lo, $hi - 50) . '-' . $hi
+      . ' --connect-timeout 4 -A ' . escapeshellarg('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130 Safari/537.36');
+  };
   $out = [];
-  exec($cmd . ' 2>/dev/null', $out, $rc);
-  [$code, $time] = array_pad(explode(' ', trim($out[0] ?? '')), 2, '0');
+  exec($curl() . ' -m 7 -r 0-' . (VOLUME_BYTES - 1) . ' -w "%{http_code} %{time_total} %{size_download}" ' . escapeshellarg($url) . ' 2>/dev/null', $out, $rc);
+  [$code, $time, $size] = array_pad(explode(' ', trim($out[0] ?? '')), 3, '0');
   $ok = $rc === 0 && (int)$code > 0;
   $reason = $ok ? null : (match ($rc) {
     6 => 'имя не разрешается',
     7 => 'не удалось подключиться',
-    28 => 'тайм-аут',
+    28 => (int)$code > 0 ? REASON_FREEZE : 'тайм-аут',
     35 => 'обрыв TLS',
     52 => 'пустой ответ',
     56 => 'соединение сброшено',
     default => "ошибка curl $rc",
   });
+  // маленькая страница — проверяем объём, как чекер tcp-16-20 (см. volumeFrozen)
+  if ($ok && (int)$size < VOLUME_SMALL) {
+    $body = TEST_DIR . '/volume.bin';
+    if (!is_file($body) || filesize($body) !== VOLUME_BYTES) {
+      file_put_contents($body, random_bytes(VOLUME_BYTES));
+    }
+    $vout = [];
+    exec($curl() . ' -m 8 -H "Expect:" -H "Content-Type: application/octet-stream" --data-binary @' . escapeshellarg($body)
+      . ' -w "%{time_appconnect}" ' . escapeshellarg($url . '?t=' . mt_rand()) . ' 2>/dev/null', $vout, $vrc);
+    if ($vrc === 28 && (float)trim($vout[0] ?? '0') > 0) {
+      [$ok, $reason] = [false, REASON_FREEZE];
+    }
+  }
   return ['ok' => $ok, 'code' => (int)$code, 'ms' => (int)round((float)$time * 1000), 'reason' => $reason];
 }
 

@@ -746,10 +746,15 @@ function checkHost(host) {
   }
 }
 
+// Ограничение ТСПУ «16-20 КБ»: соединение с зарубежным хостингом замирает на объёме. Стратегии nfqws2 его не снимают.
+const isFreeze = (reason) => !!reason && reason.includes('на объёме');
+const FREEZE_HINT = 'Похоже на ограничение ТСПУ «16-20 КБ»: соединения с зарубежными хостингами (Hetzner, DigitalOcean, OVH, Contabo…) зависают после ~16–20 КБ — маленькие страницы открываются, остальное нет. Стратегии nfqws2 его, как правило, не снимают, а обход DPI к таким адресам бывает только хуже — нужен VPN или прокси. Проверить провайдера можно чекером hyperion-cs.github.io/dpi-checkers/ru/tcp-16-20.';
+
 function probeVerdict(res, pr) {
   const p = res.routes.https.profile ? prof(res.routes.https.profile) : null;
   if (pr.ok) return notice('ok', 'Открывается', `HTTP ${pr.code}, ${pr.ms} мс.` + (p ? ` HTTPS — профиль #${p.index}.` : ' nfqws2 его не трогает — и не нужно.'));
   if (pr.reason && pr.reason.includes('DNS')) return notice('warn', 'Не открывается: ' + pr.reason, 'Проблема DNS, а не DPI — списки nfqws2 тут не помогут.');
+  if (isFreeze(pr.reason)) return notice('bad', 'Открывается частично: ' + pr.reason, FREEZE_HINT + (p ? ` Сейчас HTTPS идёт через профиль #${p.index}.` : ''));
   if (!p) return notice('bad', 'Не открывается: ' + pr.reason, 'nfqws2 его не обрабатывает. Добавьте сайт в список, который ведёт в подходящий профиль, или подберите стратегию тестом.');
   return notice('bad', 'Не открывается: ' + pr.reason, `Профиль #${p.index} (${strategyText(p)}) не помогает. Подберите стратегию тестом или исключите сайт из этого профиля.`);
 }
@@ -2706,13 +2711,13 @@ async function viewTests(main, r) {
     });
     return h('div', { class: 'stack', style: 'gap:14px' },
       baseline ? (baseline.ok ? notice('info', 'Без обхода сайт открывается', `HTTP ${baseline.code}, ${baseline.ms} мс — блокировки нет, стратегия не нужна.`)
-        : notice('warn', 'Без обхода сайт не открывается: ' + baseline.reason, baseline.reason === 'соединение сброшено' || baseline.reason === 'обрыв TLS' ? 'Похоже на блокировку по SNI (DPI) — обход поможет.' : 'Похоже на блокировку по DPI или IP.')) : null,
+        : notice('warn', 'Без обхода сайт не открывается: ' + baseline.reason, baseline.reason === 'соединение сброшено' || baseline.reason === 'обрыв TLS' ? 'Похоже на блокировку по SNI (DPI) — обход поможет.' : isFreeze(baseline.reason) ? FREEZE_HINT : 'Похоже на блокировку по DPI или IP.')) : null,
       !running ? recommendation(s, good, best) : null,
       !running && best ? h('div', { class: 'notice ok' }, icon('ok'), h('div', { class: 'grow' },
         h('b', { text: `Работают ${good.length} из ${res.length}. Быстрее всех — ${best.name}, ${best.ms} мс.` }),
         h('div', { class: 't', text: best.from }), h('code', { class: 'sm', style: 'word-break:break-all', text: best.steps.join(' ') })),
         h('div', { class: 'notice-actions' }, applyMenu(best.steps, s, 'primary'), btn('Скопировать', () => copyText(best.steps.join('\n')), 'small', 'copy'))) : null,
-      !running && !best && res.length ? notice('bad', 'Ни одна стратегия не помогла', 'Попробуйте больше повторов, протокол HTTP или другой сайт. Если без обхода соединение не устанавливается вовсе — возможно, заблокирован IP, тогда nfqws2 не поможет.') : null,
+      !running && !best && res.length ? notice('bad', 'Ни одна стратегия не помогла', isFreeze(baseline?.reason) ? FREEZE_HINT : 'Попробуйте больше повторов, протокол HTTP или другой сайт. Если без обхода соединение не устанавливается вовсе — возможно, заблокирован IP, тогда nfqws2 не поможет.') : null,
       panel(`Результаты для ${s.host}`, h('span', { class: 'sm muted num', text: `${res.length} стратегий · ${rep} повт.` + (s.finished ? ` · ${Math.round((s.finished - s.started))} с` : '') }),
         h('div', { class: 'scroll' }, h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, h('th'), h('th', { text: 'Стратегия' }), h('th', { text: 'Откуда' }), h('th', { text: 'Результат' }), h('th', { class: 'num', text: 'Время' }), h('th'))), h('tbody', {}, rows)))));
   }
