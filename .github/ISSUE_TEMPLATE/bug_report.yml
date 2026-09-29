@@ -1,0 +1,72 @@
+name: Ошибка
+description: Что-то работает не так, как описано в README
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Спасибо, что сообщаете об ошибке. Вопросы «как настроить» и «какую стратегию выбрать» лучше задавать в [Обсуждениях → Q&A](https://github.com/zemidala/nfqws2-ui/discussions/categories/q-a).
+
+        ⚠️ **Не публикуйте пароли, ключи Wi-Fi/VPN и токен Telegram.** Перед вставкой конфига или журнала проверьте, что в них нет секретов.
+  - type: input
+    id: ui-version
+    attributes:
+      label: Версия nfqws2-ui
+      description: «Настройки → О программе» или `nfqws-ui version`
+      placeholder: 1.2.0
+    validations:
+      required: true
+  - type: input
+    id: nfqws2-version
+    attributes:
+      label: Версия nfqws2-keenetic
+      description: слева вверху рядом с «nfqws2» или `opkg list-installed nfqws2-keenetic`
+      placeholder: 1.3.1
+    validations:
+      required: true
+  - type: input
+    id: system
+    attributes:
+      label: Роутер и система
+      description: модель и версия OpenWrt (`cat /etc/openwrt_release`)
+      placeholder: GL.iNet GL-MT6000, OpenWrt 24.10.6
+    validations:
+      required: true
+  - type: textarea
+    id: what
+    attributes:
+      label: Что случилось
+      description: Что вы делали, что ожидали увидеть и что получили вместо этого
+    validations:
+      required: true
+  - type: textarea
+    id: steps
+    attributes:
+      label: Как повторить
+      placeholder: |
+        1. Открыть «Настройки → Конфиг целиком»
+        2. Вставить …
+        3. Нажать «Сохранить»
+  - type: textarea
+    id: logs
+    attributes:
+      label: Журнал и сообщения
+      description: Текст ошибки из интерфейса, `logread | grep -E "nfqws|lighttpd"`, консоль браузера (F12). Без секретов.
+      render: text
+  - type: textarea
+    id: config
+    attributes:
+      label: Фрагмент конфига (если относится к делу)
+      description: Только нужные переменные из /etc/nfqws2/nfqws2.conf
+      render: shell
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Перед отправкой
+      options:
+        - label: Я поискал среди открытых и закрытых issue — такой ошибки ещё нет
+          required: true
+        - label: Я прочитал раздел «Ограничения и предупреждения» в README
+          required: true
+        - label: В тексте нет паролей, ключей и токенов
+          required: true

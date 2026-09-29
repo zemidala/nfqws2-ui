@@ -226,6 +226,16 @@ nfqws-ui-setup remove               убрать конфиг lighttpd и зад
 - Проверка сайта повторяет логику выбора профиля в nfqws2: порты, L7, списки хостов и IP, исключения.
 - podkop определяется по FakeIP (198.18.0.0/15) в ответе DNS 127.0.0.42.
 
+## Помощь и обратная связь
+
+- **Вопрос по настройке** («как сделать…», «почему не открывается сайт») — [Обсуждения → Q&A](https://github.com/zemidala/nfqws2-ui/discussions/categories/q-a).
+- **Идея** — [Обсуждения → Ideas](https://github.com/zemidala/nfqws2-ui/discussions/categories/ideas), там за неё можно проголосовать.
+- **Ошибка** — [новый issue](https://github.com/zemidala/nfqws2-ui/issues/new/choose): укажите версии nfqws2-ui и nfqws2-keenetic, роутер и шаги.
+- **Уязвимость** — только [приватно](https://github.com/zemidala/nfqws2-ui/security/advisories/new), см. [SECURITY.md](SECURITY.md).
+- Ошибки самого nfqws2 и стратегий обхода — в [zapret2](https://github.com/bol-van/zapret2), установки nfqws2 и init-скрипта — в [nfqws2-keenetic](https://github.com/nfqws/nfqws2-keenetic).
+
+Не публикуйте в конфигах и журналах пароли, ключи Wi-Fi/VPN и токен Telegram.
+
 ## Вопросы
 
 **Интерфейс не открывается.**

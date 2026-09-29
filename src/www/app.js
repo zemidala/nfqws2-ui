@@ -2503,7 +2503,7 @@ async function paneAbout(content) {
       row('Версия', h('b', { text: st.ui?.version || '?' })),
       row('nfqws2', st.version ? 'v' + st.version : 'не определена'),
       row('Исходный код', link(REPO, REPO.replace('https://', ''))),
-      row('Описание и помощь', h('a', { href: '#/settings/readme', text: 'справка (README)' }), ' · ', h('a', { href: '#/settings/changelog', text: 'изменения по версиям' }), ' · ', link(REPO + '/issues', 'сообщить о проблеме')),
+      row('Описание и помощь', h('a', { href: '#/settings/readme', text: 'справка (README)' }), ' · ', h('a', { href: '#/settings/changelog', text: 'изменения по версиям' }), ' · ', link(REPO + '/discussions/categories/q-a', 'задать вопрос'), ' · ', link(REPO + '/issues/new/choose', 'сообщить о проблеме')),
       row('Лицензия', 'MIT')),
     panel('Обновления', null,
       u.available

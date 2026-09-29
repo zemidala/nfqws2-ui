@@ -1,0 +1,29 @@
+name: Предложение
+description: Новая возможность или улучшение интерфейса
+labels: [enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Идею можно сначала обсудить в [Обсуждениях → Ideas](https://github.com/zemidala/nfqws2-ui/discussions/categories/ideas) — там за неё смогут проголосовать другие.
+  - type: textarea
+    id: problem
+    attributes:
+      label: Какую задачу это решит
+      description: Что сейчас неудобно или невозможно
+    validations:
+      required: true
+  - type: textarea
+    id: solution
+    attributes:
+      label: Как это могло бы выглядеть
+      description: Где в интерфейсе, что нажимать, что должно получиться. Можно приложить набросок.
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Как вы обходитесь сейчас
+  - type: input
+    id: ui-version
+    attributes:
+      label: Версия nfqws2-ui
+      placeholder: 1.2.0

@@ -1,0 +1,25 @@
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        ⚠️ **Не публикуйте пароли, ключи Wi-Fi/VPN и токен Telegram** — проверьте конфиг и журнал перед вставкой.
+  - type: textarea
+    id: question
+    attributes:
+      label: Вопрос
+      description: Что хотите сделать и что уже пробовали
+    validations:
+      required: true
+  - type: input
+    id: versions
+    attributes:
+      label: Версии
+      description: nfqws2-ui, nfqws2-keenetic, OpenWrt
+      placeholder: nfqws2-ui 1.2.0, nfqws2-keenetic 1.3.1, OpenWrt 24.10.6
+  - type: textarea
+    id: details
+    attributes:
+      label: Подробности
+      description: Фрагмент конфига, результат «Проверить сайт» или теста стратегий, журнал
+      render: text

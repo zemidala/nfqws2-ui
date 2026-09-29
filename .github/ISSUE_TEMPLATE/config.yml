@@ -1,0 +1,17 @@
+blank_issues_enabled: false
+contact_links:
+  - name: Вопрос по настройке
+    url: https://github.com/zemidala/nfqws2-ui/discussions/categories/q-a
+    about: Как настроить, какую стратегию выбрать, почему не открывается сайт — в Обсуждения, раздел Q&A
+  - name: Идея или обсуждение
+    url: https://github.com/zemidala/nfqws2-ui/discussions/categories/ideas
+    about: Предложения, которые хочется сначала обсудить
+  - name: Уязвимость
+    url: https://github.com/zemidala/nfqws2-ui/security/advisories/new
+    about: Сообщить о проблеме безопасности приватно (не в публичном issue) — см. SECURITY.md
+  - name: Сам nfqws2 / zapret2
+    url: https://github.com/bol-van/zapret2
+    about: Ошибки самого nfqws2 и стратегий обхода — в репозиторий zapret2
+  - name: Пакет nfqws2-keenetic
+    url: https://github.com/nfqws/nfqws2-keenetic
+    about: Установка nfqws2, init-скрипт, правила iptables
