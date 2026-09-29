@@ -534,3 +534,15 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 @media (max-width: 1439px) { .repo-link span, .https-link span, .undo-label { display: none; } }
 /* 760–1099px: вкладки без подписей, кроме открытой, — иначе шапка шире экрана */
 @media (min-width: 760px) and (max-width: 1099px) { .tabs a:not(.on) span { display: none; } .tabs a { padding: 0 10px; } .brand small { display: none; } }
+
+/* выбор интерфейса провайдера */
+.iface-pick { grid-column: 2; display: grid; gap: 8px; }
+.iface-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.iface { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 5px 10px; border: 1px solid var(--line); border-radius: calc(var(--radius) * .7 + 2px); background: var(--surface); color: var(--fg); font-size: 12.5px; cursor: pointer; text-align: left; }
+.iface:hover { background: var(--soft); }
+.iface.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.iface.dim { opacity: .7; }
+.iface .mono { font-weight: 600; }
+/* «Параметры запуска»: добавление из списков */
+.base-add .select { flex: 1 1 180px; min-width: 0; }
+@media (max-width: 759px) { .iface-pick { grid-column: 1; } .base-add .select { max-width: 100%; flex: 1 1 100%; } }

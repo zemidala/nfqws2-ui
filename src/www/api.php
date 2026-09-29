@@ -1350,6 +1350,64 @@ function wanIface(): string
   return ROOT ? 'eth3' : 'wan';
 }
 
+// Сетевые интерфейсы роутера для выбора ISP_INTERFACE: адреса, маршрут по умолчанию, имя в OpenWrt (wan, lan…)
+// и годится ли интерфейс в принципе (порты моста, Wi-Fi и мосты локальной сети — нет)
+function netIfaces(): array
+{
+  $def = [];
+  exec('ip -4 route show default 2>/dev/null', $rt4);
+  exec('ip -6 route show default 2>/dev/null', $rt6);
+  foreach ([4 => $rt4, 6 => $rt6] as $v => $rt) {
+    foreach ($rt as $l) {
+      if (preg_match('/\bdev (\S+)/', $l, $m)) {
+        $def[$m[1]][] = "IPv$v";
+      }
+    }
+  }
+  $logical = [];
+  exec('ubus call network.interface dump 2>/dev/null', $u);
+  foreach (json_decode(implode("\n", $u), true)['interface'] ?? [] as $x) {
+    $d = $x['l3_device'] ?? $x['device'] ?? null;
+    if ($d && !in_array($x['interface'], $logical[$d] ?? [], true)) {
+      $logical[$d][] = $x['interface'];
+    }
+  }
+  $ips = [];
+  exec('ip -o addr show 2>/dev/null', $ad);
+  foreach ($ad as $l) {
+    if (preg_match('/^\d+:\s+(\S+)\s+inet6?\s+(\S+)/', $l, $m) && !str_starts_with($m[2], 'fe80')) {
+      $ips[$m[1]][] = $m[2];
+    }
+  }
+  $res = [];
+  foreach (glob('/sys/class/net/*') as $p) {
+    $n = basename($p);
+    if ($n === 'lo') {
+      continue;
+    }
+    $type = (int)@file_get_contents("$p/type");
+    $kind = is_dir("$p/bridge") ? 'bridge' : (is_dir("$p/phy80211") ? 'wifi' : ($type === 512 ? 'ppp' : ($type === 65534 ? 'tunnel' : 'ethernet')));
+    $port = is_dir("$p/brport");
+    $state = trim((string)@file_get_contents("$p/operstate"));
+    $res[] = ['name' => $n, 'kind' => $kind, 'up' => in_array($state, ['up', 'unknown'], true), 'ips' => $ips[$n] ?? [],
+      'default' => $def[$n] ?? [], 'logical' => $logical[$n] ?? [],
+      // для nfqws2 подходит интерфейс с адресом, не мост локальной сети и не его порт
+      'usable' => !$port && $kind !== 'bridge' && $kind !== 'wifi' && (!empty($ips[$n]) || isset($def[$n]))];
+  }
+  // сначала интерфейсы с маршрутом по умолчанию, потом подходящие, потом остальные
+  usort($res, fn($a, $b) => [!$a['default'], !$a['usable'], $a['name']] <=> [!$b['default'], !$b['usable'], $b['name']]);
+  return $res;
+}
+
+// Файлы, которые можно подключить в «Параметрах запуска»: lua-скрипты и блобы
+function baseFiles(): array
+{
+  $lua = array_map('basename', glob(LUA_DIR . '/*.lua') ?: []);
+  $blobs = array_values(array_filter(array_map('basename', glob(CONF_DIR . '/blobs/*') ?: []),
+    fn($f) => !preg_match('/\.(lua|gz)$/', $f) && is_file(CONF_DIR . "/blobs/$f")));
+  return ['lua' => $lua, 'lua_dir' => LUA_DIR, 'blobs' => $blobs, 'blob_dir' => CONF_DIR . '/blobs'];
+}
+
 // Исправленный текст конфига, список правок и откуда, судя по путям, пришёл конфиг
 function adaptConf(string $text): array
 {
@@ -3649,6 +3707,9 @@ switch ($cmd) {
     $log = (string)@file_get_contents(UPDATE_LOG);
     respond(['running' => updateRunning(), 'log' => $log,
       'exit' => preg_match('/\[exit (\d+)\]\s*$/', $log, $m) ? (int)$m[1] : null, 'version' => UI_VERSION]);
+
+  case 'sysinfo':
+    respond(['ifaces' => netIfaces()] + baseFiles());
 
   case 'doc':
     // README и история версий лежат в пакете рядом с интерфейсом (docs/), при разработке — в корне репозитория
