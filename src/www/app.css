@@ -452,7 +452,9 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 /* кнопки в уведомлениях и выпадающие меню выравниваются одинаково */
 .menu { display: inline-flex; vertical-align: middle; }
 .notice-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; align-self: center; flex: none; }
-@media (max-width: 759px) { .notice { flex-wrap: wrap; } .notice-actions { width: 100%; } }
+/* кнопки уходят под текст, когда рядом им тесно, — и в узкой колонке на широком экране */
+.notice { flex-wrap: wrap; } .notice > .grow { flex: 1 1 160px; min-width: 0; }
+@media (max-width: 759px) { .notice-actions { width: 100%; } }
 
 /* управление сервисом: на широком экране — в блоке «Сервис», на узком — значки в верхней панели */
 .svc-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
