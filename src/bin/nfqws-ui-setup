@@ -6,7 +6,7 @@
 # /etc/lighttpd/conf.d/90-nfqws-ui.conf. Перед перезапуском lighttpd конфиг проверяется
 # (lighttpd -tt); если проверка не прошла, прежний файл возвращается на место.
 
-VERSION=1.2.1
+VERSION=1.3.0
 CONF_DIR=${NFQWS_UI_CONF_DIR:-/etc/nfqws-ui}
 WEB_JSON=$CONF_DIR/web.json
 LDIR=${NFQWS_UI_LIGHTTPD:-/etc/lighttpd}

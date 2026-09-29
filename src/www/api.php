@@ -17,7 +17,7 @@ function ldate(string $fmt, ?int $ts = null): string
   return gmdate($fmt, ($ts ?? time()) + TZ_OFFSET);
 }
 
-const UI_VERSION = '1.2.1';
+const UI_VERSION = '1.3.0';
 
 // Пути пакета nfqws2-keenetic. На OpenWrt — корень «/», в Entware (Keenetic) — «/opt» (не проверено).
 define('ROOT', !is_file('/usr/bin/nfqws2') && is_file('/opt/usr/bin/nfqws2') ? '/opt' : '');
