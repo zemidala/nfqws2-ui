@@ -289,7 +289,7 @@ const go = (hash) => { location.hash = hash; };
 
 function renderShell() {
   const nav = (cls) => h('nav', { class: cls, 'aria-label': 'Разделы' }, TABS.map(([id, label, ic, only]) =>
-    h('a', { href: '#/' + id, 'data-tab': id, class: only === 'narrow' ? 'only-narrow' : null }, icon(ic), h('span', { text: label }))));
+    h('a', { href: '#/' + id, 'data-tab': id, title: label, 'aria-label': label, class: only === 'narrow' ? 'only-narrow' : null }, icon(ic), h('span', { text: label }))));
   document.getElementById('app').replaceChildren(
     h('header', { class: 'top' },
       h('div', { class: 'top-in' },
@@ -305,6 +305,7 @@ function renderShell() {
         h('button', { class: 'btn ghost icon', id: 'refresh-top', type: 'button', title: 'Обновить', 'aria-label': 'Обновить', onclick: () => route(true) }, icon('refresh')),
         S.authEnabled ? h('button', { class: 'btn ghost icon', type: 'button', title: 'Выйти', 'aria-label': 'Выйти', onclick: logout }, icon('logout')) : null)),
     h('div', { id: 'banner' }),
+    h('div', { id: 'upd-banner' }),
     h('div', { id: 'pending', 'aria-live': 'polite' }),
     h('div', { class: 'layout' }, h('aside', { id: 'side', 'aria-label': 'Обзор' }), h('main', { id: 'main' })),
     nav('bottom'));
@@ -346,7 +347,9 @@ function updateChrome() {
   document.getElementById('banner').replaceChildren(
     need ? h('div', { class: 'banner' }, h('div', { class: 'banner-in' },
       h('span', { text: 'Конфиг изменён после запуска — изменения вступят в силу после перезапуска.' }),
-      btn('Перезапустить с проверкой', safeRestart, 'warn small', 'refresh'))) : [],
+      btn('Перезапустить с проверкой', safeRestart, 'warn small', 'refresh'))) : []);
+  // Плашка обновления — отдельно: #banner на широком экране скрыт (там «нужен перезапуск» показывает колонка слева)
+  document.getElementById('upd-banner').replaceChildren(
     u?.available && !updateSkipped(u.latest) ? h('div', { class: 'banner info' }, h('div', { class: 'banner-in' },
       h('span', {}, icon('gift'), ` Вышла новая версия nfqws2-ui ${u.latest} (у вас ${u.current}).`),
       btn('Что нового', () => openUpdate(u), 'small ghost'),

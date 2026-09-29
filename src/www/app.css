@@ -103,7 +103,7 @@ main { padding: 16px; display: grid; gap: 14px; align-content: start; min-width:
 :root[data-variant="b"] .side-in { padding: 16px; }
 
 /* ---------- блоки и элементы ---------- */
-.blk, .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; display: grid; gap: 10px; min-width: 0; box-shadow: var(--shadow); align-content: start; }
+.blk, .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; box-shadow: var(--shadow); align-content: start; }
 .panel { padding: 16px; gap: 14px; }
 :root[data-variant="b"] .blk, :root[data-variant="b"] .panel { border-color: transparent; }
 .blk-h, .panel-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
@@ -176,7 +176,7 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 .svc-state { font-size: 17px; font-weight: 700; display: flex; align-items: center; gap: 8px; flex: 1; }
 .svc-state.ok { color: var(--ok); } .svc-state.bad { color: var(--bad); }
 .svc-state .dot { width: 10px; height: 10px; }
-.search { display: flex; gap: 8px; } .search .input { flex: 1; }
+.search { display: flex; gap: 8px; min-width: 0; } .search .input { flex: 1; min-width: 0; width: 0; }
 .routes { border: 1px solid var(--line); border-radius: calc(var(--radius) * .8 + 2px); }
 .route { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 8px; padding: 6px 10px; border-top: 1px solid var(--line); align-items: baseline; }
 .route:first-child { border-top: 0; }
@@ -529,3 +529,8 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 
 /* поиск в списке: на узком экране уходит на свою строку, а не сжимается рядом с сортировкой */
 .list-search { flex: 1 1 240px; min-width: 0; }
+
+/* шапка на средних ширинах: подписи у второстепенных кнопок прячем, иконки с подсказками остаются */
+@media (max-width: 1439px) { .repo-link span, .https-link span, .undo-label { display: none; } }
+/* 760–1099px: вкладки без подписей, кроме открытой, — иначе шапка шире экрана */
+@media (min-width: 760px) and (max-width: 1099px) { .tabs a:not(.on) span { display: none; } .tabs a { padding: 0 10px; } .brand small { display: none; } }
