@@ -337,7 +337,7 @@ function updateChrome() {
         btn(h('span', { class: 'ctl-label', text: 'Остановить' }), () => service('stop'), 'small ghost danger', 'stop', { title: 'Остановить nfqws2 — обход блокировок перестанет работать', 'aria-label': 'Остановить', disabled: busy })]
       : btn(h('span', { class: 'ctl-label', text: 'Запустить' }), () => service('start'), 'small primary', 'play', { title: 'Запустить nfqws2', 'aria-label': 'Запустить' }));
   document.getElementById('ver').textContent = st.version ? 'v' + st.version : '';
-  document.getElementById('ui-ver').textContent = st.ui?.version ? 'ui v' + st.ui.version : 'ui';
+  document.getElementById('ui-ver').textContent = 'nfqws2-ui' + (st.ui?.version ? ' v' + st.ui.version : '');
   const need = st.running && (st.restart_needed || !st.in_sync) && !pendingActive();
   const u = st.ui?.update;
   const repoLink = document.getElementById('repo-link');
