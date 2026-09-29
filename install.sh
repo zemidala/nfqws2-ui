@@ -67,7 +67,8 @@ fetch "$BASE/sha256sums.txt" "$TMP/sha256sums.txt" || die "не удалось �
 if [ "$PM" = opkg ]; then
 	say "Обновляю список пакетов и ставлю зависимости (lighttpd, php8)…"
 	opkg update >/dev/null || die "opkg update не прошёл — проверьте интернет на роутере"
-	opkg install "$TMP/$FILE" || die "opkg install не прошёл (см. выше)"
+	# NFQWS_UI_FORCE=1 (nfqws-ui update --force) — поставить заново ту же версию
+	opkg install ${NFQWS_UI_FORCE:+--force-reinstall} "$TMP/$FILE" || die "opkg install не прошёл (см. выше)"
 else
 	apk update >/dev/null || die "apk update не прошёл"
 	apk add lighttpd lighttpd-mod-cgi lighttpd-mod-rewrite lighttpd-mod-setenv php8-cgi php8-mod-session php8-mod-curl curl || die "не удалось поставить зависимости"

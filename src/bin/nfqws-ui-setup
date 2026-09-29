@@ -351,7 +351,7 @@ update() {
 	# Если нас запустил lighttpd (кнопка в интерфейсе), выходим из его cgroup: при перезапуске
 	# lighttpd procd может убить её целиком, а с ней и opkg посреди установки.
 	echo $$ > /sys/fs/cgroup/cgroup.procs 2>/dev/null
-	sh "$tmp" "v$want"
+	NFQWS_UI_FORCE=$force sh "$tmp" "v$want"
 	rc=$?
 	rm -f "$tmp"
 	[ $rc = 0 ] && say "Готово: nfqws2-ui $want."
