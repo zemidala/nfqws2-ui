@@ -468,7 +468,7 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 /* ---------- обновление ---------- */
 .banner.info { background: var(--accent-soft); color: var(--accent); }
 .banner.info .banner-in span svg { vertical-align: -3px; }
-.release-notes { white-space: pre-wrap; background: var(--soft); border-radius: 8px; padding: 10px 12px; font-size: 13px; max-height: 30vh; overflow: auto; }
+.release-notes { background: var(--soft); border-radius: 8px; padding: 10px 12px; font-size: 13px; max-height: 30vh; overflow: auto; }
 
 /* ---------- подсветка журналов ---------- */
 pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family: var(--mono); font-size: 12px; line-height: 1.55; }
@@ -491,3 +491,22 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 .repo-link { color: var(--muted); font-size: 12px; font-weight: 500; gap: 5px; }
 .repo-link:hover { color: var(--fg); }
 @media (max-width: 759px) { .repo-link span { display: none; } }
+
+/* ---------- документы: README, история версий, описание релиза ---------- */
+.md { font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
+.md > :first-child { margin-top: 0; }
+.md h2 { font-size: 22px; margin: 4px 0 10px; }
+.md h3 { font-size: 17px; margin: 22px 0 8px; padding-top: 12px; border-top: 1px solid var(--line); scroll-margin-top: calc(var(--top-h, 56px) + 12px); }
+.md h4, .md h5 { font-size: 15px; margin: 16px 0 6px; scroll-margin-top: calc(var(--top-h, 56px) + 12px); }
+.md p { margin: 6px 0; }
+.md ul, .md ol { margin: 6px 0; padding-left: 22px; }
+.md li { margin: 3px 0; }
+.md li > p { margin: 4px 0; }
+.md code { font-family: var(--mono); font-size: .88em; background: var(--soft); border-radius: 4px; padding: 1px 5px; }
+.md pre.box { margin: 8px 0; font-size: 12.5px; }
+.md blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--warn); background: var(--warn-soft); border-radius: 0 8px 8px 0; }
+.md table { margin: 8px 0; }
+.md hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
+.md-toc { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }
+.release-notes .md { font-size: 13px; }
+.release-notes .md h3 { border-top: 0; padding-top: 0; margin-top: 10px; }

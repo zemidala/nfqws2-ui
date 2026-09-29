@@ -15,7 +15,8 @@ rm -rf "$OUT"; mkdir -p "$OUT"
 
 # --- файлы пакета с подставленной версией ---
 D=$STAGE/data
-mkdir -p "$D/www/nfqws-ui" "$D/usr/sbin"
+mkdir -p "$D/www/nfqws-ui/docs" "$D/usr/sbin"
+cp README.md CHANGELOG.md "$D/www/nfqws-ui/docs/"
 cp src/www/index.html src/www/app.js src/www/app.css src/www/api.php src/www/icon.svg src/www/manifest.json "$D/www/nfqws-ui/"
 cp src/bin/nfqws-ui-setup src/bin/nfqws-ui "$D/usr/sbin/"
 # ?v= — версия и хеш файлов: браузер не возьмёт старые app.js/app.css из кеша даже при той же версии

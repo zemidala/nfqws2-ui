@@ -3650,6 +3650,13 @@ switch ($cmd) {
     respond(['running' => updateRunning(), 'log' => $log,
       'exit' => preg_match('/\[exit (\d+)\]\s*$/', $log, $m) ? (int)$m[1] : null, 'version' => UI_VERSION]);
 
+  case 'doc':
+    // README и история версий лежат в пакете рядом с интерфейсом (docs/), при разработке — в корне репозитория
+    $name = ['readme' => 'README.md', 'changelog' => 'CHANGELOG.md'][$str('name')] ?? fail('Нет такого документа');
+    $file = is_file(__DIR__ . "/docs/$name") ? __DIR__ . "/docs/$name" : dirname(__DIR__, 2) . "/$name";
+    is_file($file) || fail('Документ не найден: ' . $name, 404);
+    respond(['text' => file_get_contents($file)]);
+
   case 'log':
     $out = [];
     exec('logread -e nfqws2 2>/dev/null | tail -n 300', $out);
