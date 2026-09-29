@@ -6,7 +6,7 @@
 # /etc/lighttpd/conf.d/90-nfqws-ui.conf. Перед перезапуском lighttpd конфиг проверяется
 # (lighttpd -tt); если проверка не прошла, прежний файл возвращается на место.
 
-VERSION=1.1.0
+VERSION=1.2.0
 CONF_DIR=${NFQWS_UI_CONF_DIR:-/etc/nfqws-ui}
 WEB_JSON=$CONF_DIR/web.json
 LDIR=${NFQWS_UI_LIGHTTPD:-/etc/lighttpd}
@@ -294,6 +294,70 @@ status() {
 	pidof lighttpd >/dev/null && say "lighttpd:            работает" || say "lighttpd:            НЕ РАБОТАЕТ"
 }
 
+# ---------- обновление ----------
+
+REPO=zemidala/nfqws2-ui
+
+fetch() { # url [файл]
+	if command -v wget >/dev/null 2>&1; then
+		wget -q -T 20 -O "${2:--}" "$1"
+	else
+		curl -fsSL -m 20 -o "${2:--}" "$1"
+	fi
+}
+
+latest_version() {
+	fetch "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null |
+		sed -n 's/.*"tag_name" *: *"v\{0,1\}\([^"]*\)".*/\1/p' | head -n1
+}
+
+# $1 новее $2 (версии вида 1.2.3)
+ver_gt() {
+	awk -v a="$1" -v b="$2" 'BEGIN {
+		split(a, x, "."); split(b, y, ".")
+		for (i = 1; i <= 3; i++) { if (x[i] + 0 > y[i] + 0) exit 0; if (x[i] + 0 < y[i] + 0) exit 1 }
+		exit 1
+	}'
+}
+
+update() {
+	check= force= want=
+	for a; do
+		case "$a" in
+		--check | -c) check=1 ;;
+		--force | -f) force=1 ;;
+		v[0-9]* | [0-9]*) want=${a#v} ;;
+		*) die "неизвестный параметр: $a (nfqws-ui-setup update [--check] [--force] [vX.Y.Z])" ;;
+		esac
+	done
+	say "Установлено: $VERSION"
+	if [ -z "$want" ]; then
+		want=$(latest_version)
+		[ -n "$want" ] || die "не удалось узнать последнюю версию: нет доступа к api.github.com или у репозитория нет публичных релизов"
+		say "Последняя:   $want"
+		if ! ver_gt "$want" "$VERSION" && [ -z "$force" ]; then
+			say "Обновление не нужно."
+			return 0
+		fi
+	fi
+	if [ -n "$check" ]; then
+		say "Доступно обновление до $want. Обновить: nfqws-ui-setup update"
+		return 0
+	fi
+	[ "$want" = "$VERSION" ] && [ -z "$force" ] && { say "Версия $want уже установлена (--force — поставить заново)."; return 0; }
+	say "Обновляю до $want…"
+	tmp=/tmp/nfqws-ui-update.$$.sh
+	fetch "https://github.com/$REPO/releases/download/v$want/install.sh" "$tmp" || { rm -f "$tmp"; die "не удалось скачать установщик v$want"; }
+	# Если нас запустил lighttpd (кнопка в интерфейсе), выходим из его cgroup: при перезапуске
+	# lighttpd procd может убить её целиком, а с ней и opkg посреди установки.
+	echo $$ > /sys/fs/cgroup/cgroup.procs 2>/dev/null
+	sh "$tmp" "v$want"
+	rc=$?
+	rm -f "$tmp"
+	[ $rc = 0 ] && say "Готово: nfqws2-ui $want."
+	return $rc
+}
+
 usage() {
 	cat <<-EOF
 	nfqws-ui-setup $VERSION — настройка веб-сервера для nfqws2-ui
@@ -306,6 +370,10 @@ usage() {
 	  nfqws-ui-setup takeover on|off      занять порт 90 вместо nfqws-keenetic-web (старый — на $DEF_LEGACY_PORT)
 	  nfqws-ui-setup auth on|off          вход по паролю root (выключать не рекомендуется)
 	  nfqws-ui-setup cron on|off          фоновые задания: мониторинг, история, ежедневный снимок
+	  nfqws-ui-setup update               обновить до последней версии с GitHub
+	      [--check]                       только проверить, есть ли обновление
+	      [vX.Y.Z] [--force]              поставить конкретную версию / переустановить
+	  nfqws-ui-setup version              установленная версия
 	  nfqws-ui-setup apply                пересобрать конфиг lighttpd и cron из настроек
 	  nfqws-ui-setup adopt                взять под управление написанный вручную конфиг lighttpd
 	  nfqws-ui-setup remove               убрать конфиг lighttpd и задания cron (данные остаются)
@@ -425,8 +493,14 @@ uninstall)
 	fi
 	"$0" remove
 	rm -rf "$WWW" /tmp/nfqws-ui-cache /tmp/nfqws-ui-test /tmp/nfqws-ui-pending.json /tmp/nfqws-ui-login.json
-	rm -f "$CONF_DIR/.manual" /usr/sbin/nfqws-ui-setup
+	rm -f "$CONF_DIR/.manual" /usr/sbin/nfqws-ui-setup /usr/sbin/nfqws-ui
 	say "nfqws2-ui удалён. Настройки, снимки и история остались в $CONF_DIR, /etc/nfqws2/.snapshots, /etc/nfqws2/.history"
+	;;
+update | upgrade)
+	update "$@"
+	;;
+version | -v | --version)
+	say "$VERSION"
 	;;
 help | -h | --help)
 	usage

@@ -1,0 +1,4 @@
+#!/bin/sh
+# nfqws-ui — короткое имя для nfqws-ui-setup: nfqws-ui update, nfqws-ui status, nfqws-ui help
+# https://github.com/zemidala/nfqws2-ui
+exec /usr/sbin/nfqws-ui-setup "$@"

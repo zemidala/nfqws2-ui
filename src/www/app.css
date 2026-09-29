@@ -464,3 +464,25 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .menu-list .opt { display: grid; gap: 2px; text-align: left; white-space: normal; padding: 8px 10px; }
 .menu-list .opt.dim b { color: var(--muted); }
 @media (max-width: 759px) { .brand small, .https-link { display: none; } .top-in { gap: 4px; } .top-in .btn.icon, .svc-ctl .btn { width: 36px; min-height: 36px; padding: 0; } }
+
+/* ---------- обновление ---------- */
+.banner.info { background: var(--accent-soft); color: var(--accent); }
+.banner.info .banner-in span svg { vertical-align: -3px; }
+.release-notes { white-space: pre-wrap; background: var(--soft); border-radius: 8px; padding: 10px 12px; font-size: 13px; max-height: 30vh; overflow: auto; }
+
+/* ---------- подсветка журналов ---------- */
+pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family: var(--mono); font-size: 12px; line-height: 1.55; }
+.logv .lg { white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 12px 0 10px; border-left: 3px solid transparent; }
+.logv .lg:hover { background: var(--soft); }
+.logv .lg-err-line { background: var(--bad-soft); border-left-color: var(--bad); }
+.logv .lg-warn-line { background: var(--warn-soft); border-left-color: var(--warn); }
+.lg-time { color: var(--faint); }
+.lg-lvl { color: var(--muted); }
+.lg-proc { color: var(--accent); font-weight: 600; }
+.lg-path, .lg-url { color: var(--tk-key); }
+.lg-file { color: var(--tk-key); font-weight: 600; }
+.lg-opt { color: var(--tk-opt); }
+.lg-ip { color: var(--tk-fn); }
+.lg-err { color: var(--bad); font-weight: 600; }
+.lg-warn { color: var(--warn); font-weight: 600; }
+.lg-ok { color: var(--ok); font-weight: 600; }

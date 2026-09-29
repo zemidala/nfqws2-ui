@@ -17,7 +17,7 @@ function ldate(string $fmt, ?int $ts = null): string
   return gmdate($fmt, ($ts ?? time()) + TZ_OFFSET);
 }
 
-const UI_VERSION = '1.1.0';
+const UI_VERSION = '1.2.0';
 
 // Пути пакета nfqws2-keenetic. На OpenWrt — корень «/», в Entware (Keenetic) — «/opt» (не проверено).
 define('ROOT', !is_file('/usr/bin/nfqws2') && is_file('/opt/usr/bin/nfqws2') ? '/opt' : '');
@@ -2738,6 +2738,77 @@ function testJob(): void
   file_put_contents(UI_CONF_DIR . '/tests.json', json_encode(array_slice($hist, 0, 30), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 }
 
+// ================= обновление интерфейса =================
+// Проверка — по последнему релизу на GitHub, не чаще раза в 12 часов (кнопка «Проверить» — сразу).
+// Само обновление делает nfqws-ui-setup update в отдельном сеансе: при установке пакета lighttpd
+// перезапускается, и запрос, который его запустил, обрывается.
+
+const REPO_URL = 'https://github.com/zemidala/nfqws2-ui';
+define('UPDATE_FILE', UI_CONF_DIR . '/update.json');
+const UPDATE_LOG = '/tmp/nfqws-ui-update.log';
+const SETUP_BIN = '/usr/sbin/nfqws-ui-setup';
+
+function updateInfo(): array
+{
+  $u = json_decode((string)@file_get_contents(UPDATE_FILE), true) ?: [];
+  $latest = $u['latest'] ?? null;
+  return ['current' => UI_VERSION, 'latest' => $latest, 'available' => $latest !== null && version_compare($latest, UI_VERSION, '>'),
+    'notes' => $u['notes'] ?? '', 'url' => $u['url'] ?? REPO_URL . '/releases', 'checked' => $u['checked'] ?? 0, 'error' => $u['error'] ?? null,
+    'can_update' => is_executable(SETUP_BIN)];
+}
+
+function updateCheck(bool $force): array
+{
+  $u = updateInfo();
+  if (!$force && time() - $u['checked'] < 12 * 3600) {
+    return $u;
+  }
+  $ch = curl_init('https://api.github.com/repos/zemidala/nfqws2-ui/releases/latest');
+  curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_CONNECTTIMEOUT => 8,
+    CURLOPT_HTTPHEADER => ['Accept: application/vnd.github+json', 'User-Agent: nfqws2-ui/' . UI_VERSION]]);
+  $res = curl_exec($ch);
+  $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  $err = curl_error($ch);
+  curl_close($ch);
+  $j = json_decode((string)$res, true);
+  $save = ['checked' => time()];
+  if ($code === 200 && preg_match('/^v?(\d+\.\d+\.\d+)$/', (string)($j['tag_name'] ?? ''), $m)) {
+    $save += ['latest' => $m[1], 'notes' => preg_match('/^.{0,4000}/su', (string)($j['body'] ?? ''), $nm) ? $nm[0] : '', 'url' => (string)($j['html_url'] ?? REPO_URL . '/releases')];
+  } else {
+    $old = json_decode((string)@file_get_contents(UPDATE_FILE), true) ?: [];
+    $save += array_intersect_key($old, array_flip(['latest', 'notes', 'url']))
+      + ['error' => $err ?: ($code === 404 ? 'релизов не найдено' : "GitHub ответил $code")];
+  }
+  @file_put_contents(UPDATE_FILE, json_encode($save, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+  return updateInfo();
+}
+
+function updateRunning(): bool
+{
+  // [p] — чтобы не найти саму оболочку, в строке которой есть этот шаблон
+  exec('pgrep -f "nfqws-ui-setu[p] update" 2>/dev/null', $out);
+  return (bool)$out;
+}
+
+function updateStart(string $version): void
+{
+  if (!is_executable(SETUP_BIN)) {
+    fail('Нет ' . SETUP_BIN . ' — обновите вручную, см. README');
+  }
+  if (!preg_match('/^\d+\.\d+\.\d+$/', $version)) {
+    fail('Неверная версия');
+  }
+  if (updateRunning()) {
+    fail('Обновление уже идёт');
+  }
+  file_put_contents(UPDATE_LOG, '');
+  // procd держит lighttpd и всё, что он запустил, в cgroup /services/lighttpd и при перезапуске
+  // может убить её целиком — посреди opkg install. Поэтому сначала уходим в корневую cgroup.
+  $cmd = 'echo $$ > /sys/fs/cgroup/cgroup.procs 2>/dev/null; '
+    . SETUP_BIN . ' update v' . $version . ' >>' . UPDATE_LOG . ' 2>&1; echo "[exit $?]" >>' . UPDATE_LOG;
+  exec('(setsid env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin sh -c ' . escapeshellarg($cmd) . ' >/dev/null 2>&1 &)');
+}
+
 // ================= состояние =================
 
 function iptablesCounters(): array
@@ -2805,7 +2876,8 @@ function state(): array
     'subs' => uiSettings()['subs'],
     'ui' => (function () {
       $w = uiWeb();
-      return ['version' => UI_VERSION, 'conf_file' => CONF_FILE, 'https_port' => $w['https_port'], 'legacy_port' => $w['legacy_port'], 'auth' => authEnabled()];
+      return ['version' => UI_VERSION, 'conf_file' => CONF_FILE, 'https_port' => $w['https_port'], 'legacy_port' => $w['legacy_port'], 'auth' => authEnabled(),
+        'repo' => REPO_URL, 'update' => updateInfo() + ['running' => updateRunning()]];
     })(),
     'undo' => (function () {
       $u = lastUndoable();
@@ -2905,6 +2977,7 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
     if (uiSettings()['subs']) {
       subsRun();
     }
+    updateCheck(false);
   }
   exit(0);
 }
@@ -3564,6 +3637,18 @@ switch ($cmd) {
     exec(INIT_SCRIPT . ' ' . $action . ' 2>&1', $out, $rc);
     usleep(500000);
     respond(['ok' => $rc === 0, 'output' => implode("\n", $out)]);
+
+  case 'update_check':
+    respond(updateCheck(!empty($in['force'])));
+
+  case 'update_run':
+    updateStart($str('version'));
+    respond(['ok' => true]);
+
+  case 'update_status':
+    $log = (string)@file_get_contents(UPDATE_LOG);
+    respond(['running' => updateRunning(), 'log' => $log,
+      'exit' => preg_match('/\[exit (\d+)\]\s*$/', $log, $m) ? (int)$m[1] : null, 'version' => UI_VERSION]);
 
   case 'log':
     $out = [];

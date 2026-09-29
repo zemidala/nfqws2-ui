@@ -35,6 +35,8 @@ const ICONS = {
   undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
   power: '<path d="M12 3v8"/><path d="M7 6.3a8 8 0 1 0 10 0"/>',
   dup: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V6a2 2 0 0 1 2-2h10"/><path d="M12 14h4"/>',
+  git: '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-7 4-11 8"/>',
+  gift: '<rect x="3" y="8" width="18" height="5" rx="1"/><path d="M5 13v8h14v-8M12 8v13M12 8S10 3 7.5 4 9 8 12 8zM12 8s2-5 4.5-4S15 8 12 8z"/>',
 };
 
 const LIST_NAMES = {
@@ -296,6 +298,7 @@ function renderShell() {
         nav('tabs'),
         h('span', { class: 'grow' }),
         h('span', { id: 'https-slot' }),
+        h('a', { class: 'btn ghost icon', id: 'repo-link', href: REPO, target: '_blank', rel: 'noopener', title: 'nfqws2-ui на GitHub', 'aria-label': 'nfqws2-ui на GitHub' }, icon('git')),
         h('button', { class: 'btn ghost small', type: 'button', id: 'undo-btn', hidden: true, onclick: () => undoLast(true) }, icon('undo'), h('span', { class: 'undo-label', text: 'Отменить' })),
         h('button', { class: 'btn ghost small', type: 'button', id: 'focus-off', hidden: true, onclick: () => setFocus(false) }, 'Показать обзор'),
         h('button', { class: 'btn ghost icon', id: 'refresh-top', type: 'button', title: 'Обновить', 'aria-label': 'Обновить', onclick: () => route(true) }, icon('refresh')),
@@ -335,9 +338,18 @@ function updateChrome() {
       : btn(h('span', { class: 'ctl-label', text: 'Запустить' }), () => service('start'), 'small primary', 'play', { title: 'Запустить nfqws2', 'aria-label': 'Запустить' }));
   document.getElementById('ver').textContent = st.version ? 'v' + st.version : '';
   const need = st.running && (st.restart_needed || !st.in_sync) && !pendingActive();
-  document.getElementById('banner').replaceChildren(need ? h('div', { class: 'banner' }, h('div', { class: 'banner-in' },
-    h('span', { text: 'Конфиг изменён после запуска — изменения вступят в силу после перезапуска.' }),
-    btn('Перезапустить с проверкой', safeRestart, 'warn small', 'refresh'))) : null);
+  const u = st.ui?.update;
+  const repoLink = document.getElementById('repo-link');
+  if (repoLink) repoLink.title = `nfqws2-ui ${st.ui?.version || ''} на GitHub`;
+  document.getElementById('banner').replaceChildren(
+    need ? h('div', { class: 'banner' }, h('div', { class: 'banner-in' },
+      h('span', { text: 'Конфиг изменён после запуска — изменения вступят в силу после перезапуска.' }),
+      btn('Перезапустить с проверкой', safeRestart, 'warn small', 'refresh'))) : [],
+    u?.available && !updateSkipped(u.latest) ? h('div', { class: 'banner info' }, h('div', { class: 'banner-in' },
+      h('span', {}, icon('gift'), ` Вышла новая версия nfqws2-ui ${u.latest} (у вас ${u.current}).`),
+      btn('Что нового', () => openUpdate(u), 'small ghost'),
+      u.can_update ? btn(u.running ? 'Обновляется…' : 'Обновить', () => openUpdate(u, true), 'small primary', 'download', { disabled: u.running }) : null,
+      h('button', { type: 'button', class: 'btn ghost icon small', title: 'Не напоминать об этой версии', 'aria-label': 'Скрыть', onclick: () => { try { localStorage.setItem('nfqws-ui-update-skip', u.latest); } catch { /* нет хранилища */ } updateChrome(); } }, icon('x')))) : []);
   const undo = document.getElementById('undo-btn');
   if (undo) {
     undo.hidden = !st.undo || pendingActive();
@@ -1560,7 +1572,7 @@ async function viewSettings(main, r) {
   drawSettingsNav(nav, pane);
   const m = pane.match(/^p(\d+)$/);
   if (m) return viewProfile(content, Number(m[1]), r);
-  const panes = { basic: paneBasic, base: paneBase, raw: paneRaw, backup: paneBackup, hist: paneHistory, look: paneLook };
+  const panes = { basic: paneBasic, base: paneBase, raw: paneRaw, backup: paneBackup, hist: paneHistory, look: paneLook, about: paneAbout };
   await (panes[pane] || paneBasic)(content, r);
 }
 
@@ -1596,7 +1608,8 @@ function drawSettingsNav(nav, current) {
     item('backup', 'Резервные копии', st.snap?.count ? h('span', { class: 'num', text: st.snap.count }) : null),
     item('hist', 'История изменений'),
     h('div', { class: 'nav-h', text: 'Интерфейс' }),
-    item('look', 'Оформление'));
+    item('look', 'Оформление'),
+    item('about', 'О программе', st.ui?.update?.available ? h('span', { class: 'chip ok', text: 'обновление' }) : null));
 }
 
 async function moveCustom(from, to) {
@@ -2362,6 +2375,45 @@ async function paneHistory(content, r) {
     data.items.length ? box : h('p', { class: 'muted', text: 'Изменений пока нет.' })));
 }
 
+// ---------- О программе и обновления ----------
+
+async function paneAbout(content) {
+  const st = S.state;
+  const u = st.ui?.update || {};
+  const link = (href, text) => h('a', { href, target: '_blank', rel: 'noopener', text });
+  const row = (label, ...v) => h('div', { class: 'frow' }, h('span', { class: 'lbl', text: label }), h('span', {}, ...v));
+  const check = async () => {
+    const r = await guarded(() => api('update_check', { force: true }));
+    if (!r) return;
+    S.state.ui.update = { ...u, ...r };
+    updateChrome();
+    toast(r.error ? 'Не удалось проверить: ' + r.error : r.available ? `Есть новая версия: ${r.latest}` : 'У вас последняя версия');
+    route();
+  };
+  const cmd = (c, text) => h('div', { class: 'frow' }, h('code', { class: 'lbl mono', text: c }), h('span', { class: 'sm', text }));
+  content.append(h('div', { class: 'vh' }, h('h1', { text: 'О программе' })),
+    panel('nfqws2-ui', null,
+      row('Версия', h('b', { text: st.ui?.version || '?' })),
+      row('nfqws2', st.version ? 'v' + st.version : 'не определена'),
+      row('Исходный код', link(REPO, REPO.replace('https://', ''))),
+      row('Описание и помощь', link(REPO + '#readme', 'README'), ' · ', link(REPO + '/blob/main/CHANGELOG.md', 'история изменений'), ' · ', link(REPO + '/issues', 'сообщить о проблеме')),
+      row('Лицензия', 'MIT')),
+    panel('Обновления', null,
+      u.available
+        ? notice('info', `Доступна версия ${u.latest}`, 'Обновление ставит пакет с GitHub с проверкой контрольной суммы. nfqws2, конфиг и списки не затрагиваются.',
+          h('div', { class: 'notice-actions' }, btn('Что нового', () => openUpdate(u), 'small'), u.can_update ? btn('Обновить', () => openUpdate(u, true), 'small primary', 'download', { disabled: u.running }) : null))
+        : u.latest ? notice('ok', 'У вас последняя версия', null) : null,
+      row('Последняя проверка', u.checked ? fmtAgo(Date.now() / 1000 - u.checked) : 'ещё не было', u.error ? h('span', { class: 'status-bad', text: ' — ' + u.error }) : null),
+      h('div', { class: 'row' }, btn('Проверить сейчас', check, 'small', 'refresh'), link(u.url || REPO + '/releases', 'все релизы')),
+      h('p', { class: 'sm muted', text: 'Интерфейс сам проверяет обновления раз в 12 часов и раз в сутки по расписанию. Если вышла новая версия, сверху появится плашка.' })),
+    panel('Из консоли роутера', null,
+      cmd('nfqws-ui update', 'обновить до последней версии'),
+      cmd('nfqws-ui update --check', 'только проверить'),
+      cmd('nfqws-ui update v1.0.0 --force', 'поставить конкретную версию (откат)'),
+      cmd('nfqws-ui status', 'адреса, порты, HTTPS'),
+      cmd('nfqws-ui help', 'все команды; nfqws-ui — короткое имя для nfqws-ui-setup')));
+}
+
 // ---------- Оформление ----------
 
 async function paneLook(content) {
@@ -2581,7 +2633,7 @@ async function viewTests(main, r) {
     const p = profile ? prof(profile) : null;
     let q = '';
     const pre = h('pre', { class: 'box', style: 'max-height:60vh' });
-    const draw = () => { pre.textContent = work.filter((l) => !q || l.toLowerCase().includes(q)).join('\n') || 'Пусто'; };
+    const draw = () => drawLog(pre, work.filter((l) => !q || l.toLowerCase().includes(q)));
     draw();
     return h('div', { class: 'stack', style: 'gap:14px' },
       s.result.ok ? notice('ok', `Открылся через текущую конфигурацию: HTTP ${s.result.code}, ${s.result.ms} мс`) : notice('bad', 'Не открылся через текущую конфигурацию: ' + s.result.reason),
@@ -2592,7 +2644,7 @@ async function viewTests(main, r) {
         warnings.length ? h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Предупреждения' }), h('div', { class: 'stack', style: 'gap:4px' }, warnings.map((w) => h('div', { class: 'help-iss warning' }, levelIcon('warning'), h('span', { class: 'mono sm', text: w }))))) : null),
       panel('Журнал обработки', h('span', { class: 'sm muted num', text: plural(work.length, 'строка', 'строки', 'строк') }),
         h('input', { class: 'input', placeholder: 'Фильтр', 'aria-label': 'Фильтр журнала', oninput: (e) => { q = e.target.value.toLowerCase(); draw(); } }), pre,
-        h('details', {}, h('summary', { text: `запуск nfqws2 (${setup.length} строк)` }), h('pre', { class: 'box', style: 'max-height:40vh', text: setup.join('\n') }))));
+        h('details', {}, h('summary', { text: `запуск nfqws2 (${setup.length} строк)` }), (() => { const p = h('pre', { class: 'box', style: 'max-height:40vh' }); drawLog(p, setup); return p; })())));
   }
 
   // Куда можно применить стратегию и что это затронет. Для неопытного главный вариант — «только для этого сайта».
@@ -2702,13 +2754,13 @@ async function viewLog(main) {
   const pre = h('pre', { class: 'box', style: 'max-height:65vh' });
   const draw = () => {
     const lines = data.syslog.slice().reverse().filter((l) => !q || l.toLowerCase().includes(q));
-    pre.textContent = lines.length ? lines.join('\n') : (q ? 'Ничего не найдено' : 'Журнал пуст');
+    drawLog(pre, lines, q ? 'Ничего не найдено' : 'Журнал пуст');
   };
   const search = h('input', { class: 'input', id: 'log-filter', placeholder: 'Фильтр', 'aria-label': 'Фильтр журнала', oninput: (e) => { q = e.target.value.toLowerCase(); draw(); } });
   draw();
   main.append(h('div', { class: 'vh' }, h('h1', { text: 'Журнал' }), h('span', { class: 'grow' }), btn('Обновить', () => route(), 'small', 'refresh')),
     panel('Системный журнал nfqws2', null, h('p', { class: 'sm muted', text: 'Последние 300 строк logread, новые сверху.' }), search, pre),
-    data.files.map((f) => panel(f.name, h('span', { class: 'sm muted', text: fmtBytes(f.size) }), h('pre', { class: 'box', text: f.tail || 'пусто' }))),
+    data.files.map((f) => panel(f.name, h('span', { class: 'sm muted', text: fmtBytes(f.size) }), (() => { const p = h('pre', { class: 'box' }); drawLog(p, (f.tail || '').split('\n').filter(Boolean), 'пусто'); return p; })())),
     panel('Трафик в очередь nfqws2', null, h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
       h('thead', {}, h('tr', {}, h('th', { text: 'Направление' }), h('th', { text: 'Что' }), h('th', { class: 'num', text: 'Пакетов' }), h('th', { class: 'num', text: 'Объём' }))),
       h('tbody', {}, st.iptables.length ? st.iptables.map((x) => h('tr', {}, h('td', { text: x.dir === 'out' ? 'исходящие' : 'входящие' }), h('td', { text: x.proto + (x.what === 'data' ? ', первые пакеты' : ', ' + x.what) }),
@@ -2769,6 +2821,115 @@ function modal(title, body, footer) {
   document.body.append(bg);
   bg.close = close;
   return bg;
+}
+
+// ============ подсветка журналов ============
+// Время, уровень syslog, процесс, пути, файлы, параметры, адреса, ошибки и предупреждения. Строка с ошибкой
+// или предупреждением выделяется целиком.
+
+const LOG_RE = new RegExp([
+  String.raw`(?<time>^\w{3} \w{3} +\d+ \d\d:\d\d:\d\d \d{4}|\d{4}-\d\d-\d\d[ T]\d\d:\d\d:\d\d(?:[.,]\d+)?|\b\d\d:\d\d:\d\d(?:\.\d+)?\b)`,
+  String.raw`(?<lvl>\b(?:kern|user|daemon|auth|authpriv|syslog|cron|local\d)\.(?:emerg|alert|crit|err|warn|warning|notice|info|debug)\b)`,
+  String.raw`(?<proc>\b[\w.-]+\[\d+\]:)`,
+  String.raw`(?<url>https?://[^\s"'<>]+)`,
+  String.raw`(?<path>(?<![\w/.-])/(?:[\w.+-]+/?)+)`,
+  String.raw`(?<opt>(?<![\w-])--[a-z][\w-]*)`,
+  String.raw`(?<ip>\b\d{1,3}(?:\.\d{1,3}){3}(?::\d{1,5})?(?:/\d{1,2})?\b)`,
+  String.raw`(?<file>\b[\w.-]+\.(?:list|lua|bin|conf|log|json|ipk|sh|txt|gz|pcap)\b)`,
+  String.raw`(?<err>\b(?:errors?|fail(?:ed|ure|s)?|fatal|cannot|can't|could not|denied|refused|invalid|not found|no such|timed? ?out|abort(?:ed)?)\b|[Оо]шибк[а-я]*|не удалось|не найден[а-я]*|нет доступа|НЕ РАБОТАЕТ)`,
+  String.raw`(?<warn>\b(?:warn(?:ing)?s?|deprecated|skipp(?:ed|ing)|retry(?:ing)?)\b|[Вв]нимание|[Пп]редупрежд[а-я]*)`,
+  String.raw`(?<ok>\b(?:OK|ok|success(?:ful(?:ly)?)?|started|ready|done|loaded|matches)\b|[Гг]отово|установлен|запущен)`,
+].join('|'), 'giu');
+
+function logLine(line) {
+  const out = [];
+  let last = 0;
+  let mark = '';
+  for (const m of line.matchAll(LOG_RE)) {
+    const kind = Object.keys(m.groups).find((k) => m.groups[k] !== undefined);
+    let cls = kind;
+    if (kind === 'lvl') {
+      const l = m[0].split('.')[1];
+      // busybox crond пишет каждый запуск задания как cron.err — это не ошибка
+      cls = /emerg|alert|crit|err/.test(l) && !(m[0] === 'cron.err' && / cmd /.test(line)) ? 'err' : /warn/.test(l) ? 'warn' : 'lvl';
+    }
+    if (cls === 'err') mark = 'err';
+    else if (cls === 'warn' && !mark) mark = 'warn';
+    if (m.index > last) out.push(line.slice(last, m.index));
+    out.push(h('span', { class: 'lg-' + cls, text: m[0] }));
+    last = m.index + m[0].length;
+  }
+  if (last < line.length) out.push(line.slice(last));
+  return h('div', { class: 'lg' + (mark ? ' lg-' + mark + '-line' : '') }, out.length ? out : '\u00a0');
+}
+
+// Журнал в элемент pre: строки с подсветкой или текст-заглушка
+function drawLog(pre, lines, empty = 'Пусто') {
+  pre.classList.add('logv');
+  pre.replaceChildren(...(lines.length ? lines.map(logLine) : [h('div', { class: 'lg muted', text: empty })]));
+}
+
+// ============ обновление nfqws2-ui ============
+
+const REPO = 'https://github.com/zemidala/nfqws2-ui';
+
+function updateSkipped(v) {
+  try { return localStorage.getItem('nfqws-ui-update-skip') === v; } catch { return false; }
+}
+
+// Проверка в фоне при открытии интерфейса — если последняя была больше 12 часов назад
+async function autoUpdateCheck() {
+  if (!S.state) { setTimeout(autoUpdateCheck, 3000); return; }
+  const u = S.state.ui?.update;
+  if (u && Date.now() / 1000 - u.checked < 12 * 3600) return;
+  const r = await api('update_check').catch(() => null);
+  if (r && S.state?.ui) { S.state.ui.update = { ...S.state.ui.update, ...r }; updateChrome(); }
+}
+
+// Окно «Что нового» и само обновление с живым журналом установки
+function openUpdate(u, run = false) {
+  const log = h('pre', { class: 'box', style: 'max-height:40vh' });
+  const status = h('div');
+  const body = h('div', { class: 'modal-b stack', style: 'gap:12px' },
+    h('p', {}, `Установлено: `, h('b', { text: u.current }), ` · последняя: `, h('b', { text: u.latest || '—' }), ' · ', h('a', { href: u.url || REPO + '/releases', target: '_blank', rel: 'noopener', text: 'страница релиза' })),
+    u.notes ? h('div', { class: 'release-notes', text: u.notes }) : h('p', { class: 'sm muted', text: 'Описания изменений нет.' }),
+    h('p', { class: 'sm muted' }, 'Обновление ставит пакет с GitHub (с проверкой контрольной суммы) и перезапускает веб-сервер интерфейса. nfqws2, конфиг, списки и доступ в интернет не затрагиваются. Из консоли: ', h('code', { text: 'nfqws-ui update' })),
+    status, log);
+  log.hidden = true;
+  const go = btn('Обновить до ' + u.latest, () => start(), 'primary', 'download', { disabled: !u.can_update || u.running });
+  const dlg = modal('nfqws2-ui ' + (u.latest || ''), body, u.available ? go : []);
+  let timer = null;
+  const poll = async () => {
+    const r = await api('update_status').catch(() => null);   // пока lighttpd перезапускается, ответа нет — ждём
+    if (!dlg.isConnected) return;
+    if (r) {
+      log.hidden = false;
+      drawLog(log, r.log.trim().split('\n').filter(Boolean));
+      log.scrollTop = log.scrollHeight;
+      if (r.exit !== null || (!r.running && r.version === u.latest)) {
+        if (r.exit === 0 || r.version === u.latest) {
+          status.replaceChildren(notice('ok', `Готово: nfqws2-ui ${r.version}`, 'Страница перезагрузится через 3 секунды.'));
+          setTimeout(() => location.reload(), 3000);
+        } else {
+          status.replaceChildren(notice('bad', 'Обновление не удалось', 'Подробности — в журнале ниже. Интерфейс остался на прежней версии.'));
+          go.disabled = false;
+        }
+        return;
+      }
+    }
+    timer = setTimeout(poll, 2000);
+  };
+  async function start() {
+    if (!confirm(`Обновить nfqws2-ui до ${u.latest}?\n\nВеб-сервер интерфейса перезапустится — страница на несколько секунд перестанет отвечать. nfqws2 и интернет это не затрагивает.`)) return;
+    go.disabled = true;
+    const r = await guarded(() => api('update_run', { version: u.latest }));
+    if (!r) { go.disabled = false; return; }
+    status.replaceChildren(h('div', { class: 'row sm' }, h('span', { class: 'spin' }), 'Обновляю… не закрывайте окно'));
+    clearTimeout(timer);
+    poll();
+  }
+  if (u.running) poll();
+  if (run && u.available && u.can_update && !u.running) start();
 }
 
 function openDiff(title, a, b) {
@@ -2833,6 +2994,7 @@ async function start() {
   renderShell();
   SIDE.root = null;
   route(true);
+  setTimeout(autoUpdateCheck, 3000);
 }
 
 setInterval(() => {

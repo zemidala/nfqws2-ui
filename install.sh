@@ -72,7 +72,7 @@ else
 	apk update >/dev/null || die "apk update не прошёл"
 	apk add lighttpd lighttpd-mod-cgi lighttpd-mod-rewrite lighttpd-mod-setenv php8-cgi php8-mod-session php8-mod-curl curl || die "не удалось поставить зависимости"
 	tar -xzf "$TMP/$FILE" -C /
-	chmod 755 /usr/sbin/nfqws-ui-setup
+	chmod 755 /usr/sbin/nfqws-ui-setup /usr/sbin/nfqws-ui
 	mkdir -p /etc/nfqws-ui && chmod 700 /etc/nfqws-ui
 	touch /etc/nfqws-ui/.manual
 	/usr/sbin/nfqws-ui-setup apply

@@ -17,15 +17,15 @@ rm -rf "$OUT"; mkdir -p "$OUT"
 D=$STAGE/data
 mkdir -p "$D/www/nfqws-ui" "$D/usr/sbin"
 cp src/www/index.html src/www/app.js src/www/app.css src/www/api.php src/www/icon.svg src/www/manifest.json "$D/www/nfqws-ui/"
-cp src/bin/nfqws-ui-setup "$D/usr/sbin/"
+cp src/bin/nfqws-ui-setup src/bin/nfqws-ui "$D/usr/sbin/"
 sed -i "s/?v=[0-9A-Za-z.-]*\"/?v=$VERSION\"/g" "$D/www/nfqws-ui/index.html"
 sed -i "s/^const UI_VERSION = '[^']*';/const UI_VERSION = '$VERSION';/" "$D/www/nfqws-ui/api.php"
 sed -i "s/^VERSION=.*/VERSION=$VERSION/" "$D/usr/sbin/nfqws-ui-setup"
 grep -q "UI_VERSION = '$VERSION'" "$D/www/nfqws-ui/api.php"
 
 # Права задаются явно: на Windows у файлов нет битов исполнения
-( cd "$D" && $TAR --mode='u=rwX,go=rX' --exclude=./usr/sbin/nfqws-ui-setup -cf "$STAGE/data.tar" . \
-  && $TAR --mode=0755 -rf "$STAGE/data.tar" ./usr/sbin/nfqws-ui-setup )
+( cd "$D" && $TAR --mode='u=rwX,go=rX' --exclude=./usr/sbin/nfqws-ui-setup --exclude=./usr/sbin/nfqws-ui -cf "$STAGE/data.tar" . \
+  && $TAR --mode=0755 -rf "$STAGE/data.tar" ./usr/sbin/nfqws-ui-setup ./usr/sbin/nfqws-ui )
 gzip -9n "$STAGE/data.tar"
 
 # --- control ---
