@@ -1,0 +1,6 @@
+#!/bin/sh
+[ -n "${IPKG_INSTROOT}" ] && exit 0
+# При обновлении пакета postinst заново соберёт конфиг — ничего не убираем
+[ "$1" = upgrade ] && exit 0
+/usr/sbin/nfqws-ui-setup remove
+exit 0

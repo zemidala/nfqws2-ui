@@ -1,0 +1,3 @@
+dist/
+*.ipk
+node_modules/

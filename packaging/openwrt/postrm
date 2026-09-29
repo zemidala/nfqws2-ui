@@ -1,0 +1,7 @@
+#!/bin/sh
+[ -n "${IPKG_INSTROOT}" ] && exit 0
+[ "$1" = upgrade ] && exit 0
+rm -f /tmp/nfqws-ui-pending.json /tmp/nfqws-ui-login.json
+rm -rf /tmp/nfqws-ui-cache /tmp/nfqws-ui-test
+echo "nfqws2-ui удалён. Настройки, снимки и история остались в /etc/nfqws-ui, /etc/nfqws2/.snapshots, /etc/nfqws2/.history"
+exit 0

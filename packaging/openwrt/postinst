@@ -1,0 +1,12 @@
+#!/bin/sh
+[ -n "${IPKG_INSTROOT}" ] && exit 0
+mkdir -p /etc/nfqws-ui
+chmod 700 /etc/nfqws-ui
+if /usr/sbin/nfqws-ui-setup apply; then
+	echo ""
+	echo "nfqws2-ui установлен. Вход — логин root и его пароль."
+	echo "Настройки порта, HTTPS и прочего: nfqws-ui-setup help"
+else
+	echo "nfqws2-ui: не удалось настроить lighttpd (см. выше). Повторить: nfqws-ui-setup apply"
+fi
+exit 0
