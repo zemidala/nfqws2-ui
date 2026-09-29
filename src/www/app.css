@@ -62,7 +62,7 @@ svg { width: 17px; height: 17px; flex: none; }
 /* ---------- шапка ---------- */
 .top { position: sticky; top: 0; z-index: 30; background: var(--surface); border-bottom: 1px solid var(--line); }
 .top-in { display: flex; align-items: center; gap: 12px; padding: 0 16px; min-height: var(--top-h); }
-.brand { font-weight: 700; font-size: 16px; display: flex; align-items: baseline; gap: 6px; white-space: nowrap; }
+.brand { font-weight: 700; font-size: 16px; display: flex; align-items: baseline; gap: 6px; white-space: nowrap; color: inherit; text-decoration: none; }
 .brand small { font-weight: 500; color: var(--muted); font-size: 12px; }
 .pill { display: inline-flex; align-items: center; gap: 6px; padding: 2px 10px; border-radius: 99px; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
 .pill.ok { background: var(--ok-soft); color: var(--ok); } .pill.bad { background: var(--bad-soft); color: var(--bad); } .pill.muted { background: var(--soft); color: var(--muted); }

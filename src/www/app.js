@@ -292,7 +292,7 @@ function renderShell() {
   document.getElementById('app').replaceChildren(
     h('header', { class: 'top' },
       h('div', { class: 'top-in' },
-        h('div', { class: 'brand' }, 'nfqws2', h('small', { id: 'ver' })),
+        h('a', { class: 'brand', href: '#/settings/about', title: 'О программе' }, 'nfqws2-ui', h('small', { id: 'ver' })),
         h('span', { id: 'svc', class: 'pill muted' }, h('span', { class: 'dot' }), '…'),
         h('span', { id: 'svc-ctl', class: 'svc-ctl' }),
         nav('tabs'),
@@ -336,7 +336,9 @@ function updateChrome() {
       ? [btn(h('span', { class: 'ctl-label', text: 'Перезапустить' }), safeRestart, 'small ghost', 'power', { title: 'Перезапустить nfqws2 с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, изменения откатятся сами', 'aria-label': 'Перезапустить', disabled: busy }),
         btn(h('span', { class: 'ctl-label', text: 'Остановить' }), () => service('stop'), 'small ghost danger', 'stop', { title: 'Остановить nfqws2 — обход блокировок перестанет работать', 'aria-label': 'Остановить', disabled: busy })]
       : btn(h('span', { class: 'ctl-label', text: 'Запустить' }), () => service('start'), 'small primary', 'play', { title: 'Запустить nfqws2', 'aria-label': 'Запустить' }));
-  document.getElementById('ver').textContent = st.version ? 'v' + st.version : '';
+  const ver = document.getElementById('ver');
+  ver.textContent = st.ui?.version ? 'v' + st.ui.version : '';
+  ver.parentElement.title = `nfqws2-ui ${st.ui?.version || ''}${st.version ? ' · nfqws2 ' + st.version : ''} — о программе и обновления`;
   const need = st.running && (st.restart_needed || !st.in_sync) && !pendingActive();
   const u = st.ui?.update;
   const repoLink = document.getElementById('repo-link');
@@ -605,7 +607,7 @@ function renderSideService(el) {
           btn('Остановить', () => service('stop'), 'small danger', 'stop', { title: 'Остановить nfqws2 — обход блокировок перестанет работать', disabled: pendingActive() })]
         : btn('Запустить', () => service('start'), 'small primary', 'play'),
       btn('Обновить', () => route(true), 'small ghost', 'refresh', { title: 'Обновить данные на странице' })),
-    h('p', { class: 'muted sm num', text: [st.version && 'v' + st.version, st.running && st.process.started && 'запущен ' + fmtAgo(st.now - st.process.started), st.running && st.process.rss_kb && (st.process.rss_kb / 1024).toFixed(1).replace('.', ',') + ' МБ'].filter(Boolean).join(' · ') }),
+    h('p', { class: 'muted sm num', text: [st.version && 'nfqws2 v' + st.version, st.running && st.process.started && 'запущен ' + fmtAgo(st.now - st.process.started), st.running && st.process.rss_kb && (st.process.rss_kb / 1024).toFixed(1).replace('.', ',') + ' МБ'].filter(Boolean).join(' · ') }),
     need && !pendingActive() ? notice('warn', 'Нужен перезапуск', 'Конфиг изменён после запуска nfqws2. После перезапуска интерфейс проверит сайты и откатит изменения, если вы их не подтвердите.', btn('Перезапустить с проверкой', safeRestart, 'small warn')) : null,
     st.rollback?.files.length && !pendingActive() ? h('div', { class: 'row sm' },
       h('span', { class: 'muted', text: `С ${fmtDate(st.rollback.since)} изменено: ${st.rollback.files.join(', ')}` }),
