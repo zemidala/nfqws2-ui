@@ -589,7 +589,7 @@ function renderSideMonitor(el) {
     h('div', { class: 'blk-h' }, h('h2', { text: 'Мониторинг' }), h('a', { class: 'sm', href: '#/tests/monitor', text: 'открыть' })),
     h('p', { class: 'sm' }, h('span', { class: okN === m.sites.length ? 'status-ok' : 'status-bad', text: `${okN} из ${m.sites.length} открываются` }),
       m.last ? h('span', { class: 'muted', text: ' · ' + fmtAgo(S.state.now - m.last) }) : null, m.enabled ? null : h('span', { class: 'muted', text: ' · выключен' })),
-    h('div', { class: 'mon-mini' }, m.sites.map((s) => h('button', { type: 'button', class: 'mon-row', onclick: () => checkHost(s.host), title: 'Проверить сейчас' },
+    h('div', { class: 'mon-mini' }, m.sites.map((s) => h('button', { type: 'button', class: 'mon-row', onclick: () => checkHost(s.host), title: 'Проверить сейчас (повторный клик — свернуть)' },
       levelIcon(!s.last ? 'info' : s.last[1] ? 'ok' : 'error'), h('span', { class: 'ellipsis mono sm', text: s.host }), uptimeBar(s.recent)))));
 }
 
@@ -695,11 +695,17 @@ function createCheck() {
   const recent = h('div', { class: 'recent' });
   const drawRecent = () => recent.replaceChildren(recentGet().map((x) => h('button', { class: 'chip', type: 'button', text: x, onclick: () => run(x) })));
   let seq = 0;
+  let shown = null;   // сайт, результат которого сейчас развёрнут
+  // Свернуть результат (и отменить проверку, если она ещё идёт)
+  const collapse = () => { seq++; shown = null; out.replaceChildren(); closeBtn.hidden = true; };
+  const closeBtn = h('button', { class: 'btn ghost icon small', type: 'button', hidden: true, title: 'Свернуть результат', 'aria-label': 'Свернуть результат', onclick: () => { collapse(); input.value = ''; } }, icon('up'));
   async function run(host) {
     host = host.trim();
     if (!host) return;
     input.value = host;
     const my = ++seq;
+    shown = host;
+    closeBtn.hidden = false;
     out.replaceChildren(spinner('Проверяю…'));
     let res;
     try { res = await api('check', { host }); } catch (e) { out.replaceChildren(notice('bad', e.message)); return; }
@@ -711,22 +717,26 @@ function createCheck() {
       h('div', {}, h('h3', { text: res.host }), h('div', { class: 'sm muted', text: res.ips.length ? 'IP: ' + res.ips.slice(0, 3).join(', ') + (res.ips.length > 3 ? ` +${res.ips.length - 3}` : '') : 'IP не определился' })),
       res.podkop?.proxy ? notice('info', 'Идёт через podkop (прокси на VPS)', 'Для клиентов сети этот сайт уходит в туннель podkop, nfqws2 видит только соединение до сервера прокси. Проверка ниже — с самого роутера, мимо podkop.') : null,
       probeBox, routesBlock(res), actionsBlock(res),
-      btn('Подобрать стратегию', () => go('#/tests?host=' + encodeURIComponent(res.host)), 'small', 'tests'));
+      h('div', { class: 'row' }, btn('Подобрать стратегию', () => go('#/tests?host=' + encodeURIComponent(res.host)), 'small', 'tests'),
+        h('span', { class: 'grow' }), btn('Свернуть', () => { collapse(); input.value = ''; }, 'small ghost', 'up')));
+    shown = res.host;
     const pr = await api('probe', { host: res.host }).catch((e) => ({ ok: false, reason: e.message }));
     if (my === seq) probeBox.replaceChildren(probeVerdict(res, pr));
   }
   const el = h('section', { class: 'blk' },
-    h('div', { class: 'blk-h' }, h('h2', { text: 'Проверить сайт' })),
+    h('div', { class: 'blk-h' }, h('h2', { text: 'Проверить сайт' }), closeBtn),
     h('form', { class: 'search', onsubmit: (e) => { e.preventDefault(); run(input.value); } }, input, h('button', { class: 'btn primary icon', type: 'submit', title: 'Проверить', 'aria-label': 'Проверить' }, icon('search'))),
     recent, out);
+  input.addEventListener('keydown', (e) => { if (e.key === 'Escape' && shown) { e.preventDefault(); collapse(); input.value = ''; } });
   drawRecent();
-  return { el, run, input };
+  // Повторный клик по тому же сайту (в мониторинге) сворачивает результат
+  const toggle = (host) => { if (shown && shown === host.trim()) { collapse(); input.value = ''; return false; } run(host); return true; };
+  return { el, run, input, toggle, collapse };
 }
 
 function checkHost(host) {
   if (isWide()) {
-    S.check.run(host);
-    S.check.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    if (S.check.toggle(host)) S.check.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
   } else {
     go('#/?q=' + encodeURIComponent(host));
   }
