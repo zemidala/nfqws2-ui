@@ -17,7 +17,7 @@ function ldate(string $fmt, ?int $ts = null): string
   return gmdate($fmt, ($ts ?? time()) + TZ_OFFSET);
 }
 
-const UI_VERSION = '1.0.0';
+const UI_VERSION = '1.1.0';
 
 // Пути пакета nfqws2-keenetic. На OpenWrt — корень «/», в Entware (Keenetic) — «/opt» (не проверено).
 define('ROOT', !is_file('/usr/bin/nfqws2') && is_file('/opt/usr/bin/nfqws2') ? '/opt' : '');
@@ -47,7 +47,7 @@ const CONF_VARS = ['ISP_INTERFACE', 'NFQWS_BASE_ARGS', 'NFQWS_ARGS_CUSTOM', 'NFQ
 // Переменные с аргументами nfqws2 — их проверяет линтер
 const ARG_VARS = ['NFQWS_BASE_ARGS', 'NFQWS_ARGS_CUSTOM', 'NFQWS_ARGS', 'NFQWS_ARGS_QUIC', 'NFQWS_ARGS_UDP', 'NFQWS_ARGS_IPSET'];
 const CACHE_DIR = '/tmp/nfqws-ui-cache';
-const CACHE_VER = 4;   // увеличить при изменении разбора справки/lua/проверок
+const CACHE_VER = 5;   // увеличить при изменении разбора справки/lua/проверок
 
 // ================= общее =================
 
@@ -1329,6 +1329,153 @@ function listFileExists(string $path): bool
 
 // Проверка переменных с аргументами. $raw — значения как в форме (для привязки к номеру аргумента),
 // $text — полный текст кандидата конфига. Возвращает список замечаний.
+// ---------- перенос конфига с другой системы ----------
+// Конфиг, скопированный с Keenetic (Entware, пути /opt/...) на OpenWrt или обратно, из zapret2 (/opt/zapret2/...)
+// или от nfqws первой версии, часто не запускается: другие пути, интерфейс провайдера, нет части переменных.
+
+function platformName(): string
+{
+  return ROOT ? 'Keenetic (Entware)' : 'OpenWrt';
+}
+
+// Интерфейс маршрута по умолчанию — обычно это провайдер
+function wanIface(): string
+{
+  exec('ip -4 route show default 2>/dev/null', $out);
+  foreach ($out as $l) {
+    if (preg_match('/\bdev (\S+)/', $l, $m)) {
+      return $m[1];
+    }
+  }
+  return ROOT ? 'eth3' : 'wan';
+}
+
+// Исправленный текст конфига, список правок и откуда, судя по путям, пришёл конфиг
+function adaptConf(string $text): array
+{
+  $changes = [];
+  $from = [];
+
+  // 1. Пути. true — переносить всегда (та же раскладка nfqws2), false — только если такой файл здесь есть
+  $rules = [
+    ['~^(?:/opt)?/etc/nfqws2/~', CONF_DIR . '/', true, ROOT ? 'OpenWrt' : 'Keenetic (Entware)'],
+    ['~^(?:/opt)?/etc/nfqws/(?=[\w.-]+\.list$)~', LISTS_DIR . '/', false, 'nfqws первой версии'],
+    ['~^(?:/opt)?/etc/nfqws/~', CONF_DIR . '/', false, 'nfqws первой версии'],
+    ['~^/opt/zapret2?/lua/~', LUA_DIR . '/', false, 'zapret2'],
+    ['~^/opt/zapret2?/files/fake/~', CONF_DIR . '/blobs/', false, 'zapret2'],
+    ['~^/opt/zapret2?/ipset/~', LISTS_DIR . '/', false, 'zapret2'],
+  ];
+  if (!ROOT) {
+    $rules[] = ['~^/opt/var/log/~', '/var/log/', true, 'Keenetic (Entware)'];
+  }
+  $lines = explode("\n", $text);
+  foreach ($lines as &$line) {
+    if (preg_match('/^\s*#/', $line)) {
+      continue;
+    }
+    $line = preg_replace_callback('~(?<![\w./-])/[\w.+-]+(?:/[\w.+-]+)*/?~', function ($m) use ($rules, &$changes, &$from) {
+      $p = $m[0];
+      foreach ($rules as [$re, $to, $always, $src]) {
+        if (!preg_match($re, $p)) {
+          continue;
+        }
+        $new = preg_replace($re, $to, $p, 1);
+        if ($new === $p || (!$always && !file_exists($new))) {
+          return $p;
+        }
+        $changes["$p → $new"] = true;
+        $from[$src] = true;
+        return $new;
+      }
+      return $p;
+    }, $line);
+  }
+  unset($line);
+  $text = implode("\n", $lines);
+  $changes = array_keys($changes);
+
+  $raw = confRawVars($text);
+
+  // 2. Интерфейс провайдера, которого на этом роутере нет (eth3/ppp0 с Keenetic, wan/pppoe-wan с OpenWrt)
+  if (isset($raw['ISP_INTERFACE']) && is_dir('/sys/class/net')) {
+    $ifs = tokens($raw['ISP_INTERFACE']);
+    if (!array_filter($ifs, fn($i) => is_dir("/sys/class/net/$i"))) {
+      $wan = wanIface();
+      $text = confSetVar($text, 'ISP_INTERFACE', $wan);
+      $changes[] = ($ifs ? 'интерфейса «' . implode(' ', $ifs) . '» здесь нет' : 'интерфейс провайдера не задан') . " → $wan (маршрут по умолчанию)";
+    }
+  }
+
+  // 3. lua-файлы, без которых --lua-desync не работает
+  if (isset($raw['NFQWS_BASE_ARGS']) && preg_match('/--lua-desync=/', $text) && !preg_match('~--lua-init=@\S*zapret-lib\.lua~', $raw['NFQWS_BASE_ARGS'])) {
+    foreach (['zapret-lib.lua', 'zapret-antidpi.lua', 'zapret-auto.lua'] as $f) {
+      if (is_file(LUA_DIR . "/$f") && !str_contains($raw['NFQWS_BASE_ARGS'], "/$f")) {
+        $text = appendTokenInText($text, 'NFQWS_BASE_ARGS', '--lua-init=@' . LUA_DIR . "/$f");
+        $changes[] = "подключён $f";
+      }
+    }
+  }
+
+  // 4. Переменные, без которых init-скрипт не запустит nfqws2 или запустит не так (значения — как в стандартном конфиге)
+  $base = [];
+  foreach (['zapret-lib.lua', 'zapret-antidpi.lua', 'zapret-auto.lua'] as $f) {
+    if (is_file(LUA_DIR . "/$f")) {
+      $base[] = '--lua-init=@' . LUA_DIR . "/$f";
+    }
+  }
+  foreach (['quic_initial', 'tls_clienthello'] as $b) {
+    if (is_file(CONF_DIR . "/blobs/$b.bin")) {
+      $base[] = "--blob=$b:@" . CONF_DIR . "/blobs/$b.bin";
+    }
+  }
+  $needed = [
+    'ISP_INTERFACE' => fn() => wanIface(),
+    'NFQWS_BASE_ARGS' => fn() => implode("\n" . str_repeat(' ', 17), $base),
+    'NFQWS_EXTRA_ARGS' => fn() => '$MODE_LIST',
+    'TCP_PORTS' => fn() => '80,443',
+    'UDP_PORTS' => fn() => '443',
+    'IPV6_ENABLED' => fn() => '1',
+    'LOG_LEVEL' => fn() => '0',
+    'NFQUEUE_NUM' => fn() => '300',
+    'USER' => fn() => 'nobody',
+    'CONFIG_VERSION' => fn() => '1',
+  ];
+  if (ROOT) {
+    $needed += ['POLICY_NAME' => fn() => 'nfqws', 'POLICY_EXCLUDE' => fn() => '0'];
+  }
+  $added = [];
+  foreach ($needed as $name => $val) {
+    if (!array_key_exists($name, $raw)) {
+      $v = $val();
+      $text = rtrim($text, "\n") . "\n" . ($added ? '' : "\n# Добавлено nfqws2-ui: этих переменных не было в конфиге\n")
+        . $name . '=' . (preg_match('/^[\w.,:-]+$/', $v) && $name !== 'ISP_INTERFACE' ? $v : "\"$v\"") . "\n";
+      $added[] = $name;
+    }
+  }
+  // Режимы MODE_* нужны до строки, где на них ссылается NFQWS_EXTRA_ARGS
+  $modes = [
+    'MODE_LIST' => '--hostlist=' . LISTS_DIR . '/user.list',
+    'MODE_ALL' => '--hostlist-exclude=' . LISTS_DIR . '/exclude.list',
+    'MODE_AUTO' => '$MODE_LIST --hostlist-auto=' . LISTS_DIR . '/auto.list --hostlist-auto-debug=' . ROOT . '/var/log/nfqws2.log $MODE_ALL',
+  ];
+  $missingModes = array_diff_key($modes, $raw);
+  if ($missingModes) {
+    $block = '';
+    foreach ($missingModes as $name => $v) {
+      $block .= "$name=\"$v\"\n";
+      $added[] = $name;
+    }
+    $text = preg_match('/^NFQWS_EXTRA_ARGS=/m', $text, $m, PREG_OFFSET_CAPTURE)
+      ? substr($text, 0, $m[0][1]) . $block . substr($text, $m[0][1])
+      : rtrim($text, "\n") . "\n$block";
+  }
+  if ($added) {
+    $changes[] = 'добавлены переменные: ' . implode(', ', $added);
+  }
+
+  return ['text' => normalizeText($text), 'changes' => $changes, 'from' => array_keys($from), 'added' => $added];
+}
+
 function lintConf(array $raw, string $text): array
 {
   $issues = [];
@@ -1352,6 +1499,14 @@ function lintConf(array $raw, string $text): array
   $exp = confValues($tmp);
   unlink($tmp);
 
+  $ad = adaptConf($text);
+  if ($ad['changes']) {
+    $msg = $ad['from']
+      ? 'Похоже, конфиг от ' . implode(' / ', $ad['from']) . ', а здесь ' . platformName() . ' — пути и настройки нужно поправить'
+      : ($ad['added'] && count($ad['changes']) === 1 ? 'В конфиге не хватает переменных: ' . implode(', ', $ad['added']) : 'Конфиг не подходит для этого роутера');
+    $add(null, null, $ad['from'] ? 'error' : 'warning', $msg, ['op' => 'adapt', 'label' => 'Исправить под ' . platformName(), 'changes' => $ad['changes']]);
+  }
+
   $help = helpInfo();
   $opts = $help['options'];
   $lua = luaCatalog();
@@ -1374,10 +1529,32 @@ function lintConf(array $raw, string $text): array
 
   foreach (ARG_VARS as $var) {
     $toks = tokens($raw[$var] ?? '');
+    // Комментарий внутри кавычек (так написан стандартный конфиг Keenetic): от «#» до конца строки.
+    // nfqws2 получает эти слова как лишние аргументы и пропускает их
+    $comment = [];
+    $n = 0;
+    foreach (explode("\n", $raw[$var] ?? '') as $line) {
+      $lt = tokens($line);
+      foreach ($lt as $k => $t) {
+        if ($t[0] === '#') {
+          $comment[$n + $k] = count($lt) - $k;
+          for ($j = $k + 1; $j < count($lt); $j++) {
+            $comment[$n + $j] = 0;
+          }
+          break;
+        }
+      }
+      $n += count($lt);
+    }
     foreach ($toks as $i => $t) {
-      if ($t[0] === '#') {
-        $add($var, $i, 'error', 'Комментарий внутри кавычек уйдёт в nfqws2 как аргумент — вынесите его над переменной', ['op' => 'remove', 'label' => 'Удалить комментарий']);
+      if (isset($comment[$i])) {
+        if ($comment[$i]) {
+          $add($var, $i, 'info', 'Комментарий внутри кавычек — nfqws2 получит его слова как лишние аргументы и пропустит; надёжнее вынести над переменной', ['op' => 'remove_comment', 'count' => $comment[$i], 'label' => 'Удалить комментарий']);
+        }
         continue;
+      }
+      if (str_starts_with($t, '--dpi-desync')) {
+        $add(null, null, 'error', 'Похоже, это стратегии nfqws первой версии (--dpi-desync…) — nfqws2 их не понимает, их нужно переписать на --lua-desync');
       }
       if (!str_starts_with($t, '--')) {
         $add($var, $i, 'error', 'Ожидается параметр вида --имя=значение');
@@ -1594,7 +1771,8 @@ function lintDesync(string $var, int $i, string $val, array $funcs, array $lua, 
   }
   $f = $funcs[$fn];
   if (!isset($loadedLua[$f['file']])) {
-    $add($var, $i, 'error', "Функция {$fn} из {$f['file']}, а этот файл не подключён через --lua-init");
+    $add($var, $i, 'error', "Функция {$fn} из {$f['file']}, а этот файл не подключён через --lua-init",
+      is_file(LUA_DIR . "/{$f['file']}") ? ['op' => 'append', 'var' => 'NFQWS_BASE_ARGS', 'tok' => '--lua-init=@' . LUA_DIR . "/{$f['file']}", 'label' => "Подключить {$f['file']}"] : null);
   }
   $allowed = array_merge(array_keys($f['args']), $f['file_keys'], ['strategy', 'final']);
   foreach ($f['std'] as $g) {
@@ -1839,6 +2017,12 @@ function applyConfFix(array $x, ?string $choice): string
   $text = file_get_contents(CONF_FILE);
   $raw = confRawVars($text);
   $f = $x['fix'];
+  if ($f['op'] === 'adapt') {
+    return adaptConf($text)['text'];
+  }
+  if ($f['op'] === 'append') {
+    return appendTokenInText($text, $f['var'], $f['tok']);
+  }
   if ($f['op'] === 'set_var') {
     return confSetVar($text, $f['var'], $f['value']);
   }
@@ -1858,6 +2042,11 @@ function applyConfFix(array $x, ?string $choice): string
   switch ($f['op']) {
     case 'remove':
       return editTokenInText($text, $var, $i, null);
+    case 'remove_comment':
+      for ($k = 0; $k < $f['count']; $k++) {
+        $text = editTokenInText($text, $var, $i, null);
+      }
+      return $text;
     case 'replace':
       return editTokenInText($text, $var, $i, $f['to']);
     case 'move':
@@ -3036,6 +3225,10 @@ switch ($cmd) {
   case 'lint_raw':
     $text = normalizeText($str('content'));
     respond(lintConf(confRawVars($text), $text));
+
+  case 'conf_adapt':
+    // Переделка текста из редактора под этот роутер — без сохранения
+    respond(adaptConf(normalizeText($str('content'))));
 
   case 'list_lint':
     $path = editablePath($str('name'));

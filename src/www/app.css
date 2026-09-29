@@ -312,6 +312,9 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 .cfg-body .ed-ta { height: calc(100vh - var(--top-h) - 190px); min-height: 420px; resize: none; }
 .cfg-body .ed-ta:focus { box-shadow: none; }
 .cfg-status { grid-column: 1 / -1; display: flex; gap: 14px; flex-wrap: wrap; padding: 6px 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); font-variant-numeric: tabular-nums; }
+.cfg-adapt { grid-column: 1 / -1; padding: 10px; border-bottom: 1px solid var(--line); }
+.cfg-adapt:empty { display: none; }
+.cfg-adapt ul { margin: 4px 0; padding-left: 18px; font-size: 12px; overflow-wrap: anywhere; }
 .cfg-extra { grid-column: 1 / -1; padding: 10px 12px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
 @media (max-width: 899px) { .cfg { grid-template-columns: 1fr; } .outline { display: none; } .cfg-body .ed-ta { height: 60vh; } }
 

@@ -433,7 +433,7 @@ function fixButton(x, disabledReason = null) {
     await loadState().catch(() => {});
     route();
   };
-  const attrs = disabledReason ? { disabled: true, title: disabledReason } : { title: 'Исправить автоматически. Отменить можно кнопкой «Отменить» или в истории изменений.' };
+  const attrs = disabledReason ? { disabled: true, title: disabledReason } : { title: (f.changes?.length ? 'Будет сделано:\n' + f.changes.join('\n') + '\n\n' : '') + 'Исправить автоматически. Отменить можно кнопкой «Отменить» или в истории изменений.' };
   if (f.choices?.length) {
     const sel = h('select', { class: 'mini-sel mono', 'aria-label': 'Значение' }, f.choices.map((c) => h('option', { value: c, text: c })));
     return h('span', { class: 'row', style: 'gap:4px;flex-wrap:nowrap' }, sel, btn(f.label, () => run(sel.value), 'small primary', 'wand', attrs));
@@ -1087,13 +1087,13 @@ function renderHelp(box, info, tokIssues) {
     info?.std ? h('details', {}, h('summary', { text: 'стандартные параметры' }), h('ul', { class: 'mono sm' }, info.std.map((x) => h('li', { text: x })))) : null);
 }
 
-function issuesListEl(issues, onPick, lineOf) {
+function issuesListEl(issues, onPick, lineOf, fixFor = fixButton) {
   if (!issues.length) return null;
   return h('ul', { class: 'iss-list' }, issues.map((x) => h('li', {},
     h('div', { class: 'row', style: 'flex-wrap:nowrap;align-items:flex-start' },
       h('button', { type: 'button', class: 'iss-item', onclick: () => onPick?.(x) }, levelIcon(x.level),
         h('span', {}, lineOf ? h('span', { class: 'muted', text: lineOf(x) + ': ' }) : null, x.msg)),
-      fixButton(x)))));
+      fixFor(x)))));
 }
 
 // ============ Сайты: менеджер списков ============
@@ -2115,6 +2115,7 @@ async function paneRaw(content) {
   const counts = h('span', { class: 'row' });
   const findN = h('span', { class: 'sm muted num' });
   const extra = h('div', { class: 'cfg-extra' });
+  const banner = h('div', { class: 'cfg-adapt' });
   let caretInfo = 'строка 1, столбец 1';
   const tokAt = (pos, text) => {
     for (const [name, rg] of Object.entries(confVarRanges(text))) {
@@ -2164,8 +2165,27 @@ async function paneRaw(content) {
       dry ? h('span', { class: dry.ok ? 'status-ok' : 'status-bad', text: 'nfqws2 --dry-run: ' + (dry.ok ? 'пройдено' : dry.message) }) : h('span', { text: 'проверка: ошибка синтаксиса' }),
       h('span', { class: 'grow' }), h('span', { text: `сохранён ${fmtDate(conf.mtime)} · перед сохранением делается снимок` }));
   }
+  // Конфиг от другой системы (Keenetic ↔ OpenWrt, zapret2) переделывается прямо в редакторе — сохраняет пользователь
+  const adaptInEditor = async () => {
+    const r = await guarded(() => api('conf_adapt', { content: ed.ta.value }));
+    if (!r) return;
+    const before = ed.ta.value;
+    const put = (text) => { ed.setValue(text); setDirty(text !== conf.content); relint(text); drawOutline(); };
+    put(r.text);
+    toast(`В редакторе: ${plural(r.changes.length, 'правка', 'правки', 'правок')}. Проверьте и сохраните.`, { undo: () => put(before) });
+  };
+  const fixFor = (x) => x.fix?.op === 'adapt' ? btn(x.fix.label, adaptInEditor, 'small primary', 'wand') : fixButton(x);
+  function drawBanner() {
+    const x = issues.find((i) => i.fix?.op === 'adapt');
+    banner.replaceChildren(x ? h('div', { class: 'notice ' + (x.level === 'error' ? 'bad' : 'warn') }, icon(x.level === 'error' ? 'bad' : 'alert'),
+      h('div', { class: 'grow' }, h('b', { text: x.msg }),
+        h('ul', { class: 't' }, x.fix.changes.map((c) => h('li', { class: 'mono', text: c }))),
+        h('div', { class: 't sm', text: 'Правки попадут в редактор — проверьте их и нажмите «Сохранить».' })),
+      h('div', { class: 'notice-actions' }, btn(x.fix.label, adaptInEditor, 'small primary', 'wand'))) : []);
+  }
   function drawExtra() {
-    extra.replaceChildren(issuesListEl(issues, (x) => { const p = locate(x); if (p) ed.select(p.start, p.end); }, (x) => { const p = locate(x); return (x.var || 'конфиг') + (p ? ', строка ' + ed.ta.value.slice(0, p.start).split('\n').length : ''); }), sug.el, help);
+    drawBanner();
+    extra.replaceChildren(issuesListEl(issues, (x) => { const p = locate(x); if (p) ed.select(p.start, p.end); }, (x) => { const p = locate(x); return (x.var || 'конфиг') + (p ? ', строка ' + ed.ta.value.slice(0, p.start).split('\n').length : ''); }, fixFor), sug.el, help);
   }
   const relint = debounce(async (val) => {
     const r = await api('lint_raw', { content: val }).catch(() => null);
@@ -2228,7 +2248,7 @@ async function paneRaw(content) {
   ed.setIssues(issues);
   content.append(h('div', { class: 'vh' }, h('h1', { text: 'Конфиг целиком' }), h('span', { class: 'sm muted mono', text: S.state?.ui?.conf_file || 'nfqws2.conf' }), h('span', { class: 'grow' }),
     isWide() ? btn('Показать обзор и меню', () => setFocus(false), 'small') : null),
-  h('div', { class: 'cfg' }, tools, outline, h('div', { class: 'cfg-body' }, ed.el), status, extra));
+  h('div', { class: 'cfg' }, tools, banner, outline, h('div', { class: 'cfg-body' }, ed.el), status, extra));
   drawOutline(); drawCounts(); drawStatus(); drawExtra();
 }
 
