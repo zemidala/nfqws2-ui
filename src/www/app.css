@@ -510,3 +510,22 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 .md-toc { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 13px; }
 .release-notes .md { font-size: 13px; }
 .release-notes .md h3 { border-top: 0; padding-top: 0; margin-top: 10px; }
+
+/* ---------- выравнивание иконок с текстом ----------
+   Иконки центрируются по рамке строки, а середина строчных букв на ~1px ниже —
+   поэтому рядом с текстом иконку опускаем на 1px (в квадратных кнопках-иконках не трогаем). */
+.btn:not(.icon) > svg, .tabs a > svg, .bottom a > svg, .icon-link > svg, .chip > svg { position: relative; top: 1px; }
+.icon-link { display: inline-flex; align-items: center; gap: 5px; }
+.check-go { padding-left: 12px; padding-right: 10px; }
+.check-go svg { width: 15px; height: 15px; }
+
+/* строки «подпись — значение»: подпись по базовой линии первой строки значения (поле, чипы, текст) */
+.frow { align-items: baseline; }
+.frow > .lbl { padding-top: 0; }
+.cmd-row { grid-template-columns: 290px minmax(0, 1fr); }
+.cmd-row > code.lbl { white-space: nowrap; color: var(--fg); }
+@media (max-width: 759px) { .cmd-row { grid-template-columns: 1fr; gap: 2px; } }
+.tbl td.date { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* поиск в списке: на узком экране уходит на свою строку, а не сжимается рядом с сортировкой */
+.list-search { flex: 1 1 240px; min-width: 0; }

@@ -36,6 +36,7 @@ const ICONS = {
   power: '<path d="M12 3v8"/><path d="M7 6.3a8 8 0 1 0 10 0"/>',
   dup: '<rect x="8" y="8" width="12" height="12" rx="2"/><path d="M4 16V6a2 2 0 0 1 2-2h10"/><path d="M12 14h4"/>',
   git: '<circle cx="6" cy="5" r="2"/><circle cx="6" cy="19" r="2"/><circle cx="18" cy="7" r="2"/><path d="M6 7v10M18 9c0 5-7 4-11 8"/>',
+  arrow: '<path d="M5 12h14M13 6l6 6-6 6"/>',
   gift: '<rect x="3" y="8" width="18" height="5" rx="1"/><path d="M5 13v8h14v-8M12 8v13M12 8S10 3 7.5 4 9 8 12 8zM12 8s2-5 4.5-4S15 8 12 8z"/>',
 };
 
@@ -670,7 +671,7 @@ function renderSideBackup(el) {
   el.replaceChildren(
     h('div', { class: 'blk-h' }, h('h2', { text: 'Резервные копии' }), h('a', { class: 'sm', href: '#/settings/backup', text: 'открыть' })),
     s.count ? h('p', { class: 'sm' }, h('span', { class: 'status-ok', text: '✓ На роутере: ' }), `${plural(s.count, 'снимок', 'снимка', 'снимков')}, последний ${fmtAgo(S.state.now - s.last)}`) : h('p', { class: 'sm muted', text: 'Снимков пока нет' }),
-    h('p', { class: 'sm' }, h('a', { href: 'api.php?download=current' }, icon('download'), ' Скачать архив сейчас')));
+    h('p', { class: 'sm' }, h('a', { class: 'icon-link', href: 'api.php?download=current' }, icon('download'), 'Скачать архив сейчас')));
 }
 
 function renderSideTraffic(el) {
@@ -725,7 +726,7 @@ function createCheck() {
   }
   const el = h('section', { class: 'blk' },
     h('div', { class: 'blk-h' }, h('h2', { text: 'Проверить сайт' }), closeBtn),
-    h('form', { class: 'search', onsubmit: (e) => { e.preventDefault(); run(input.value); } }, input, h('button', { class: 'btn primary icon', type: 'submit', title: 'Проверить', 'aria-label': 'Проверить' }, icon('search'))),
+    h('form', { class: 'search', onsubmit: (e) => { e.preventDefault(); run(input.value); } }, input, h('button', { class: 'btn primary check-go', type: 'submit', title: 'Проверить: открывается ли сайт и каким профилем nfqws2 он пойдёт' }, 'Проверить', icon('arrow'))),
     recent, out);
   input.addEventListener('keydown', (e) => { if (e.key === 'Escape' && shown) { e.preventDefault(); collapse(); input.value = ''; } });
   drawRecent();
@@ -1389,7 +1390,7 @@ async function drawList(content, name) {
       await reload();
     };
     addInput.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
-    const search = h('input', { class: 'input grow', id: 'list-filter', placeholder: 'Поиск в списке', value: filter, autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Поиск в списке' });
+    const search = h('input', { class: 'input list-search', id: 'list-filter', placeholder: 'Поиск в списке', value: filter, autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Поиск в списке' });
     const sortSel = h('select', { class: 'select', 'aria-label': 'Порядок', onchange: (e) => { sortMode = e.target.value; drawEntries(); } },
       [['file', 'Как в файле'], ['az', 'По алфавиту'], ['issues', 'Сначала с замечаниями']].map(([v, t]) => h('option', { value: v, text: t, selected: v === sortMode })));
     const bulk = h('div', { class: 'bulk', hidden: true });
@@ -2403,7 +2404,7 @@ async function paneAbout(content) {
     toast(r.error ? 'Не удалось проверить: ' + r.error : r.available ? `Есть новая версия: ${r.latest}` : 'У вас последняя версия');
     route();
   };
-  const cmd = (c, text) => h('div', { class: 'frow' }, h('code', { class: 'lbl mono', text: c }), h('span', { class: 'sm', text }));
+  const cmd = (c, text) => h('div', { class: 'frow cmd-row' }, h('code', { class: 'lbl mono', text: c }), h('span', { class: 'sm', text }));
   content.append(h('div', { class: 'vh' }, h('h1', { text: 'О программе' })),
     panel('nfqws2-ui', null,
       row('Версия', h('b', { text: st.ui?.version || '?' })),
@@ -2748,8 +2749,8 @@ async function viewTests(main, r) {
       h('div', { class: 'row' }, startBtn, h('span', { class: 'sm muted grow', text: 'Работает отдельный процесс nfqws2 на очереди 301 только для проверочных соединений роутера. Ваш трафик и основной nfqws2 не затрагиваются.' }))),
     out,
     tab === 'pick' && hist.items.length ? panel('Прошлые тесты', null, h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
-      h('thead', {}, h('tr', {}, h('th', { text: 'Когда' }), h('th', { text: 'Сайт' }), h('th', { text: 'Без обхода' }), h('th', { text: 'Сработало' }), h('th', { text: 'Лучшая' }))),
-      h('tbody', {}, hist.items.map((x) => h('tr', {}, h('td', { class: 'num', text: fmtDate(x.ts) }), h('td', { class: 'mono', text: x.host }),
+      h('thead', {}, h('tr', {}, h('th', { text: 'Когда' }), h('th', { text: 'Сайт' }), h('th', { text: 'Без обхода' }), h('th', { class: 'num', text: 'Сработало' }), h('th', { text: 'Лучшая' }))),
+      h('tbody', {}, hist.items.map((x) => h('tr', {}, h('td', { class: 'date', text: fmtDate(x.ts) }), h('td', { class: 'mono', text: x.host }),
         h('td', { text: x.baseline?.ok ? 'открывается' : x.baseline?.reason || '—' }), h('td', { class: 'num', text: `${x.ok} из ${x.total}` }), h('td', { class: 'mono sm', text: x.best || '—' }))))))) : null);
   poll();
 }
