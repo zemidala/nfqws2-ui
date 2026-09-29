@@ -292,13 +292,13 @@ function renderShell() {
   document.getElementById('app').replaceChildren(
     h('header', { class: 'top' },
       h('div', { class: 'top-in' },
-        h('a', { class: 'brand', href: '#/settings/about', title: 'О программе' }, 'nfqws2-ui', h('small', { id: 'ver' })),
+        h('div', { class: 'brand' }, 'nfqws2', h('small', { id: 'ver' })),
         h('span', { id: 'svc', class: 'pill muted' }, h('span', { class: 'dot' }), '…'),
         h('span', { id: 'svc-ctl', class: 'svc-ctl' }),
         nav('tabs'),
         h('span', { class: 'grow' }),
         h('span', { id: 'https-slot' }),
-        h('a', { class: 'btn ghost icon', id: 'repo-link', href: REPO, target: '_blank', rel: 'noopener', title: 'nfqws2-ui на GitHub', 'aria-label': 'nfqws2-ui на GitHub' }, icon('git')),
+        h('a', { class: 'btn ghost small repo-link', id: 'repo-link', href: REPO, target: '_blank', rel: 'noopener', title: 'nfqws2-ui на GitHub', 'aria-label': 'nfqws2-ui на GitHub' }, icon('git'), h('span', { id: 'ui-ver', class: 'num' })),
         h('button', { class: 'btn ghost small', type: 'button', id: 'undo-btn', hidden: true, onclick: () => undoLast(true) }, icon('undo'), h('span', { class: 'undo-label', text: 'Отменить' })),
         h('button', { class: 'btn ghost small', type: 'button', id: 'focus-off', hidden: true, onclick: () => setFocus(false) }, 'Показать обзор'),
         h('button', { class: 'btn ghost icon', id: 'refresh-top', type: 'button', title: 'Обновить', 'aria-label': 'Обновить', onclick: () => route(true) }, icon('refresh')),
@@ -336,13 +336,12 @@ function updateChrome() {
       ? [btn(h('span', { class: 'ctl-label', text: 'Перезапустить' }), safeRestart, 'small ghost', 'power', { title: 'Перезапустить nfqws2 с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, изменения откатятся сами', 'aria-label': 'Перезапустить', disabled: busy }),
         btn(h('span', { class: 'ctl-label', text: 'Остановить' }), () => service('stop'), 'small ghost danger', 'stop', { title: 'Остановить nfqws2 — обход блокировок перестанет работать', 'aria-label': 'Остановить', disabled: busy })]
       : btn(h('span', { class: 'ctl-label', text: 'Запустить' }), () => service('start'), 'small primary', 'play', { title: 'Запустить nfqws2', 'aria-label': 'Запустить' }));
-  const ver = document.getElementById('ver');
-  ver.textContent = st.ui?.version ? 'v' + st.ui.version : '';
-  ver.parentElement.title = `nfqws2-ui ${st.ui?.version || ''}${st.version ? ' · nfqws2 ' + st.version : ''} — о программе и обновления`;
+  document.getElementById('ver').textContent = st.version ? 'v' + st.version : '';
+  document.getElementById('ui-ver').textContent = st.ui?.version ? 'ui v' + st.ui.version : 'ui';
   const need = st.running && (st.restart_needed || !st.in_sync) && !pendingActive();
   const u = st.ui?.update;
   const repoLink = document.getElementById('repo-link');
-  if (repoLink) repoLink.title = `nfqws2-ui ${st.ui?.version || ''} на GitHub`;
+  if (repoLink) repoLink.title = `nfqws2-ui ${st.ui?.version || ''} — исходный код на GitHub. Версия и обновления: Настройки → О программе`;
   document.getElementById('banner').replaceChildren(
     need ? h('div', { class: 'banner' }, h('div', { class: 'banner-in' },
       h('span', { text: 'Конфиг изменён после запуска — изменения вступят в силу после перезапуска.' }),

@@ -486,3 +486,8 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 .lg-err { color: var(--bad); font-weight: 600; }
 .lg-warn { color: var(--warn); font-weight: 600; }
 .lg-ok { color: var(--ok); font-weight: 600; }
+
+/* версия интерфейса у ссылки на репозиторий */
+.repo-link { color: var(--muted); font-size: 12px; font-weight: 500; gap: 5px; }
+.repo-link:hover { color: var(--fg); }
+@media (max-width: 759px) { .repo-link span { display: none; } }
