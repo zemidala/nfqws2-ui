@@ -4,7 +4,7 @@ export PATH
 mkdir -p /opt/etc/nfqws-ui
 chmod 700 /opt/etc/nfqws-ui
 # Служба lighttpd из Entware иначе принимает за свой процесс WebDAV-сервер прошивки Keenetic
-# (он тоже lighttpd) и останавливает его: https://github.com/Entware/entware-packages/pull/27
+# (он тоже lighttpd) и останавливает его
 [ -f /opt/etc/init.d/S80lighttpd ] && sed -i 's#^PROCS=lighttpd$#PROCS=/opt/sbin/lighttpd#' /opt/etc/init.d/S80lighttpd
 if /opt/sbin/nfqws-ui-setup apply; then
 	echo ""
