@@ -1,0 +1,16 @@
+#!/bin/sh
+PATH=/opt/sbin:/opt/bin:/opt/usr/sbin:/opt/usr/bin:/usr/sbin:/usr/bin:/sbin:/bin
+export PATH
+mkdir -p /opt/etc/nfqws-ui
+chmod 700 /opt/etc/nfqws-ui
+# Служба lighttpd из Entware иначе принимает за свой процесс WebDAV-сервер прошивки Keenetic
+# (он тоже lighttpd) и останавливает его: https://github.com/Entware/entware-packages/pull/27
+[ -f /opt/etc/init.d/S80lighttpd ] && sed -i 's#^PROCS=lighttpd$#PROCS=/opt/sbin/lighttpd#' /opt/etc/init.d/S80lighttpd
+if /opt/sbin/nfqws-ui-setup apply; then
+	echo ""
+	echo "nfqws2-ui установлен. Вход — логин root и его пароль в Entware (тот же, что для SSH)."
+	echo "Настройки порта, HTTPS и прочего: nfqws-ui-setup help"
+else
+	echo "nfqws2-ui: не удалось настроить lighttpd (см. выше). Повторить: nfqws-ui-setup apply"
+fi
+exit 0

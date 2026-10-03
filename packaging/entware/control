@@ -1,0 +1,15 @@
+Package: nfqws2-ui
+Version: @VERSION@-1
+Depends: nfqws2-keenetic, lighttpd, lighttpd-mod-cgi, lighttpd-mod-rewrite, lighttpd-mod-setenv, php8-cgi, php8-mod-session, php8-mod-curl, curl, cron
+Source: https://github.com/zemidala/nfqws2-ui
+SourceName: nfqws2-ui
+License: MIT
+LicenseFiles: LICENSE
+Section: net
+URL: https://github.com/zemidala/nfqws2-ui
+Maintainer: zemidala <42742254+zemidala@users.noreply.github.com>
+Architecture: all
+Installed-Size: @SIZE@
+Description: Web interface for nfqws2 (nfqws2-keenetic): config editor with
+ syntax check and fixes, list manager, strategy tests, change history,
+ snapshots and safe restart with auto-rollback. Russian UI.

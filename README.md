@@ -1,6 +1,6 @@
 # nfqws2-ui
 
-Веб-интерфейс для **nfqws2** (пакет [nfqws2-keenetic](https://github.com/nfqws/nfqws2-keenetic)) на роутерах с **OpenWrt**.
+Веб-интерфейс для **nfqws2** (пакет [nfqws2-keenetic](https://github.com/nfqws/nfqws2-keenetic)) на роутерах с **OpenWrt** и, экспериментально, на **Keenetic** (Entware).
 
 Интерфейс нужен, чтобы настраивать обход блокировок без SSH и без ручной правки конфига:
 - видно, каким профилем пойдёт конкретный сайт и открывается ли он;
@@ -83,9 +83,9 @@
 
 | | |
 |---|---|
-| Система | **OpenWrt 24.10** (opkg). Проверено на 24.10.6, aarch64 (GL.iNet GL-MT6000) |
-| nfqws2 | пакет **nfqws2-keenetic ≥ 1.3** уже установлен и работает (`/etc/nfqws2/nfqws2.conf`) |
-| Зависимости | ставятся сами: `lighttpd` (+ `mod-cgi`, `mod-rewrite`, `mod-setenv`), `php8-cgi`, `php8-mod-session`, `php8-mod-curl`, `curl` |
+| Система | **OpenWrt 24.10** (opkg). Проверено на 24.10.6, aarch64 (GL.iNet GL-MT6000).<br>**Keenetic с Entware** — экспериментально, см. [Keenetic](#keenetic-entware) |
+| nfqws2 | пакет **nfqws2-keenetic ≥ 1.3** уже установлен и работает (`/etc/nfqws2/nfqws2.conf`, на Keenetic — `/opt/etc/nfqws2/nfqws2.conf`) |
+| Зависимости | ставятся сами: `lighttpd` (+ `mod-cgi`, `mod-rewrite`, `mod-setenv`), `php8-cgi`, `php8-mod-session`, `php8-mod-curl`, `curl`; на Keenetic ещё `cron` |
 | Место | ~0,3 МБ сам интерфейс; lighttpd + PHP ≈ 4–5 МБ, если их ещё нет |
 | Память | php-cgi запускается на время запроса, постоянно висит только lighttpd (~1–2 МБ) |
 | Браузер | любой современный; на телефоне тоже удобно |
@@ -105,7 +105,7 @@ wget -qO- https://github.com/zemidala/nfqws2-ui/releases/latest/download/install
 ```
 
 Установщик выполняет шаги по порядку:
-1. Проверяет, что это OpenWrt и nfqws2-keenetic на месте.
+1. Проверяет, что это OpenWrt или Keenetic с Entware и что nfqws2-keenetic на месте.
 2. Скачивает пакет из релиза и сверяет контрольную сумму.
 3. Ставит пакет через `opkg`, вместе с зависимостями.
 4. Настраивает lighttpd.
@@ -116,7 +116,7 @@ wget -qO- https://github.com/zemidala/nfqws2-ui/releases/latest/download/install
 
 ### Вручную
 
-1. Скачайте `nfqws2-ui_<версия>-1_all.ipk` со страницы [Releases](https://github.com/zemidala/nfqws2-ui/releases).
+1. Скачайте `nfqws2-ui_<версия>-1_all.ipk` со страницы [Releases](https://github.com/zemidala/nfqws2-ui/releases). Для Keenetic — `nfqws2-ui_<версия>-1_all_entware.ipk`.
 2. Скопируйте файл на роутер: `scp -O nfqws2-ui_*.ipk root@192.168.1.1:/tmp/`.
 3. Установите: `opkg update && opkg install /tmp/nfqws2-ui_*.ipk`.
 
@@ -146,6 +146,23 @@ opkg remove nfqws2-ui
 Удалить и их: `rm -rf /etc/nfqws-ui /etc/nfqws2/.snapshots /etc/nfqws2/.history`.
 
 lighttpd и PHP не удаляются: ими может пользоваться что-то ещё. Если они больше не нужны, удалите их вручную: `opkg remove lighttpd php8-cgi …`.
+
+### Keenetic (Entware)
+
+> Поддержка Keenetic **экспериментальная**. Установка, вход, обновление, HTTPS, редактор, списки, снимки и безопасный перезапуск проверены на стенде с Entware, но не на настоящем роутере. Перехват трафика и тесты стратегий на прошивке Keenetic не проверялись. Если вы поставили интерфейс на Keenetic, напишите, что получилось, в [Обсуждениях](https://github.com/zemidala/nfqws2-ui/discussions).
+
+Нужны Entware и уже работающий nfqws2-keenetic. Команда установки та же, выполняется в консоли Entware (SSH, обычно порт 222).
+
+Чем Keenetic отличается от OpenWrt:
+
+- **Всё лежит под `/opt`.** К каждому пути из этого README добавьте `/opt` в начале: `/opt/etc/nfqws-ui`, `/opt/etc/nfqws2/.snapshots`, `/opt/etc/lighttpd/conf.d/90-nfqws-ui.conf`. Исключения: интерфейс — в `/opt/share/www/nfqws-ui/`, утилита — `/opt/sbin/nfqws-ui-setup`.
+- **Вход — под root из Entware**, с тем же паролем, что для SSH в Entware (по умолчанию `keenetic`; смените его командой `passwd`). Учётная запись администратора прошивки не подходит.
+- **Адрес** — `http://<адрес роутера>:8090`, обычно `http://192.168.1.1:8090`.
+- **Системный журнал** ведёт прошивка, в интерфейсе его нет: смотрите раздел «Диагностика» в веб-интерфейсе Keenetic. Файлы журналов nfqws2 интерфейс показывает.
+- **Задания cron** лежат в `/opt/etc/cron.d/nfqws-ui`.
+- **HTTPS**: `nfqws-ui-setup https on` ставит `lighttpd-mod-openssl` и `openssl-util`.
+- **В выборе интерфейса провайдера** нет имён вида wan/lan: только имена интерфейсов (`eth3`, `ppp0`), адреса и маршрут по умолчанию.
+- podkop на Keenetic нет, его блок в проверке сайта не показывается.
 
 ## Настройка: `nfqws-ui-setup`
 
@@ -179,7 +196,7 @@ nfqws-ui-setup remove               убрать конфиг lighttpd и зад
 
 ### Ограничения
 - **Только nfqws2** и только формат конфига **nfqws2-keenetic** (`NFQWS_ARGS`, `NFQWS_ARGS_CUSTOM`, `NFQWS_ARGS_UDP` и т.д.). zapret с `config` от bol-van, nfqws первой версии и другие сборки не поддерживаются.
-- **Keenetic / Entware не поддерживается и не проверялся.** Установщик на Keenetic откажется работать. Для Keenetic посмотрите [Keenetic-NFQWS-Web-Theme](https://github.com/Twinkle264/Keenetic-NFQWS-Web-Theme).
+- **Keenetic (Entware) — экспериментально**: проверено на стенде с Entware, но не на настоящем роутере, см. [Keenetic](#keenetic-entware). Прошивка Keenetic время от времени пересобирает правила iptables и может стереть временные правила теста стратегий посреди прогона — тогда тест нужно повторить.
 - **OpenWrt 25.x (apk) не проверялся.** Установщик ставит файлы без пакета, удаление — `nfqws-ui-setup uninstall`.
 - Проверялось на iptables (nfqws2-keenetic использует iptables-legacy). С nftables-вариантами может не работать.
 - **Тесты стратегий проверяют только TCP** (HTTPS и HTTP). QUIC/UDP не тестируется: это видно только в браузере.
@@ -240,7 +257,7 @@ nfqws-ui-setup remove               убрать конфиг lighttpd и зад
 
 **Интерфейс не открывается.**
 1. Выполните `nfqws-ui-setup status`: там адрес и состояние lighttpd.
-2. Посмотрите журнал: `logread | grep lighttpd`.
+2. Посмотрите журнал: `logread | grep lighttpd` (на Keenetic — `/opt/var/log/lighttpd/error.log`).
 3. Пересоберите конфиг: `nfqws-ui-setup apply`.
 
 **«Неверный логин или пароль», хотя пароль верный.** Вход только под `root`. Проверьте, что у root задан пароль: `passwd`.
@@ -258,7 +275,7 @@ nfqws-ui-setup remove               убрать конфиг lighttpd и зад
 ## Разработка
 
 ```sh
-sh scripts/build.sh          # dist/: .ipk, .tar.gz, install.sh, sha256sums.txt
+sh scripts/build.sh          # dist/: .ipk для OpenWrt и для Entware, .tar.gz, install.sh, sha256sums.txt
 ```
 
 Релиз собирается GitHub Actions при пуше тега `v*`. Номер версии — в файле `VERSION`.

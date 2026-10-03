@@ -1,0 +1,8 @@
+#!/bin/sh
+[ "$1" = upgrade ] && exit 0
+rm -f /tmp/nfqws-ui-pending.json /tmp/nfqws-ui-login.json
+rm -rf /tmp/nfqws-ui-cache /tmp/nfqws-ui-test
+# opkg оставляет пустые каталоги пакета
+rmdir /opt/share/www/nfqws-ui/docs /opt/share/www/nfqws-ui 2>/dev/null
+echo "nfqws2-ui удалён. Настройки, снимки и история остались в /opt/etc/nfqws-ui, /opt/etc/nfqws2/.snapshots, /opt/etc/nfqws2/.history"
+exit 0

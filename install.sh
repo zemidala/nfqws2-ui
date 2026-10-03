@@ -1,5 +1,5 @@
 #!/bin/sh
-# Установщик nfqws2-ui для OpenWrt.
+# Установщик nfqws2-ui для OpenWrt и Keenetic (Entware).
 #   wget -qO- https://github.com/zemidala/nfqws2-ui/releases/latest/download/install.sh | sh
 # Конкретная версия:  ... | sh -s -- v1.0.0
 # https://github.com/zemidala/nfqws2-ui
@@ -23,20 +23,27 @@ fetch() { # url [файл]
 [ "$(id -u)" = 0 ] || die "запускайте от root"
 
 # --- где запускаемся ---
-if [ ! -f /etc/openwrt_release ]; then
-	if [ -d /opt/etc ] && { [ -e /proc/ndm ] || [ -f /opt/etc/entware_release ]; }; then
-		die "Keenetic/Entware пока не поддерживается. Для Keenetic есть тема для nfqws-keenetic-web: https://github.com/Twinkle264/Keenetic-NFQWS-Web-Theme"
-	fi
-	die "нужен OpenWrt (/etc/openwrt_release не найден)"
+# R — корень пакетов: «/» на OpenWrt, «/opt» в Entware (Keenetic)
+if [ -f /etc/openwrt_release ]; then
+	R=
+	. /etc/openwrt_release
+	say "Система: ${DISTRIB_DESCRIPTION:-OpenWrt} (${DISTRIB_ARCH:-?})"
+elif [ -x /opt/bin/opkg ]; then
+	R=/opt
+	PATH=/opt/sbin:/opt/bin:/opt/usr/sbin:/opt/usr/bin:/usr/sbin:/usr/bin:/sbin:/bin
+	export PATH
+	say "Система: Keenetic / Entware ($(uname -m))"
+else
+	die "нужен OpenWrt или Keenetic с Entware (не найдены /etc/openwrt_release и /opt/bin/opkg)"
 fi
-. /etc/openwrt_release
-say "Система: ${DISTRIB_DESCRIPTION:-OpenWrt} (${DISTRIB_ARCH:-?})"
 
-if [ ! -x /usr/bin/nfqws2 ] || [ ! -f /etc/nfqws2/nfqws2.conf ]; then
+if [ ! -x $R/usr/bin/nfqws2 ] || [ ! -f $R/etc/nfqws2/nfqws2.conf ]; then
 	die "nfqws2 не найден. Сначала установите nfqws2-keenetic: https://github.com/nfqws/nfqws2-keenetic"
 fi
 
-if command -v opkg >/dev/null 2>&1; then
+if [ -n "$R" ]; then
+	PM=opkg
+elif command -v opkg >/dev/null 2>&1; then
 	PM=opkg
 elif command -v apk >/dev/null 2>&1; then
 	PM=apk
@@ -53,13 +60,22 @@ fi
 case "$VERSION" in v*) ;; *) VERSION=v$VERSION ;; esac
 V=${VERSION#v}
 BASE="https://github.com/$REPO/releases/download/$VERSION"
-if [ "$PM" = opkg ]; then FILE=nfqws2-ui_${V}-1_all.ipk; else FILE=nfqws2-ui_${V}.tar.gz; fi
+if [ -n "$R" ]; then
+	FILE=nfqws2-ui_${V}-1_all_entware.ipk
+elif [ "$PM" = opkg ]; then
+	FILE=nfqws2-ui_${V}-1_all.ipk
+else
+	FILE=nfqws2-ui_${V}.tar.gz
+fi
 
 TMP=/tmp/nfqws2-ui-install.$$
 trap 'rm -rf "$TMP"' EXIT INT TERM
 mkdir -p "$TMP"
 say "Скачиваю nfqws2-ui $VERSION…"
-fetch "$BASE/$FILE" "$TMP/$FILE" || die "не удалось скачать $BASE/$FILE"
+fetch "$BASE/$FILE" "$TMP/$FILE" || {
+	[ -n "$R" ] && die "не удалось скачать $BASE/$FILE (пакет для Keenetic есть начиная с версии 1.4.0)"
+	die "не удалось скачать $BASE/$FILE"
+}
 fetch "$BASE/sha256sums.txt" "$TMP/sha256sums.txt" || die "не удалось скачать sha256sums.txt"
 ( cd "$TMP" && grep " $FILE\$" sha256sums.txt > sum.txt && sha256sum -c sum.txt >/dev/null 2>&1 ) || die "контрольная сумма $FILE не совпала — файл повреждён или подменён"
 

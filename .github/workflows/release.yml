@@ -20,7 +20,8 @@ jobs:
         run: |
           sh -n src/bin/nfqws-ui-setup
           sh -n install.sh
-          sh -n packaging/openwrt/postinst packaging/openwrt/prerm packaging/openwrt/postrm
+          for f in src/bin/nfqws-ui packaging/openwrt/postinst packaging/openwrt/prerm packaging/openwrt/postrm \
+            packaging/entware/postinst packaging/entware/prerm packaging/entware/postrm; do sh -n "$f"; done
           php -l src/www/api.php
           node --check src/www/app.js
 
@@ -40,7 +41,7 @@ jobs:
 
           ## Установка
 
-          На роутере с OpenWrt 24.10 и установленным nfqws2-keenetic:
+          На роутере с OpenWrt 24.10 или на Keenetic с Entware (экспериментально), где уже установлен nfqws2-keenetic:
 
           \`\`\`sh
           wget -qO- https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/install.sh | sh

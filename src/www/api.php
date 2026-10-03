@@ -17,9 +17,9 @@ function ldate(string $fmt, ?int $ts = null): string
   return gmdate($fmt, ($ts ?? time()) + TZ_OFFSET);
 }
 
-const UI_VERSION = '1.3.0';
+const UI_VERSION = '1.4.0';
 
-// Пути пакета nfqws2-keenetic. На OpenWrt — корень «/», в Entware (Keenetic) — «/opt» (не проверено).
+// Пути пакета nfqws2-keenetic. На OpenWrt — корень «/», в Entware (Keenetic) — «/opt».
 define('ROOT', !is_file('/usr/bin/nfqws2') && is_file('/opt/usr/bin/nfqws2') ? '/opt' : '');
 define('CONF_FILE', ROOT . '/etc/nfqws2/nfqws2.conf');
 define('CONF_DIR', ROOT . '/etc/nfqws2');
@@ -34,6 +34,9 @@ define('WEB_CONF', ROOT . '/etc/nfqws_web.conf');   // настройка вхо
 define('NFQWS_BIN', ROOT . '/usr/bin/nfqws2');
 define('PID_FILE', ROOT . '/var/run/nfqws2.pid');
 define('INIT_SCRIPT', ROOT ? '/opt/etc/init.d/S51nfqws2' : '/etc/init.d/nfqws2-keenetic');
+define('LOG_DIR', ROOT . '/var/log');
+// PATH для фоновых заданий: в Entware программы лежат в /opt
+define('JOB_PATH', (ROOT ? '/opt/sbin:/opt/bin:/opt/usr/sbin:/opt/usr/bin:' : '') . '/usr/sbin:/usr/bin:/sbin:/bin');
 const PROTECTED_LISTS = ['user.list', 'exclude.list', 'auto.list', 'ipset.list', 'ipset_exclude.list'];
 
 const GLOBAL_OPTS = ['user', 'uid', 'qnum', 'fastpath-workaround', 'lua-init', 'lua-gc', 'blob', 'debug',
@@ -47,7 +50,7 @@ const CONF_VARS = ['ISP_INTERFACE', 'NFQWS_BASE_ARGS', 'NFQWS_ARGS_CUSTOM', 'NFQ
 // Переменные с аргументами nfqws2 — их проверяет линтер
 const ARG_VARS = ['NFQWS_BASE_ARGS', 'NFQWS_ARGS_CUSTOM', 'NFQWS_ARGS', 'NFQWS_ARGS_QUIC', 'NFQWS_ARGS_UDP', 'NFQWS_ARGS_IPSET'];
 const CACHE_DIR = '/tmp/nfqws-ui-cache';
-const CACHE_VER = 5;   // увеличить при изменении разбора справки/lua/проверок
+const CACHE_VER = 6;  // увеличить при изменении разбора справки/lua/проверок
 
 // ================= общее =================
 
@@ -94,7 +97,8 @@ function authenticate(string $username, string $password): bool
   if ($username !== 'root' || $password === '') {
     return false;
   }
-  $users = @file(file_exists('/etc/shadow') ? '/etc/shadow' : '/etc/passwd') ?: [];
+  // На Keenetic это root из Entware (/opt/etc/shadow), а не учётная запись прошивки
+  $users = @file(file_exists(ROOT . '/etc/shadow') ? ROOT . '/etc/shadow' : ROOT . '/etc/passwd') ?: [];
   $user = preg_grep('/^root:/', $users);
   if (!$user) {
     return false;
@@ -567,7 +571,7 @@ function runningArgs(int $pid): array
 function packageVersion(string $pkg): ?string
 {
   $out = [];
-  if (is_file('/usr/bin/apk') || is_file('/sbin/apk')) {
+  if (!ROOT && (is_file('/usr/bin/apk') || is_file('/sbin/apk'))) {
     exec('apk list -I ' . escapeshellarg($pkg) . ' 2>/dev/null', $out);
     foreach ($out as $l) {
       if (preg_match('/^' . preg_quote($pkg, '/') . '-(\d[^\s]*)/', $l, $m)) {
@@ -1256,15 +1260,14 @@ function helpInfo(): array
 // Функции и их параметры — из документации в самих lua-скриптах
 function luaCatalog(): array
 {
-  $files = glob(LUA_DIR . '/*.lua');
-  return cached('lua', $files, function () use ($files) {
+  $files = luaFiles();
+  return cached('lua', array_values($files), function () use ($files) {
     $std = [];
     $funcs = [];
     $globals = [];
     $fileKeys = [];
-    foreach ($files as $file) {
-      $base = basename($file);
-      $lines = file($file, FILE_IGNORE_NEW_LINES);
+    foreach ($files as $base => $file) {
+      $lines = file(str_ends_with($file, '.gz') ? "compress.zlib://$file" : $file, FILE_IGNORE_NEW_LINES) ?: [];
       $group = null;
       $inBlock = false;
       $doc = [];
@@ -1364,6 +1367,21 @@ function listFileExists(string $path): bool
   return is_file($path) || is_file($path . '.gz');
 }
 
+// Lua-скрипты nfqws2-keenetic кладёт сжатыми (zapret-lib.lua.gz), а в --lua-init пишется имя без .gz:
+// nfqws2 сам берёт сжатый файл, если обычного нет. Возвращает имя.lua => настоящий файл.
+function luaFiles(): array
+{
+  $res = [];
+  foreach (glob(LUA_DIR . '/*.lua.gz') ?: [] as $f) {
+    $res[basename($f, '.gz')] = $f;
+  }
+  foreach (glob(LUA_DIR . '/*.lua') ?: [] as $f) {
+    $res[basename($f)] = $f;
+  }
+  ksort($res);
+  return $res;
+}
+
 // Проверка переменных с аргументами. $raw — значения как в форме (для привязки к номеру аргумента),
 // $text — полный текст кандидата конфига. Возвращает список замечаний.
 // ---------- перенос конфига с другой системы ----------
@@ -1439,7 +1457,7 @@ function netIfaces(): array
 // Файлы, которые можно подключить в «Параметрах запуска»: lua-скрипты и блобы
 function baseFiles(): array
 {
-  $lua = array_map('basename', glob(LUA_DIR . '/*.lua') ?: []);
+  $lua = array_keys(luaFiles());
   $blobs = array_values(array_filter(array_map('basename', glob(CONF_DIR . '/blobs/*') ?: []),
     fn($f) => !preg_match('/\.(lua|gz)$/', $f) && is_file(CONF_DIR . "/blobs/$f")));
   return ['lua' => $lua, 'lua_dir' => LUA_DIR, 'blobs' => $blobs, 'blob_dir' => CONF_DIR . '/blobs'];
@@ -1462,6 +1480,8 @@ function adaptConf(string $text): array
   ];
   if (!ROOT) {
     $rules[] = ['~^/opt/var/log/~', '/var/log/', true, 'Keenetic (Entware)'];
+  } else {
+    $rules[] = ['~^/var/log/~', '/opt/var/log/', true, 'OpenWrt'];
   }
   $lines = explode("\n", $text);
   foreach ($lines as &$line) {
@@ -1504,7 +1524,7 @@ function adaptConf(string $text): array
   // 3. lua-файлы, без которых --lua-desync не работает
   if (isset($raw['NFQWS_BASE_ARGS']) && preg_match('/--lua-desync=/', $text) && !preg_match('~--lua-init=@\S*zapret-lib\.lua~', $raw['NFQWS_BASE_ARGS'])) {
     foreach (['zapret-lib.lua', 'zapret-antidpi.lua', 'zapret-auto.lua'] as $f) {
-      if (is_file(LUA_DIR . "/$f") && !str_contains($raw['NFQWS_BASE_ARGS'], "/$f")) {
+      if (listFileExists(LUA_DIR . "/$f") && !str_contains($raw['NFQWS_BASE_ARGS'], "/$f")) {
         $text = appendTokenInText($text, 'NFQWS_BASE_ARGS', '--lua-init=@' . LUA_DIR . "/$f");
         $changes[] = "подключён $f";
       }
@@ -1514,7 +1534,7 @@ function adaptConf(string $text): array
   // 4. Переменные, без которых init-скрипт не запустит nfqws2 или запустит не так (значения — как в стандартном конфиге)
   $base = [];
   foreach (['zapret-lib.lua', 'zapret-antidpi.lua', 'zapret-auto.lua'] as $f) {
-    if (is_file(LUA_DIR . "/$f")) {
+    if (listFileExists(LUA_DIR . "/$f")) {
       $base[] = '--lua-init=@' . LUA_DIR . "/$f";
     }
   }
@@ -1721,7 +1741,7 @@ function lintConf(array $raw, string $text): array
           }
           break;
         case 'lua-init':
-          if (str_starts_with($val, '@') && !is_file(substr($val, 1))) {
+          if (str_starts_with($val, '@') && !listFileExists(substr($val, 1))) {
             $add($var, $i, 'error', 'Файла нет: ' . substr($val, 1));
           }
           break;
@@ -1867,7 +1887,7 @@ function lintDesync(string $var, int $i, string $val, array $funcs, array $lua, 
   $f = $funcs[$fn];
   if (!isset($loadedLua[$f['file']])) {
     $add($var, $i, 'error', "Функция {$fn} из {$f['file']}, а этот файл не подключён через --lua-init",
-      is_file(LUA_DIR . "/{$f['file']}") ? ['op' => 'append', 'var' => 'NFQWS_BASE_ARGS', 'tok' => '--lua-init=@' . LUA_DIR . "/{$f['file']}", 'label' => "Подключить {$f['file']}"] : null);
+      listFileExists(LUA_DIR . "/{$f['file']}") ? ['op' => 'append', 'var' => 'NFQWS_BASE_ARGS', 'tok' => '--lua-init=@' . LUA_DIR . "/{$f['file']}", 'label' => "Подключить {$f['file']}"] : null);
   }
   $allowed = array_merge(array_keys($f['args']), $f['file_keys'], ['strategy', 'final']);
   foreach ($f['std'] as $g) {
@@ -1950,7 +1970,7 @@ function dryRun(array $exp): array
 
 function lintCurrent(): array
 {
-  $deps = array_merge([CONF_FILE, LISTS_DIR, NFQWS_BIN], glob(LUA_DIR . '/*.lua'));
+  $deps = array_merge([CONF_FILE, LISTS_DIR, NFQWS_BIN], array_values(luaFiles()));
   return cached('lint-current', $deps, function () {
     $text = file_get_contents(CONF_FILE);
     return lintConf(confRawVars($text), $text);
@@ -2859,7 +2879,7 @@ function testJob(): void
 const REPO_URL = 'https://github.com/zemidala/nfqws2-ui';
 define('UPDATE_FILE', UI_CONF_DIR . '/update.json');
 const UPDATE_LOG = '/tmp/nfqws-ui-update.log';
-const SETUP_BIN = '/usr/sbin/nfqws-ui-setup';
+define('SETUP_BIN', ROOT ? '/opt/sbin/nfqws-ui-setup' : '/usr/sbin/nfqws-ui-setup');
 
 function updateInfo(): array
 {
@@ -2915,11 +2935,11 @@ function updateStart(string $version): void
     fail('Обновление уже идёт');
   }
   file_put_contents(UPDATE_LOG, '');
-  // procd держит lighttpd и всё, что он запустил, в cgroup /services/lighttpd и при перезапуске
+  // procd (OpenWrt) держит lighttpd и всё, что он запустил, в cgroup /services/lighttpd и при перезапуске
   // может убить её целиком — посреди opkg install. Поэтому сначала уходим в корневую cgroup.
   $cmd = 'echo $$ > /sys/fs/cgroup/cgroup.procs 2>/dev/null; '
     . SETUP_BIN . ' update v' . $version . ' >>' . UPDATE_LOG . ' 2>&1; echo "[exit $?]" >>' . UPDATE_LOG;
-  exec('(setsid env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin sh -c ' . escapeshellarg($cmd) . ' >/dev/null 2>&1 &)');
+  exec('(setsid env -i PATH=' . JOB_PATH . ' sh -c ' . escapeshellarg($cmd) . ' >/dev/null 2>&1 &)');
 }
 
 // ================= состояние =================
@@ -2953,7 +2973,7 @@ function restartNeeded(?array $proc): bool
   if (!$proc || !$proc['started']) {
     return false;
   }
-  foreach (array_merge([CONF_FILE], glob(LUA_DIR . '/*.lua')) as $f) {
+  foreach (array_merge([CONF_FILE], array_values(luaFiles())) as $f) {
     // btime точен примерно до секунды
     if (@filemtime($f) > $proc['started'] + 2) {
       return true;
@@ -3500,7 +3520,7 @@ switch ($cmd) {
       'deadline' => time() + $minutes * 60, 'before' => $before, 'checks' => null];
     pendingSave($p);
     exec(INIT_SCRIPT . ' restart 2>&1', $out, $rc);
-    exec('(env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/sbin:/opt/bin NFQWS_UI_CLI=guard php-cgi -q -f ' . escapeshellarg(__FILE__) . ' >/dev/null 2>&1 &)');
+    exec('(env -i PATH=' . JOB_PATH . ' NFQWS_UI_CLI=guard php-cgi -q -f ' . escapeshellarg(__FILE__) . ' >/dev/null 2>&1 &)');
     respond(['ok' => $rc === 0, 'output' => implode("\n", $out), 'files' => array_map('basename', array_keys($p['versions']))]);
 
   case 'safe_confirm':
@@ -3549,7 +3569,7 @@ switch ($cmd) {
     chmod(TEST_DIR . '/trace.log', 0666);
     testSaveStatus(['state' => 'starting', 'host' => $host, 'started' => time()]);
     // Чистое окружение: иначе php-cgi увидит CGI-переменные запроса и не перейдёт в режим задания
-    exec('(env -i PATH=/usr/sbin:/usr/bin:/sbin:/bin:/opt/sbin:/opt/bin NFQWS_UI_CLI=test php-cgi -q -f ' . escapeshellarg(__FILE__) . ' >/dev/null 2>&1 &)');
+    exec('(env -i PATH=' . JOB_PATH . ' NFQWS_UI_CLI=test php-cgi -q -f ' . escapeshellarg(__FILE__) . ' >/dev/null 2>&1 &)');
     respond(['ok' => true]);
 
   case 'test_status':
@@ -3774,10 +3794,14 @@ switch ($cmd) {
     respond(['text' => file_get_contents($file)]);
 
   case 'log':
-    $out = [];
-    exec('logread -e nfqws2 2>/dev/null | tail -n 300', $out);
+    // На Keenetic logread нет: системный журнал ведёт прошивка, его показывает веб-интерфейс роутера
+    $out = null;
+    if (!ROOT) {
+      $out = [];
+      exec('logread -e nfqws2 2>/dev/null | tail -n 300', $out);
+    }
     $files = [];
-    foreach (glob('/var/log/nfqws2*.log') as $f) {
+    foreach (glob(LOG_DIR . '/nfqws2*.log') ?: [] as $f) {
       $files[] = ['name' => basename($f), 'size' => filesize($f), 'tail' => implode('', array_slice(@file($f) ?: [], -200))];
     }
     respond(['syslog' => $out, 'files' => $files]);
