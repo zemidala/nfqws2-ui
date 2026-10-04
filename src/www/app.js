@@ -1,7 +1,7 @@
 'use strict';
 
-// Интерфейс nfqws2. Широкий экран: слева колонка обзора, справа вкладки Сайты · Тесты · Настройки · Журнал.
-// Узкий экран: колонка обзора — вкладка «Обзор». Без сборки и внешних зависимостей, данные — через api.php.
+// Интерфейс nfqws2. Три компоновки на выбор (Оформление): боковое меню, вкладки по задачам с колонкой обзора,
+// «вокруг сайта». Страницы и их адреса общие. Без сборки и внешних зависимостей, данные — через api.php.
 
 const ICONS = {
   home: '<path d="M3 10.5 12 3l9 7.5V20a1 1 0 0 1-1 1h-5v-6H9v6H4a1 1 0 0 1-1-1z"/>',
@@ -28,6 +28,9 @@ const ICONS = {
   search: '<circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/>',
   edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
   wand: '<path d="m15 4 5 5L9 20l-5-5z"/><path d="M13 6l5 5"/>',
+  menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  pulse: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
+  layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
   download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
   upload: '<path d="M12 20V9M7 14l5-5 5 5M5 4h14"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/>',
@@ -115,6 +118,23 @@ function icon(name) {
   return s;
 }
 
+// Знак ZD: цвета фирменные, от темы не зависят
+const LOGO = '<mask id="zd-cut" maskUnits="userSpaceOnUse" x="0" y="0" width="200" height="200"><rect width="200" height="200" fill="#fff"/><rect x="62" y="73" width="40" height="6" fill="#000"/><rect x="30" y="121" width="40" height="6" fill="#000"/><rect x="128" y="50" width="6" height="30" fill="#000"/><rect x="128" y="120" width="6" height="30" fill="#000"/></mask>'
+  + '<rect x="10" y="10" width="180" height="180" rx="34" fill="#ff6a14"/><g fill="#07080b" mask="url(#zd-cut)"><path d="M34 56H98V76L60 124H98V144H34V124L72 76H34Z"/><path fill-rule="evenodd" d="M108 56H134C154 56 166 74 166 100C166 126 154 144 134 144H108ZM128 76V124H133C142 124 146 114 146 100C146 86 142 76 133 76Z"/></g>';
+function svgEl(viewBox, html, cls, label) {
+  const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+  s.setAttribute('viewBox', viewBox);
+  s.setAttribute('class', cls);
+  if (label) { s.setAttribute('role', 'img'); s.setAttribute('aria-label', label); } else s.setAttribute('aria-hidden', 'true');
+  s.innerHTML = html;
+  return s;
+}
+function logo(size) {
+  const s = svgEl('0 0 200 200', LOGO, 'zd', 'ZD');
+  s.style.width = s.style.height = size + 'px';
+  return s;
+}
+
 const btn = (label, onclick, cls = '', ic = null, attrs = {}) =>
   h('button', { class: 'btn ' + cls, type: 'button', onclick, ...attrs }, ic && icon(ic), label);
 const chip = (text, cls = '') => h('span', { class: 'chip ' + cls, text });
@@ -189,11 +209,12 @@ async function guarded(fn, okText) {
 // ============ оформление ============
 
 function getLook() {
-  try { return { variant: 'a', mode: 'auto', ...JSON.parse(localStorage.getItem('nfqws-ui-look') || '{}') }; } catch { return { variant: 'a', mode: 'auto' }; }
+  try { return { variant: 'a', mode: 'auto', layout: 'menu', ...JSON.parse(localStorage.getItem('nfqws-ui-look') || '{}') }; } catch { return { variant: 'a', mode: 'auto', layout: 'menu' }; }
 }
 function applyLook(look = getLook()) {
   document.documentElement.dataset.variant = look.variant;
   document.documentElement.dataset.mode = look.mode;
+  document.documentElement.dataset.layout = ['menu', 'tabs', 'site'].includes(look.layout) ? look.layout : 'menu';
 }
 function setLook(patch) {
   const look = { ...getLook(), ...patch };
@@ -271,33 +292,120 @@ function listEffect(l, profiles = S.state.profiles) {
 
 // ============ каркас ============
 
-const TABS = [
-  ['', 'Обзор', 'home', 'narrow'],
-  ['sites', 'Сайты', 'sites'],
-  ['tests', 'Тесты', 'tests'],
-  ['settings', 'Настройки', 'settings'],
-  ['log', 'Журнал', 'log'],
-];
+// Страницы: адрес и название. Адреса прежние (#/tests/…, #/settings/…, #/sites/…) — старые ссылки и закладки
+// работают в любой компоновке; компоновка решает только, где показаны переходы между страницами.
+const PAGES = {
+  over: ['#/', 'Обзор'],
+  pick: ['#/tests/pick', 'Подбор стратегии'], trace: ['#/tests/trace', 'Трассировка'],
+  mon: ['#/tests/monitor', 'Мониторинг'], tg: ['#/tests/notify', 'Уведомления'],
+  prof: ['#/settings', 'Профили'], lists: ['#/sites', 'Списки'],
+  basic: ['#/settings/basic', 'Основное'], base: ['#/settings/base', 'Параметры запуска'], raw: ['#/settings/raw', 'Конфиг целиком'],
+  backup: ['#/settings/backup', 'Резервные копии'], hist: ['#/settings/hist', 'История изменений'], log: ['#/log', 'Журнал'],
+  look: ['#/settings/look', 'Оформление'], about: ['#/settings/about', 'О программе'],
+  // ещё не сделаны: в меню видны, но заблокированы и помечены «скоро»
+  diag: [null, 'Диагноз блокировки'], phist: [null, 'История подборов'], auto: [null, 'Автоподбор'], asn: [null, 'Список по ASN'], report: [null, 'Отчёт для помощи'],
+};
+const SOON_HINT = 'Ещё в разработке — появится в одной из следующих версий';
+const SYS_PAGES = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'look', 'about'];
+const SYS_NAV = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
+// Компоновка «Боковое меню»: группы и их страницы
+const MENU = [[null, ['over']], ['Проверка сайта', ['diag', 'pick', 'trace', 'phist']], ['Наблюдение', ['mon', 'auto', 'tg']], ['Обход', ['prof', 'lists', 'asn']], ['Система', SYS_NAV]];
+// Верхние вкладки компоновок: страница по клику, подпись, значок, страницы вкладки, «только на узком экране»
+const TOP_TABS = {
+  menu: [],
+  tabs: [['over', 'Обзор', 'home', ['over'], true], ['pick', 'Проверка', 'tests', ['diag', 'pick', 'trace', 'phist', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'auto', 'tg']],
+    ['prof', 'Профили', 'layers', ['prof']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
+  site: [['over', 'Обзор', 'home', ['over']], ['mon', 'Сайты', 'pulse', ['mon', 'diag', 'pick', 'trace', 'phist', 'auto', 'tg', 'site']],
+    ['prof', 'Профили', 'layers', ['prof']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
+};
+// Нижняя панель телефона — одна для всех компоновок; остальное — в меню
+const BOTTOM = [['over', 'Обзор', 'home', ['over']], ['pick', 'Подбор', 'tests', ['pick', 'trace', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'tg']], ['prof', 'Профили', 'layers', ['prof']]];
+
+const layout = () => document.documentElement.dataset.layout || 'menu';
+// Колонка обзора слева — только в компоновке «Вкладки» на широком экране
+const overviewCol = () => isWide() && layout() === 'tabs';
 
 function parseRoute() {
   const raw = location.hash.replace(/^#\/?/, '');
   const [path, query] = raw.split('?');
   const parts = path.split('/').filter(Boolean).map(decodeURIComponent);
-  return { tab: parts[0] || '', arg: parts[1] || '', q: new URLSearchParams(query || '') };
+  return { tab: parts[0] || '', arg: parts[1] || '', sub: parts[2] || '', q: new URLSearchParams(query || '') };
 }
 const go = (hash) => { location.hash = hash; };
 
+function pageOf(r = parseRoute()) {
+  if (r.tab === 'sites') return 'lists';
+  if (r.tab === 'log') return 'log';
+  if (r.tab === 'site') return 'site';
+  if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace' }[r.arg] || 'pick';
+  if (r.tab === 'settings') return SYS_PAGES.includes(r.arg) ? r.arg : ['readme', 'changelog'].includes(r.arg) ? 'about' : 'prof';
+  return 'over';
+}
+
+// Отметка у пункта меню: ошибки конфига, число снимков, упавшие сайты, обновление
+function pageTail(id) {
+  const st = S.state;
+  if (!st) return null;
+  const issues = st.lint?.issues || [];
+  const dot = (lvl) => lvl === 'error' ? h('span', { class: 'errdot', title: 'Есть ошибки' }) : lvl === 'warning' ? h('span', { class: 'warndot', title: 'Есть предупреждения' }) : null;
+  let tail = null;
+  if (id === 'prof') tail = dot(worst(st.conf_profiles.flatMap((p) => profIssues(p))));
+  else if (id === 'basic') tail = dot(worst(issues.filter((x) => ['ISP_INTERFACE', 'TCP_PORTS', 'UDP_PORTS'].includes(x.var))) && 'warning');
+  else if (id === 'base') tail = dot(worst(issues.filter((x) => x.var === 'NFQWS_BASE_ARGS')) && 'warning');
+  else if (id === 'raw') tail = dot(worst(issues) === 'error' ? 'error' : null);
+  else if (id === 'backup') tail = st.snap?.count ? h('span', { class: 'num', text: st.snap.count }) : null;
+  else if (id === 'about') tail = st.ui?.update?.available ? h('span', { class: 'chip ok', text: 'обновление' }) : null;
+  else if (id === 'mon') {
+    const down = (st.monitor?.sites || []).filter((x) => x.last && !x.last[1]).length;
+    tail = down ? h('span', { class: 'chip bad num', title: 'Не открываются', text: down }) : null;
+  }
+  return tail ? h('span', { class: 'tail' }, tail) : null;
+}
+
+function menuNav() {
+  const cur = pageOf();
+  return h('nav', { class: 'nav mnav', 'aria-label': 'Разделы' }, MENU.map(([head, ids]) => [
+    head ? h('div', { class: 'nav-h', text: head }) : null,
+    ids.map((id) => PAGES[id][0]
+      ? h('a', { href: PAGES[id][0], 'data-pages': id === 'pick' ? 'pick site' : id, class: id === cur || (id === 'pick' && cur === 'site') ? 'on' : null },
+        h('span', { class: 'nm', text: PAGES[id][1] }), pageTail(id))
+      : soonItem(id))]));
+}
+
+// Пункт для ещё не сделанной страницы: виден, но не нажимается
+const soonItem = (id) => h('span', { class: 'soon', title: SOON_HINT, 'aria-disabled': 'true' },
+  h('span', { class: 'nm', text: PAGES[id][1] }), h('span', { class: 'tag', text: 'скоро' }));
+
+// Меню на узком экране выезжает слева
+function openDrawer(on = true) {
+  const d = document.getElementById('drawer');
+  if (!d) return;
+  d.hidden = !on;
+  if (on) d.firstChild.replaceChildren(menuNav());
+}
+
+// Второй ряд вкладок — страницы текущей верхней вкладки (компоновки «Вкладки» и «Вокруг сайта»)
+function subTabs(page) {
+  const tab = TOP_TABS[layout()].find((t) => t[3].includes(page));
+  const ids = tab ? tab[3].filter((id) => id !== 'site') : [];
+  if (ids.length < 2 || page === 'site') return null;
+  return h('nav', { class: 'subtabs', 'aria-label': tab[1] }, ids.map((id) => PAGES[id][0] ? h('a', { href: PAGES[id][0], class: id === page ? 'on' : null, text: PAGES[id][1] }) : soonItem(id)));
+}
+
 function renderShell() {
-  const nav = (cls) => h('nav', { class: cls, 'aria-label': 'Разделы' }, TABS.map(([id, label, ic, only]) =>
-    h('a', { href: '#/' + id, 'data-tab': id, title: label, 'aria-label': label, class: only === 'narrow' ? 'only-narrow' : null }, icon(ic), h('span', { text: label }))));
+  const link = ([id, label, ic, pages, narrow]) => h('a', { href: PAGES[id][0], 'data-pages': pages.join(' '), title: label, 'aria-label': label, class: narrow ? 'only-narrow' : null }, icon(ic), h('span', { text: label }));
+  const quick = h('input', { class: 'input', placeholder: 'проверить сайт…', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', inputmode: 'url', enterkeyhint: 'go', 'aria-label': 'Сайт для проверки' });
   document.getElementById('app').replaceChildren(
     h('header', { class: 'top' },
       h('div', { class: 'top-in' },
-        h('div', { class: 'brand' }, 'nfqws2', h('small', { id: 'ver' })),
+        h('button', { class: 'btn ghost icon', id: 'burger', type: 'button', title: 'Меню', 'aria-label': 'Меню', onclick: () => openDrawer() }, icon('menu')),
+        h('a', { class: 'brand', href: PAGES.about[0], title: 'nfqws2-ui — о программе' }, logo(26), h('span', {}, 'nfqws2', h('small', { id: 'ver' }))),
         h('span', { id: 'svc', class: 'pill muted' }, h('span', { class: 'dot' }), '…'),
         h('span', { id: 'svc-ctl', class: 'svc-ctl' }),
-        nav('tabs'),
+        h('nav', { class: 'tabs', 'aria-label': 'Разделы' }, TOP_TABS[layout()].map(link)),
         h('span', { class: 'grow' }),
+        h('form', { class: 'quick', onsubmit: (e) => { e.preventDefault(); const v = quick.value.trim(); if (!v) return; quick.value = ''; quick.blur(); checkHost(v); } },
+          quick, h('button', { class: 'btn primary icon', type: 'submit', title: 'Проверить: открывается ли сайт и каким профилем nfqws2 он пойдёт', 'aria-label': 'Проверить' }, icon('arrow'))),
         h('span', { id: 'https-slot' }),
         h('a', { class: 'btn ghost small repo-link', id: 'repo-link', href: REPO, target: '_blank', rel: 'noopener', title: 'nfqws2-ui на GitHub', 'aria-label': 'nfqws2-ui на GitHub' }, icon('git'), h('span', { id: 'ui-ver', class: 'num' })),
         h('button', { class: 'btn ghost small', type: 'button', id: 'undo-btn', hidden: true, onclick: () => undoLast(true) }, icon('undo'), h('span', { class: 'undo-label', text: 'Отменить' })),
@@ -308,20 +416,21 @@ function renderShell() {
     h('div', { id: 'upd-banner' }),
     h('div', { id: 'pending', 'aria-live': 'polite' }),
     h('div', { class: 'layout' }, h('aside', { id: 'side', 'aria-label': 'Обзор' }), h('main', { id: 'main' })),
-    nav('bottom'));
+    h('nav', { class: 'bottom', 'aria-label': 'Разделы' }, BOTTOM.map(link),
+      h('button', { type: 'button', onclick: () => openDrawer() }, icon('menu'), h('span', { text: 'Меню' }))),
+    h('div', { id: 'drawer', class: 'drawer', hidden: true, onclick: (e) => { if (e.target.id === 'drawer' || e.target.closest('a')) openDrawer(false); } }, h('div', { class: 'drawer-in' })));
 }
 
 function setFocus(on) {
   document.documentElement.dataset.focus = on ? '1' : '0';
   const b = document.getElementById('focus-off');
-  if (b) b.hidden = !on || !isWide();
-  document.querySelector('.split.settings')?.classList.toggle('focus', on);
+  if (b) b.hidden = !on || !overviewCol();
 }
 
 function updateChrome() {
   const st = S.state;
-  const tab = parseRoute().tab;
-  document.querySelectorAll('[data-tab]').forEach((a) => a.classList.toggle('on', a.dataset.tab === tab));
+  const page = pageOf();
+  document.querySelectorAll('[data-pages]').forEach((a) => a.classList.toggle('on', a.dataset.pages.split(' ').includes(page)));
   if (!st) return;
   // Ссылка на HTTPS — только если он включён (nfqws-ui-setup https on)
   const hp = st.ui?.https_port;
@@ -495,7 +604,7 @@ function renderLogin(error) {
       err.textContent = x.message;
     }
   } },
-  h('h1', { text: 'nfqws2 — вход' }),
+  h('div', { class: 'row' }, logo(34), h('h1', { text: 'nfqws2 — вход' })),
   h('p', { class: 'muted', text: 'Логин и пароль — как для SSH роутера.' }),
   user, pass, err, h('button', { class: 'btn primary', type: 'submit', text: 'Войти' }));
   document.getElementById('app').replaceChildren(h('div', { class: 'login' }, form));
@@ -509,12 +618,14 @@ async function route(refresh = false) {
   if (!S.auth) return;
   const seq = ++routeSeq;
   let r = parseRoute();
-  if (!r.tab && isWide()) {
+  if (!r.tab && overviewCol()) {
+    // обзор уже виден в колонке слева — открываем первую вкладку
     const q = r.q.get('q');
-    history.replaceState(null, '', '#/sites');
+    history.replaceState(null, '', PAGES.pick[0]);
     if (q) S.check.run(q);
     r = parseRoute();
   }
+  openDrawer(false);
   updateChrome();
   const main = document.getElementById('main');
   if (!S.state || refresh) {
@@ -523,8 +634,8 @@ async function route(refresh = false) {
   }
   if (seq !== routeSeq) return;
   if (r.tab !== 'settings' || r.arg !== 'raw') setFocus(false);
-  const views = { '': viewOverview, sites: viewSites, tests: viewTests, settings: viewSettings, log: viewLog };
-  main.replaceChildren();
+  const views = { '': viewOverview, sites: viewSites, tests: viewTests, settings: viewSettings, log: viewLog, site: viewSite };
+  main.replaceChildren(subTabs(pageOf(r)));
   placeSide();
   try {
     await (views[r.tab] || viewOverview)(main, r);
@@ -559,12 +670,17 @@ function sideBlocks() {
     SIDE.monitor = h('section', { class: 'blk' });
     SIDE.root = h('div', { class: 'side-in' }, SIDE.service, S.check.el, SIDE.problems, SIDE.monitor, SIDE.backup, SIDE.traffic);
   }
+  // проверку сайта могла забрать карточка сайта — возвращаем на место
+  if (S.check.el.parentNode !== SIDE.root) SIDE.service.after(S.check.el);
   return SIDE.root;
 }
+// Слева на широком экране: «Вкладки» — колонка обзора, «Боковое меню» — меню, «Вокруг сайта» — ничего
 function placeSide() {
   const side = document.getElementById('side');
-  if (isWide()) {
+  if (overviewCol()) {
     if (sideBlocks().parentNode !== side) side.replaceChildren(sideBlocks());
+  } else if (isWide() && layout() === 'menu') {
+    side.replaceChildren(menuNav());
   } else {
     side.replaceChildren();
   }
@@ -721,7 +837,7 @@ function createCheck() {
       h('div', {}, h('h3', { text: res.host }), h('div', { class: 'sm muted', text: res.ips.length ? 'IP: ' + res.ips.slice(0, 3).join(', ') + (res.ips.length > 3 ? ` +${res.ips.length - 3}` : '') : 'IP не определился' })),
       res.podkop?.proxy ? notice('info', 'Идёт через podkop (прокси на VPS)', 'Для клиентов сети этот сайт уходит в туннель podkop, nfqws2 видит только соединение до сервера прокси. Проверка ниже — с самого роутера, мимо podkop.') : null,
       probeBox, routesBlock(res), actionsBlock(res),
-      h('div', { class: 'row' }, btn('Подобрать стратегию', () => go('#/tests?host=' + encodeURIComponent(res.host)), 'small', 'tests'),
+      h('div', { class: 'row' }, btn('Подобрать стратегию', () => go(layout() === 'site' ? `#/site/${encodeURIComponent(res.host)}/pick` : '#/tests?host=' + encodeURIComponent(res.host)), 'small', 'tests'),
         h('span', { class: 'grow' }), btn('Свернуть', () => { collapse(); input.value = ''; }, 'small ghost', 'up')));
     shown = res.host;
     const pr = await api('probe', { host: res.host }).catch((e) => ({ ok: false, reason: e.message }));
@@ -735,15 +851,18 @@ function createCheck() {
   drawRecent();
   // Повторный клик по тому же сайту (в мониторинге) сворачивает результат
   const toggle = (host) => { if (shown && shown === host.trim()) { collapse(); input.value = ''; return false; } run(host); return true; };
-  return { el, run, input, toggle, collapse };
+  return { el, run, input, toggle, collapse, shown: () => shown };
 }
 
 function checkHost(host) {
-  if (isWide()) {
+  if (overviewCol()) {
     if (S.check.toggle(host)) S.check.el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  } else {
-    go('#/?q=' + encodeURIComponent(host));
+    return;
   }
+  // в адрес попадает только имя сайта: «https://сайт/страница» → «сайт»
+  const name = host.trim().replace(/^[a-z]+:\/\//i, '').replace(/[/?#].*$/, '');
+  const hash = layout() === 'site' ? '#/site/' + encodeURIComponent(name) : '#/?q=' + encodeURIComponent(host.trim());
+  if (location.hash === hash) route(); else go(hash);
 }
 
 // Ограничение ТСПУ «16-20 КБ»: соединение с зарубежным хостингом замирает на объёме. Стратегии nfqws2 его не снимают.
@@ -806,6 +925,74 @@ async function viewOverview(main, r) {
   main.append(sideBlocks());
   updateSide();
   if (r.q.get('q')) S.check.run(r.q.get('q'));
+  // когда обзор — страница, а не узкая колонка, на нём хватает места для сводки по остальным разделам
+  const extra = h('div', { class: 'side-in' });
+  main.append(extra);
+  drawOverviewExtra(extra);
+}
+
+function drawOverviewExtra(el) {
+  const st = S.state;
+  const blk = (title, href, ...body) => h('section', { class: 'blk' },
+    h('div', { class: 'blk-h' }, h('h2', { text: title }), href ? h('a', { class: 'sm', href, text: 'открыть' }) : null), ...body);
+  const kv = (k, ...v) => h('div', { class: 'kv' }, h('span', { class: 'muted', text: k }), h('span', {}, ...v));
+  const profs = st.conf_profiles;
+  const bad = profs.filter((p) => worst(profIssues(p)) === 'error' || ['dead', 'excludes-only'].includes(p.state)).length;
+  const used = st.lists.filter((l) => l.used.length);
+  const withProblems = st.lists.filter((l) => l.problems?.error || l.problems?.warning).length;
+  const changes = h('div', { class: 'over-rows' }, h('span', { class: 'sm muted', text: 'загрузка…' }));
+  const picks = h('div', { class: 'over-rows' }, h('span', { class: 'sm muted', text: 'загрузка…' }));
+  const u = st.ui?.update || {};
+  el.replaceChildren(
+    blk('Профили', PAGES.prof[0],
+      h('p', { class: 'sm' }, plural(profs.length, 'профиль', 'профиля', 'профилей'), bad ? h('span', { class: 'status-bad', text: ` · ${bad} с проблемами` }) : h('span', { class: 'status-ok', text: ' · все в порядке' })),
+      h('div', { class: 'over-rows' }, profs.map((p) => h('a', { class: 'over-row', href: `#/settings/p${p.index}`, title: profScope(p) },
+        h('span', { class: 'pn ' + (worst(profIssues(p)) === 'error' ? 'err' : p.state), text: p.index }),
+        h('span', { class: 'ellipsis', text: profName(p) }), h('span', { class: 'sm faint ellipsis', text: strategyText(p) }))))),
+    blk('Списки', PAGES.lists[0],
+      h('p', { class: 'sm' }, `${used.length} из ${st.lists.length} используются · ${fmtNum(used.reduce((a, l) => a + l.entries, 0))} записей`,
+        withProblems ? h('span', { class: 'status-bad', text: ` · ${withProblems} с замечаниями` }) : null),
+      h('div', { class: 'over-rows' }, [...used].sort((a, b) => b.entries - a.entries).slice(0, 6).map((l) => h('a', { class: 'over-row', href: '#/sites/' + encodeURIComponent(l.name), title: l.name },
+        h('span', { class: 'ellipsis', text: listName(l.name) }), h('span', { class: 'sm faint num', text: fmtNum(l.entries) }))))),
+    blk('Последние подборы', PAGES.pick[0], picks),
+    blk('Последние изменения', PAGES.hist[0], changes),
+    blk('Версии', PAGES.about[0],
+      kv('nfqws2', st.version ? 'v' + st.version : 'не определена'),
+      kv('nfqws2-ui', 'v' + (st.ui?.version || '?'), u.available ? h('a', { class: 'chip ok', href: PAGES.about[0], text: `есть ${u.latest}` }) : null),
+      kv('Конфиг', h('a', { class: 'mono', href: PAGES.raw[0], text: st.ui?.conf_file || 'nfqws2.conf' })),
+      kv('Изменён', st.conf_mtime ? fmtAgo(st.now - st.conf_mtime) : '—'),
+      h('p', { class: 'sm' }, h('a', { href: '#/settings/readme', text: 'Справка' }), ' · ', h('a', { href: '#/settings/changelog', text: 'изменения по версиям' }))));
+  api('tests_history').then((r) => {
+    const items = (r.items || []).slice(0, 5);
+    picks.replaceChildren(items.length ? items.map((x) => h('a', { class: 'over-row', href: '#/tests?host=' + encodeURIComponent(x.host) },
+      levelIcon(x.baseline?.ok ? 'info' : x.best ? 'ok' : 'error'), h('span', { class: 'ellipsis mono', text: x.host }),
+      h('span', { class: 'sm faint ellipsis', text: x.baseline?.ok ? 'открывается и так' : x.best || 'ничего не помогло' })))
+      : h('span', { class: 'sm muted', text: 'Подбор стратегии ещё не запускался.' }));
+  }).catch(() => picks.replaceChildren());
+  api('history_log', { limit: 6 }).then((r) => {
+    changes.replaceChildren(r.items.length ? r.items.map((e) => h('div', { class: 'over-row' },
+      h('span', { class: 'sm faint num nowrap', text: fmtDate(e.ts) }),
+      h('span', { class: 'ellipsis', title: e.note || '', text: e.file === '*' ? e.note : [e.file === 'nfqws2.conf' ? 'Конфиг' : listName(e.file), e.note].filter(Boolean).join(': ') })))
+      : h('span', { class: 'sm muted', text: 'Изменений пока не было.' }));
+  }).catch(() => changes.replaceChildren());
+}
+
+// ============ Карточка сайта: проверка, подбор и трассировка одного сайта (компоновка «Вокруг сайта») ============
+
+async function viewSite(main, r) {
+  const host = r.arg;
+  if (!host) { go(PAGES.mon[0]); return; }
+  const sub = ['pick', 'trace'].includes(r.sub) ? r.sub : 'check';
+  const href = (s) => '#/site/' + encodeURIComponent(host) + (s === 'check' ? '' : '/' + s);
+  main.append(
+    h('div', { class: 'vh' }, h('a', { class: 'btn ghost small', href: PAGES.mon[0] }, icon('back'), 'Сайты'), h('h1', { class: 'site-name', text: host })),
+    h('nav', { class: 'subtabs', 'aria-label': 'Сайт' },
+      [['check', 'Проверка'], ['pick', 'Подбор стратегии'], ['trace', 'Трассировка']].map(([s, t]) => h('a', { href: href(s), class: s === sub ? 'on' : null, text: t })),
+      soonItem('diag'), soonItem('phist')));
+  if (sub !== 'check') return viewTests(main, { arg: sub, q: new URLSearchParams({ host }) }, true);
+  if (overviewCol()) main.append(h('p', { class: 'muted', text: 'Результат проверки — в колонке слева.' }));
+  else main.append(S.check.el);
+  if (S.check.shown() !== host) S.check.run(host);
 }
 
 // ============ редактор с подсветкой ============
@@ -1585,13 +1772,17 @@ async function saveVars(vars, note, force = false) {
 async function viewSettings(main, r) {
   await Promise.all([loadCatalog(), loadConf()]);
   const pane = r.arg || 'p' + (S.state.conf_profiles.find((p) => profIssues(p).some((x) => x.level === 'error'))?.index || 1);
-  const nav = h('nav', { class: 'nav scrollable', 'aria-label': 'Разделы настроек' });
   const content = h('div', { class: 'stack', style: 'gap:14px' });
-  const split = h('div', { class: 'split settings' }, nav, content);
-  main.append(split);
-  drawSettingsNav(nav, pane);
   const m = pane.match(/^p(\d+)$/);
-  if (m) return viewProfile(content, Number(m[1]), r);
+  if (m) {
+    // «Профили»: слева список профилей, справа выбранный
+    const nav = h('nav', { class: 'nav scrollable', 'aria-label': 'Профили' });
+    main.append(h('div', { class: 'split settings' }, nav, content));
+    drawSettingsNav(nav, pane);
+    return viewProfile(content, Number(m[1]), r);
+  }
+  // остальные страницы настроек открываются из меню или вкладок «Система»
+  main.append(content);
   const panes = { basic: paneBasic, base: paneBase, raw: paneRaw, backup: paneBackup, hist: paneHistory, look: paneLook, about: paneAbout, readme: (c) => paneDoc(c, 'readme'), changelog: (c) => paneDoc(c, 'changelog') };
   await (panes[pane] || paneBasic)(content, r);
 }
@@ -1600,7 +1791,6 @@ function drawSettingsNav(nav, current) {
   const st = S.state;
   const customs = st.conf_profiles.filter((p) => p.source?.source === 'NFQWS_ARGS_CUSTOM');
   const item = (id, label, tail) => h('a', { href: '#/settings/' + id, class: id === current ? 'on' : null }, label, tail ? h('span', { class: 'tail' }, tail) : null);
-  const rawIssues = st.lint?.issues || [];
   let dragFrom = null;
   nav.replaceChildren(
     h('div', { class: 'nav-h', text: 'Профили — порядок проверки' }),
@@ -1619,19 +1809,7 @@ function drawSettingsNav(nav, current) {
       }
       return a;
     }),
-    h('button', { class: 'ni', type: 'button', onclick: addCustomProfile }, h('span', { class: 'pn', text: '+' }), h('span', { class: 'nm muted', text: 'Свой профиль' })),
-    h('div', { class: 'nav-h', text: 'Общее' }),
-    item('basic', 'Основное', worst(rawIssues.filter((x) => ['ISP_INTERFACE', 'TCP_PORTS', 'UDP_PORTS'].includes(x.var))) ? h('span', { class: 'warndot' }) : null),
-    item('base', 'Параметры запуска', worst(rawIssues.filter((x) => x.var === 'NFQWS_BASE_ARGS')) ? h('span', { class: 'warndot' }) : null),
-    item('raw', 'Конфиг целиком', worst(rawIssues) === 'error' ? h('span', { class: 'errdot' }) : null),
-    h('div', { class: 'nav-h', text: 'Сохранность' }),
-    item('backup', 'Резервные копии', st.snap?.count ? h('span', { class: 'num', text: st.snap.count }) : null),
-    item('hist', 'История изменений'),
-    h('div', { class: 'nav-h', text: 'Интерфейс' }),
-    item('look', 'Оформление'),
-    item('about', 'О программе', st.ui?.update?.available ? h('span', { class: 'chip ok', text: 'обновление' }) : null),
-    item('readme', 'Справка'),
-    item('changelog', 'Изменения по версиям'));
+    h('button', { class: 'ni', type: 'button', onclick: addCustomProfile }, h('span', { class: 'pn', text: '+' }), h('span', { class: 'nm muted', text: 'Свой профиль' })));
 }
 
 async function moveCustom(from, to) {
@@ -2227,7 +2405,7 @@ async function paneBase(content) {
 // ---------- Конфиг целиком ----------
 
 async function paneRaw(content) {
-  setFocus(true);
+  setFocus(overviewCol());   // конфигу нужна ширина: колонка обзора сворачивается
   const conf = S.conf;
   let issues = S.state.lint.issues;
   let dry = S.state.lint.dry_run;
@@ -2372,7 +2550,7 @@ async function paneRaw(content) {
     btn('Сохранить', () => save(), 'primary small'));
   ed.setIssues(issues);
   content.append(h('div', { class: 'vh' }, h('h1', { text: 'Конфиг целиком' }), h('span', { class: 'sm muted mono', text: S.state?.ui?.conf_file || 'nfqws2.conf' }), h('span', { class: 'grow' }),
-    isWide() ? btn('Показать обзор и меню', () => setFocus(false), 'small') : null),
+    overviewCol() ? btn('Показать обзор', () => setFocus(false), 'small') : null),
   h('div', { class: 'cfg' }, tools, banner, outline, h('div', { class: 'cfg-body' }, ed.el), status, extra));
   drawOutline(); drawCounts(); drawStatus(); drawExtra();
 }
@@ -2504,7 +2682,8 @@ async function paneAbout(content) {
   };
   const cmd = (c, text) => h('div', { class: 'frow cmd-row' }, h('code', { class: 'lbl mono', text: c }), h('span', { class: 'sm', text }));
   content.append(h('div', { class: 'vh' }, h('h1', { text: 'О программе' })),
-    panel('nfqws2-ui', null,
+    panel(null, null,
+      h('div', { class: 'about-brand' }, logo(48), h('div', {}, h('h2', { text: 'nfqws2-ui' }), h('div', { class: 'sm muted', text: 'веб-интерфейс для nfqws2 · zemidala' }))),
       row('Версия', h('b', { text: st.ui?.version || '?' })),
       row('nfqws2', st.version ? 'v' + st.version : 'не определена'),
       row('Исходный код', link(REPO, REPO.replace('https://', ''))),
@@ -2528,11 +2707,27 @@ async function paneAbout(content) {
 
 // ---------- Оформление ----------
 
+// Схемы компоновок для выбора
+const LAYOUT_THUMB = {
+  menu: '<rect width="120" height="68" rx="4" fill="var(--bg)" stroke="var(--line)"/><rect width="120" height="10" rx="4" fill="var(--surface)" stroke="var(--line)"/><rect y="10" width="30" height="58" fill="var(--surface)" stroke="var(--line)"/><path d="M5 17h18M5 23h14M5 35h18M5 41h12M5 47h16M5 59h14" stroke="var(--faint)" stroke-width="2" stroke-linecap="round"/><rect x="3" y="26" width="24" height="6" rx="2" fill="var(--accent-soft)"/><rect x="36" y="16" width="78" height="20" rx="2" fill="var(--surface)" stroke="var(--line)"/><rect x="36" y="40" width="78" height="22" rx="2" fill="var(--surface)" stroke="var(--line)"/>',
+  tabs: '<rect width="120" height="68" rx="4" fill="var(--bg)" stroke="var(--line)"/><rect width="120" height="10" rx="4" fill="var(--surface)" stroke="var(--line)"/><rect x="30" y="3" width="50" height="4" rx="2" fill="var(--accent)"/><rect y="10" width="28" height="58" fill="var(--surface)" stroke="var(--line)"/><rect x="34" y="16" width="44" height="3" rx="1.5" fill="var(--faint)"/><rect x="34" y="24" width="80" height="16" rx="2" fill="var(--surface)" stroke="var(--line)"/><rect x="34" y="44" width="80" height="18" rx="2" fill="var(--surface)" stroke="var(--line)"/>',
+  site: '<rect width="120" height="68" rx="4" fill="var(--bg)" stroke="var(--line)"/><rect width="120" height="10" rx="4" fill="var(--surface)" stroke="var(--line)"/><rect x="30" y="3" width="40" height="4" rx="2" fill="var(--accent)"/><rect x="88" y="3" width="26" height="4" rx="2" fill="var(--line)"/><rect x="18" y="16" width="84" height="6" rx="2" fill="var(--accent-soft)"/><rect x="18" y="26" width="84" height="36" rx="2" fill="var(--surface)" stroke="var(--line)"/><path d="M22 34h76M22 41h76M22 48h76M22 55h76" stroke="var(--line)"/>',
+};
+
 async function paneLook(content) {
   const look = getLook();
   const card = (v, title, text, thumb) => h('label', { class: 'look' }, h('input', { type: 'radio', name: 'look', value: v, checked: look.variant === v, onchange: () => { setLook({ variant: v }); } }), thumb, h('b', { text: title }), h('span', { class: 'sm muted', text }));
   const i = (cls, style) => h('i', { class: cls, style });
+  // Компоновка: где показаны переходы между страницами. Страницы и их адреса одни и те же.
+  const setLayout = (v) => { setLook({ layout: v }); renderShell(); route(); };
+  const lay = (v, title, text) => h('label', { class: 'look' }, h('input', { type: 'radio', name: 'layout', value: v, checked: look.layout === v, onchange: () => setLayout(v) }),
+    svgEl('0 0 120 68', LAYOUT_THUMB[v], 'lthumb'), h('b', { text: title }), h('span', { class: 'sm muted', text }));
   content.append(h('div', { class: 'vh' }, h('h1', { text: 'Оформление' })),
+    panel(null, null,
+      h('fieldset', { class: 'looks' }, h('legend', { class: 'sm muted', text: 'Компоновка — как разложены разделы' }),
+        lay('menu', 'Боковое меню', 'Все разделы списком слева, любой — в один клик.'),
+        lay('tabs', 'Вкладки по задачам', 'Вкладки сверху, слева постоянная колонка обзора.'),
+        lay('site', 'Вокруг сайта', 'Таблица сайтов и карточка сайта: проверка, подбор, трассировка рядом.'))),
     panel(null, null,
       h('fieldset', { class: 'looks' }, h('legend', { class: 'sm muted', text: 'Стиль интерфейса' }),
         card('a', 'A · Консоль', 'Плотно, панель с разделителями. Больше всего данных на экране.', h('span', { class: 'thumb th-a' }, h('span', { class: 'tl' }, i('acc'), i(), i(), i()), h('span', { class: 'tr' }, i(), i('', 'width:70%'), i('acc', 'width:40%')))),
@@ -2547,10 +2742,6 @@ async function paneLook(content) {
 // ============ Тесты ============
 
 let testPoll = null;
-const testTabs = (tab) => h('div', { class: 'seg', role: 'group', 'aria-label': 'Вид теста' },
-  [['pick', 'Подбор стратегии'], ['trace', 'Трассировка'], ['monitor', 'Мониторинг']].map(([id, t]) =>
-    h('button', { type: 'button', class: tab === id ? 'on' : '', text: t, onclick: () => go('#/tests/' + id) })));
-
 async function viewMonitor(main) {
   const m = await api('monitor_get');
   const cfg = m.settings;
@@ -2558,8 +2749,6 @@ async function viewMonitor(main) {
   const add = h('input', { class: 'input mono grow', id: 'mon-add', placeholder: 'добавить сайт, например rutracker.org', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Добавить сайт' });
   const interval = h('select', { class: 'select', 'aria-label': 'Как часто' }, [10, 30, 60, 180, 720].map((n) => h('option', { value: n, text: n < 60 ? `каждые ${n} мин` : `каждые ${n / 60} ч`, selected: n === cfg.interval })));
   const enabled = h('input', { type: 'checkbox', id: 'mon-on', checked: cfg.enabled });
-  const tgToken = h('input', { class: 'input mono', id: 'tg-token', type: 'password', placeholder: m.tg.token_set ? 'задан — оставьте пустым, чтобы не менять' : '123456:ABC…', autocomplete: 'off', 'aria-label': 'Токен бота' });
-  const tgChat = h('input', { class: 'input mono', id: 'tg-chat', value: m.tg.chat, placeholder: 'ID чата, например 123456789', 'aria-label': 'ID чата' });
   const listBox = h('div', { class: 'stack', style: 'gap:0' });
   const nextInfo = h('p', { class: 'sm muted' });
   const checking = new Set();
@@ -2617,26 +2806,37 @@ async function viewMonitor(main) {
     panel('Сайты', h('div', { class: 'row' },
       h('label', { class: 'row sm' }, enabled, 'включён'), interval,
       btn('Проверить все сейчас', async () => { toast('Проверяю…'); const r = await guarded(() => api('monitor_run')); if (r) { m.data = r.data; draw(); await loadState(); } }, 'small', 'refresh')),
-      h('p', { class: 'sm muted', text: 'Сайты открываются с самого роутера через основной nfqws2. История — последние 96 проверок. При смене состояния «открывается ↔ нет» может прийти сообщение в Telegram.' }),
+      h('p', { class: 'sm muted', text: 'Сайты открываются с самого роутера через основной nfqws2. История — последние 96 проверок. При смене состояния «открывается ↔ нет» может прийти сообщение в Telegram — см. «Уведомления».' }),
       nextInfo,
-      h('div', { class: 'row' }, add, btn('Добавить', addSite, 'primary', 'plus')), listBox),
-    panel('Уведомления в Telegram', null,
-      h('p', { class: 'sm muted', text: 'Создайте бота у @BotFather, напишите ему любое сообщение и укажите токен и ID своего чата (его показывает @userinfobot). Токен хранится только на роутере.' }),
-      h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 'tg-token', text: 'Токен бота' }), tgToken),
-      h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 'tg-chat', text: 'ID чата' }), tgChat),
-      h('div', { class: 'row' }, btn('Сохранить', async () => { if (await save({ tg_token: tgToken.value || '••••', tg_chat: tgChat.value })) toast('Сохранено'); }, 'primary'),
-        btn('Отправить проверочное', async () => { await save({ tg_token: tgToken.value || '••••', tg_chat: tgChat.value }); await guarded(() => api('notify_test'), 'Сообщение отправлено'); }))));
+      h('div', { class: 'row' }, add, btn('Добавить', addSite, 'primary', 'plus')), listBox));
   [interval, enabled].forEach((x) => x.addEventListener('change', () => { save(); drawNext(); }));
 }
 
-async function viewTests(main, r) {
+// Уведомления в Telegram о сайтах из мониторинга
+async function viewNotify(main) {
+  const m = await api('monitor_get');
+  const tgToken = h('input', { class: 'input mono', id: 'tg-token', type: 'password', placeholder: m.tg.token_set ? 'задан — оставьте пустым, чтобы не менять' : '123456:ABC…', autocomplete: 'off', 'aria-label': 'Токен бота' });
+  const tgChat = h('input', { class: 'input mono', id: 'tg-chat', value: m.tg.chat, placeholder: 'ID чата, например 123456789', 'aria-label': 'ID чата' });
+  const save = () => guarded(() => api('monitor_set', { tg_token: tgToken.value || '••••', tg_chat: tgChat.value }));
+  main.append(h('div', { class: 'vh' }, h('h1', { text: 'Уведомления' })),
+    panel('Уведомления в Telegram', null,
+      h('p', { class: 'sm muted', text: 'Сообщение приходит, когда сайт из мониторинга перестаёт или снова начинает открываться. Создайте бота у @BotFather, напишите ему любое сообщение и укажите токен и ID своего чата (его показывает @userinfobot). Токен хранится только на роутере.' }),
+      h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 'tg-token', text: 'Токен бота' }), tgToken),
+      h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 'tg-chat', text: 'ID чата' }), tgChat),
+      h('div', { class: 'row' }, btn('Сохранить', async () => { if (await save()) toast('Сохранено'); }, 'primary'),
+        btn('Отправить проверочное', async () => { if (await save()) await guarded(() => api('notify_test'), 'Сообщение отправлено'); }))));
+}
+
+// bare — без заголовка: страница встроена в карточку сайта
+async function viewTests(main, r, bare = false) {
   await loadCatalog();
   clearInterval(testPoll);
-  const tab = r.arg || 'pick';
+  const tab = ['trace', 'monitor', 'notify'].includes(r.arg) ? r.arg : 'pick';
   if (tab === 'monitor') {
-    main.append(h('div', { class: 'vh' }, h('h1', { text: 'Мониторинг' }), h('span', { class: 'grow' }), testTabs(tab)));
+    main.append(h('div', { class: 'vh' }, h('h1', { text: layout() === 'site' ? 'Сайты' : 'Мониторинг' })));
     return viewMonitor(main);
   }
+  if (tab === 'notify') return viewNotify(main);
   const host = h('input', { class: 'input mono grow', id: 't-host', value: r.q.get('host') || S.check?.input.value || '', placeholder: 'rutracker.org', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Сайт для теста' });
   host.addEventListener('input', () => { host.dataset.edited = '1'; });
   if (r.q.get('host')) host.dataset.edited = '1';
@@ -2835,8 +3035,7 @@ async function viewTests(main, r) {
 
   const hist = await api('tests_history').catch(() => ({ items: [] }));
   main.append(
-    h('div', { class: 'vh' }, h('h1', { text: 'Тесты стратегий' }), h('span', { class: 'grow' }),
-      testTabs(tab)),
+    bare ? null : h('div', { class: 'vh' }, h('h1', { text: tab === 'trace' ? 'Трассировка' : 'Подбор стратегии' })),
     panel(null, null,
       h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 't-host', text: 'Сайт' }), h('div', { class: 'row' }, host, proto)),
       tab === 'pick' ? [

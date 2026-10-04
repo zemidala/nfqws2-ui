@@ -1,5 +1,5 @@
 <!doctype html>
-<html lang="ru" data-variant="a" data-mode="auto">
+<html lang="ru" data-variant="a" data-mode="auto" data-layout="menu">
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
@@ -8,8 +8,8 @@
 <link rel="icon" href="icon.svg" type="image/svg+xml">
 <link rel="manifest" href="manifest.json">
 <script>
-  // Оформление применяется до отрисовки, чтобы не мелькала другая тема
-  try { var l = JSON.parse(localStorage.getItem('nfqws-ui-look') || '{}'); if (l.variant) document.documentElement.dataset.variant = l.variant; if (l.mode) document.documentElement.dataset.mode = l.mode; } catch (e) {}
+  // Оформление и компоновка применяются до отрисовки, чтобы не мелькал другой вид
+  try { var l = JSON.parse(localStorage.getItem('nfqws-ui-look') || '{}'); if (l.variant) document.documentElement.dataset.variant = l.variant; if (l.mode) document.documentElement.dataset.mode = l.mode; if (l.layout) document.documentElement.dataset.layout = l.layout; } catch (e) {}
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
