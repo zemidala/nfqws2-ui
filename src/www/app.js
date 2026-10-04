@@ -303,9 +303,9 @@ const PAGES = {
   backup: ['#/settings/backup', 'Резервные копии'], hist: ['#/settings/hist', 'История изменений'], log: ['#/log', 'Журнал'],
   look: ['#/settings/look', 'Оформление'], about: ['#/settings/about', 'О программе'],
   // ещё не сделаны: в меню видны, но заблокированы и помечены «скоро»
-  diag: ['#/diag', 'Диагноз блокировки'], phist: [null, 'История подборов'], auto: [null, 'Автоподбор'], asn: [null, 'Список по ASN'], report: [null, 'Отчёт для помощи'],
+  diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], auto: [null, 'Автоподбор'], asn: [null, 'Список по ASN'], report: [null, 'Отчёт для помощи'],
 };
-const NEW_PAGES = ['diag'];   // только что появились — помечаются в меню
+const NEW_PAGES = ['diag', 'phist'];   // только что появились — помечаются в меню
 const SOON_HINT = 'Ещё в разработке — появится в одной из следующих версий';
 const SYS_PAGES = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'look', 'about'];
 const SYS_NAV = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
@@ -339,7 +339,7 @@ function pageOf(r = parseRoute()) {
   if (r.tab === 'log') return 'log';
   if (r.tab === 'site') return 'site';
   if (r.tab === 'diag') return 'diag';
-  if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace' }[r.arg] || 'pick';
+  if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace', history: 'phist' }[r.arg] || 'pick';
   if (r.tab === 'settings') return SYS_PAGES.includes(r.arg) ? r.arg : ['readme', 'changelog'].includes(r.arg) ? 'about' : 'prof';
   return 'over';
 }
@@ -999,7 +999,7 @@ function overviewExtra() {
         withProblems ? h('span', { class: 'status-bad', text: ` · ${withProblems} с замечаниями` }) : null),
       h('div', { class: 'over-rows' }, [...used].sort((a, b) => b.entries - a.entries).slice(0, 6).map((l) => h('a', { class: 'over-row', href: '#/sites/' + encodeURIComponent(l.name), title: l.name },
         h('span', { class: 'ellipsis', text: listName(l.name) }), h('span', { class: 'sm faint num', text: fmtNum(l.entries) })))));
-  out.picks = blk('Последние подборы', PAGES.pick[0], picks);
+  out.picks = blk('Последние подборы', PAGES.phist[0], picks);
   out.changes = blk('Последние изменения', PAGES.hist[0], changes);
   out.ver = blk('Версии', PAGES.about[0],
       kv('nfqws2', st.version ? 'v' + st.version : 'не определена'),
@@ -1009,7 +1009,7 @@ function overviewExtra() {
       h('p', { class: 'sm' }, h('a', { href: '#/settings/readme', text: 'Справка' }), ' · ', h('a', { href: '#/settings/changelog', text: 'изменения по версиям' })));
   api('tests_history').then((r) => {
     const items = (r.items || []).slice(0, 5);
-    picks.replaceChildren(items.length ? items.map((x) => h('a', { class: 'over-row', href: '#/tests?host=' + encodeURIComponent(x.host) },
+    picks.replaceChildren(items.length ? items.map((x) => h('a', { class: 'over-row', href: pickHistHref(x.host) },
       levelIcon(x.baseline?.ok ? 'info' : x.best ? 'ok' : 'error'), h('span', { class: 'ellipsis mono', text: x.host }),
       h('span', { class: 'sm faint ellipsis', text: x.baseline?.ok ? 'открывается и так' : x.best || 'ничего не помогло' })))
       : h('span', { class: 'sm muted', text: 'Подбор стратегии ещё не запускался.' }));
@@ -1180,13 +1180,13 @@ async function viewDiag(main, r, bare = false) {
 async function viewSite(main, r) {
   const host = r.arg;
   if (!host) { go(PAGES.mon[0]); return; }
-  const sub = ['diag', 'pick', 'trace'].includes(r.sub) ? r.sub : 'check';
+  const sub = ['diag', 'pick', 'trace', 'hist'].includes(r.sub) ? r.sub : 'check';
   const href = (s) => '#/site/' + encodeURIComponent(host) + (s === 'check' ? '' : '/' + s);
   main.append(
     h('div', { class: 'vh' }, h('a', { class: 'btn ghost small', href: PAGES.mon[0] }, icon('back'), 'Сайты'), h('h1', { class: 'site-name', text: host })),
     h('nav', { class: 'subtabs', 'aria-label': 'Сайт' },
-      [['check', 'Проверка'], ['diag', 'Диагноз'], ['pick', 'Подбор стратегии'], ['trace', 'Трассировка']].map(([s, t]) => h('a', { href: href(s), class: s === sub ? 'on' : null, text: t })),
-      soonItem('phist')));
+      [['check', 'Проверка'], ['diag', 'Диагноз'], ['pick', 'Подбор стратегии'], ['trace', 'Трассировка'], ['hist', 'История подборов']].map(([s, t]) => h('a', { href: href(s), class: s === sub ? 'on' : null, text: t }))));
+  if (sub === 'hist') return viewPickHist(main, { q: new URLSearchParams({ host }) }, true);
   if (sub === 'diag') return viewDiag(main, { q: new URLSearchParams({ host }) }, true);
   if (sub !== 'check') return viewTests(main, { arg: sub, q: new URLSearchParams({ host }) }, true);
   if (overviewCol()) main.append(h('p', { class: 'muted', text: 'Результат проверки — в колонке слева.' }));
@@ -3038,6 +3038,7 @@ async function viewNotify(main) {
 async function viewTests(main, r, bare = false) {
   await loadCatalog();
   clearInterval(testPoll);
+  if (r.arg === 'history') return viewPickHist(main, r);
   const tab = ['trace', 'monitor', 'notify'].includes(r.arg) ? r.arg : 'pick';
   if (tab === 'monitor') {
     main.append(h('div', { class: 'vh' }, h('h1', { text: layout() === 'site' ? 'Сайты' : 'Мониторинг' })));
@@ -3050,6 +3051,7 @@ async function viewTests(main, r, bare = false) {
   const proto = h('select', { class: 'select', 'aria-label': 'Протокол' }, h('option', { value: 'https', text: 'HTTPS (TLS, TCP 443)' }), h('option', { value: 'http', text: 'HTTP (TCP 80)' }));
   const setCfg = h('input', { type: 'checkbox', id: 't-cfg', checked: true });
   const setStd = h('input', { type: 'checkbox', id: 't-std', checked: true });
+  const setHist = h('input', { type: 'checkbox', id: 't-hist', checked: true });
   const repeats = h('select', { class: 'select', 'aria-label': 'Повторов' }, [1, 2, 3, 5].map((n) => h('option', { value: n, text: plural(n, 'повтор', 'повтора', 'повторов'), selected: n === 3 })));
   const refine = h('input', { type: 'checkbox', id: 't-refine' });
   const out = h('div', { class: 'stack', style: 'gap:14px' });
@@ -3060,7 +3062,7 @@ async function viewTests(main, r, bare = false) {
 
   async function start() {
     const cmd = tab === 'trace' ? 'trace_start' : 'test_start';
-    const sets = [setCfg.checked && 'config', setStd.checked && 'std'].filter(Boolean);
+    const sets = [setCfg.checked && 'config', setStd.checked && 'std', setHist.checked && 'hist', setHist.checked && 'other'].filter(Boolean);
     if (tab !== 'trace' && !sets.length) { toast('Выберите, что пробовать', { err: true }); return; }
     if (!await guarded(() => api(cmd, { host: host.value, proto: proto.value, sets, repeats: Number(repeats.value), refine: refine.checked }))) return;
     poll();
@@ -3112,7 +3114,7 @@ async function viewTests(main, r, bare = false) {
       return h('tr', {},
         h('td', {}, levelIcon(full ? 'ok' : x.ok ? 'warning' : 'error')),
         h('td', {}, h('div', { text: x.name }), h('code', { class: 'sm muted', style: 'word-break:break-all', text: x.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') })),
-        h('td', { class: 'sm muted', text: x.from }),
+        h('td', { class: 'sm muted' }, x.from, x.hist ? h('div', { class: 'nowrap' }, chip('работала ' + fmtDate(x.hist), 'ok')) : null),
         h('td', { class: 'sm', text: full ? `открылся ${x.ok} из ${x.ok}` : x.ok ? `${x.ok} из ${x.tries}` : x.reason || 'не открылся' }),
         h('td', { class: 'num', text: x.ms ? x.ms + ' мс' : '—' }),
         h('td', {}, x.ok ? applyMenu(x.steps, s) : null));
@@ -3243,6 +3245,7 @@ async function viewTests(main, r, bare = false) {
     const part = [`--filter-tcp=${http ? 80 : 443}`, `--filter-l7=${http ? 'http' : 'tls'}`, `--hostlist-domains=${s.host}`, `--payload=${http ? 'http_req' : 'tls_client_hello'}`, ...steps];
     if (!confirm(`Создать профиль только для ${s.host}?\n\nОн встанет первым (#1), остальные профили сдвинутся на один номер. Другие сайты не затронет.\n\nПосле сохранения nfqws2 перезапустится с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, всё вернётся как было.`)) return;
     if (!await saveVars({ NFQWS_ARGS_CUSTOM: joinParts([part, ...cur]) }, `профиль только для ${s.host}`)) return;
+    api('pick_applied', { host: s.host, steps, target: `отдельный профиль для ${s.host}` }).catch(() => {});
     await safeRestart();
     go('#/settings/p1');
   }
@@ -3279,7 +3282,8 @@ async function viewTests(main, r, bare = false) {
       h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 't-host', text: 'Сайт' }), h('div', { class: 'row' }, host, proto)),
       tab === 'pick' ? [
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Что пробовать' }), h('div', { class: 'row' },
-          h('label', { class: 'row' }, setCfg, 'стратегии из вашего конфига'), h('label', { class: 'row' }, setStd, 'стандартный набор'))),
+          h('label', { class: 'row' }, setCfg, 'стратегии из вашего конфига'), h('label', { class: 'row' }, setStd, 'стандартный набор'),
+          h('label', { class: 'row', title: 'Стратегии из истории подборов: сначала работавшие для этого сайта, затем до пяти помогавших другим сайтам' }, setHist, 'что работало раньше'))),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Повторов' }), h('div', { class: 'row' }, repeats, h('span', { class: 'sm muted', text: 'Стратегия засчитывается, если сайт открылся каждый раз.' }))),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Уточнение' }), h('div', { class: 'stack', style: 'gap:2px' },
           h('label', { class: 'row' }, refine, 'искать вариант полегче, даже если рабочая стратегия найдена'),
@@ -3287,11 +3291,113 @@ async function viewTests(main, r, bare = false) {
         h('p', { class: 'sm muted', text: 'Трассировка открывает сайт через копию текущей конфигурации с подробным журналом nfqws2 — видно, какой профиль сработал и что сделали стратегии.' }),
       h('div', { class: 'row' }, startBtn, h('span', { class: 'sm muted grow', text: 'Работает отдельный процесс nfqws2 на очереди 301 только для проверочных соединений роутера. Ваш трафик и основной nfqws2 не затрагиваются.' }))),
     out,
-    tab === 'pick' && hist.items.length ? panel('Прошлые тесты', null, h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
+    tab === 'pick' && !bare && hist.items.length ? panel('Последние подборы', h('a', { class: 'sm', href: PAGES.phist[0], text: 'вся история' }), h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
       h('thead', {}, h('tr', {}, h('th', { text: 'Когда' }), h('th', { text: 'Сайт' }), h('th', { text: 'Без обхода' }), h('th', { class: 'num', text: 'Сработало' }), h('th', { text: 'Лучшая' }))),
-      h('tbody', {}, hist.items.map((x) => h('tr', {}, h('td', { class: 'date', text: fmtDate(x.ts) }), h('td', { class: 'mono', text: x.host }),
+      h('tbody', {}, hist.items.slice(0, 5).map((x) => h('tr', {}, h('td', { class: 'date', text: fmtDate(x.ts) }), h('td', { class: 'mono' }, h('a', { href: pickHistHref(x.host), text: x.host })),
         h('td', { text: x.baseline?.ok ? 'открывается' : x.baseline?.reason || '—' }), h('td', { class: 'num', text: `${x.ok} из ${x.total}` }), h('td', { class: 'mono sm', text: x.best || '—' }))))))) : null);
   poll();
+}
+
+// ============ История подборов: что и когда работало для каждого сайта ============
+
+const pickHistHref = (host) => layout() === 'site' ? `#/site/${encodeURIComponent(host)}/hist` : PAGES.phist[0] + '?host=' + encodeURIComponent(host);
+const pickOutcome = (x) => x.baseline?.ok ? 'открывается и без обхода' : x.best ? x.best : x.state === 'stopped' ? 'остановлен' : 'ничего не помогло';
+
+// Быстрая проверка: только то, что для этого сайта уже работало
+async function pickAgain(host, proto) {
+  if (!await guarded(() => api('test_start', { host, proto: proto || 'https', sets: ['hist'], repeats: 3 }))) return;
+  go(pickHref(host));
+}
+
+// bare — без заголовка: страница встроена в карточку сайта
+async function viewPickHist(main, r, bare = false) {
+  const host = r.q.get('host');
+  if (host) return viewPickHistSite(main, host, bare);
+  const all = (await api('tests_history').catch(() => ({ items: [] }))).items;
+  const sites = new Map();
+  for (const x of all) {
+    if (!sites.has(x.host)) sites.set(x.host, { host: x.host, last: x, runs: 0, works: 0, applied: null });
+    const g = sites.get(x.host);
+    g.runs++;
+    g.works += x.works || 0;
+    if (!g.applied && x.applied) g.applied = x.applied;
+  }
+  const body = h('tbody');
+  const search = h('input', { class: 'input', type: 'search', placeholder: 'Найти сайт', 'aria-label': 'Найти сайт', style: 'max-width:260px', oninput: () => draw() });
+  function draw() {
+    const q = search.value.trim().toLowerCase();
+    const rows = [...sites.values()].filter((g) => !q || g.host.includes(q));
+    body.replaceChildren(...rows.map((g) => h('tr', {},
+      h('td', {}, levelIcon(g.last.baseline?.ok ? 'info' : g.last.best ? 'ok' : 'error')),
+      h('td', {}, h('a', { class: 'mono', href: pickHistHref(g.host), text: g.host })),
+      h('td', { class: 'date', text: fmtDate(g.last.ts) }),
+      h('td', { class: 'sm' }, pickOutcome(g.last), g.applied ? h('div', { class: 'sm muted', text: `применена ${fmtDate(g.applied.ts)}: ${g.applied.name}` }) : null),
+      h('td', { class: 'num', text: g.runs }),
+      h('td', {}, h('div', { class: 'row', style: 'justify-content:flex-end;flex-wrap:nowrap' },
+        g.works ? btn('Проверить снова', () => pickAgain(g.host, g.last.proto), 'small', 'play', { title: 'Быстрый подбор только по тому, что для этого сайта уже работало' }) : null,
+        btn('', async () => { if (confirm(`Удалить историю подборов для ${g.host}?`) && await guarded(() => api('picks_delete', { host: g.host }), 'Удалено')) route(true); }, 'small ghost', 'trash', { 'aria-label': 'Удалить историю сайта', title: 'Удалить историю сайта' }))))));
+    if (!rows.length) body.append(h('tr', {}, h('td', { colspan: 6, class: 'muted', text: 'Ничего не найдено.' })));
+  }
+  draw();
+  main.append(
+    bare ? null : h('div', { class: 'vh' }, h('h1', { text: 'История подборов' })),
+    !sites.size ? panel(null, null, h('p', { class: 'muted', text: 'Подбор стратегии ещё не запускался. После каждого подбора здесь останется, что и когда сработало, — при следующей поломке это проверяется первым.' }),
+      h('div', { class: 'row' }, h('a', { class: 'btn primary', href: PAGES.pick[0] }, 'Подобрать стратегию')))
+    : panel(null, null,
+      h('div', { class: 'row' }, search, h('span', { class: 'grow' }), h('span', { class: 'sm muted num', text: `${plural(sites.size, 'сайт', 'сайта', 'сайтов')} · ${plural(all.length, 'подбор', 'подбора', 'подборов')}` }),
+        btn('Очистить всё', async () => { if (confirm('Удалить всю историю подборов? На профили и конфиг это не влияет.') && await guarded(() => api('picks_delete', {}), 'История очищена')) route(true); }, 'small danger', 'trash')),
+      h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
+        h('thead', {}, h('tr', {}, h('th'), h('th', { text: 'Сайт' }), h('th', { text: 'Последний подбор' }), h('th', { text: 'Итог' }), h('th', { class: 'num', text: 'Запусков' }), h('th'))), body)),
+      h('p', { class: 'sm faint', text: 'Хранится до 100 подборов, не больше 10 на сайт. Работавшие стратегии подбор пробует первыми — галочка «что работало раньше».' })));
+}
+
+async function viewPickHistSite(main, host, bare) {
+  const runs = (await api('tests_history', { host }).catch(() => ({ items: [] }))).items;
+  // сводка по стратегиям: в скольких запусках пробовалась и в скольких открыла сайт каждый раз
+  const strat = new Map();
+  for (const e of runs) {
+    for (const x of e.results || []) {
+      if (!x.steps) continue;
+      const key = x.steps.join(' ');
+      if (!strat.has(key)) strat.set(key, { name: x.name, steps: x.steps, seen: 0, full: 0, last: null, ms: null, refined: x.refined });
+      const g = strat.get(key);
+      g.seen++;
+      if (x.ok >= (e.repeats || 1)) { g.full++; if (!g.last) { g.last = e.ts; g.ms = x.ms; } }
+    }
+  }
+  const list = [...strat.values()].sort((a, b) => (b.last || 0) - (a.last || 0) || b.full - a.full);
+  const applied = runs.find((e) => e.applied)?.applied;
+  const proto = runs[0]?.proto || 'https';
+  main.append(
+    bare ? null : h('div', { class: 'vh' }, h('a', { class: 'btn ghost small', href: PAGES.phist[0] }, icon('back'), 'Вся история'), h('h1', { class: 'site-name', text: host })),
+    !runs.length ? panel(null, null, h('p', { class: 'muted', text: `Для ${host} подбор ещё не запускался.` }), h('div', { class: 'row' }, h('a', { class: 'btn primary', href: pickHref(host) }, 'Подобрать стратегию'))) : [
+      panel(null, null, h('div', { class: 'row' },
+        list.some((g) => g.full) ? btn('Проверить снова', () => pickAgain(host, proto), 'primary', 'play') : null,
+        h('a', { class: 'btn', href: pickHref(host) }, 'Полный подбор'), h('a', { class: 'btn', href: diagHref(host) }, 'Диагноз'), h('span', { class: 'grow' }),
+        btn('Удалить историю', async () => { if (confirm(`Удалить историю подборов для ${host}?`) && await guarded(() => api('picks_delete', { host }), 'Удалено')) { if (bare) route(true); else go(PAGES.phist[0]); } }, 'small danger', 'trash')),
+        h('p', { class: 'sm muted', text: '«Проверить снова» пробует только то, что для этого сайта уже работало, — это секунды, а не минуты. Применить стратегию можно из результатов проверки.' }),
+        applied ? h('p', { class: 'sm' }, 'Применена ', h('b', { text: fmtDate(applied.ts) }), ': ', h('span', { class: 'mono', text: applied.name }), applied.target ? ` — ${applied.target}` : '') : null),
+      panel('Что работало', h('span', { class: 'sm muted num', text: plural(list.length, 'стратегия', 'стратегии', 'стратегий') }),
+        list.length ? h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
+          h('thead', {}, h('tr', {}, h('th'), h('th', { text: 'Стратегия' }), h('th', { text: 'Работала' }), h('th', { class: 'nowrap', text: 'Последний раз' }), h('th', { class: 'num', text: 'Время' }), h('th'))),
+          h('tbody', {}, list.map((g) => h('tr', {},
+            h('td', {}, levelIcon(g.full === g.seen ? 'ok' : g.full ? 'warning' : 'error')),
+            h('td', { style: 'min-width:220px' }, h('div', {}, g.name, g.refined ? ' ' : null, g.refined ? chip('уточнение') : null), h('code', { class: 'sm muted', style: 'word-break:break-all', text: g.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') })),
+            h('td', { class: 'sm nowrap', text: g.full ? `в ${g.full} из ${plural(g.seen, 'запуска', 'запусков', 'запусков')}` : 'открывала не каждый раз' }),
+            h('td', { class: 'date', text: g.last ? fmtDate(g.last) : '—' }),
+            h('td', { class: 'num nowrap', text: g.ms ? g.ms + ' мс' : '—' }),
+            h('td', {}, btn('Скопировать', () => copyText(g.steps.join('\n')), 'small', 'copy'))))))) : h('p', { class: 'muted', text: 'Ни одна стратегия этот сайт пока не открыла.' })),
+      panel('Запуски', h('span', { class: 'sm muted num', text: String(runs.length) }),
+        h('div', { class: 'stack', style: 'gap:6px' }, runs.map((e) => h('details', { class: 'prun' },
+          h('summary', {}, levelIcon(e.baseline?.ok ? 'info' : e.best ? 'ok' : 'error'), h('span', { class: 'date', text: fmtDate(e.ts) }),
+            h('span', { class: 'grow ellipsis', text: pickOutcome(e) }),
+            h('span', { class: 'sm muted num nowrap', text: `${e.ok} из ${e.total}` + (e.dur ? ` · ${e.dur} с` : '') })),
+          h('p', { class: 'sm muted', text: 'Без обхода: ' + (e.baseline?.ok ? 'открывается' : e.baseline?.reason || 'нет данных') + (e.proto === 'http' ? ' · HTTP' : '') + (e.applied ? ` · применена ${e.applied.name}` : '') }),
+          e.results?.length ? h('div', { class: 'scroll' }, h('table', { class: 'tbl' }, h('tbody', {}, e.results.map((x) => h('tr', {},
+            h('td', {}, levelIcon(x.ok && x.ok === x.tries ? 'ok' : x.ok ? 'warning' : 'error')),
+            h('td', { text: x.name }), h('td', { class: 'sm muted', text: x.from }),
+            h('td', { class: 'sm', text: x.ok ? `${x.ok} из ${x.tries}` : x.reason || 'не открылся' }),
+            h('td', { class: 'num', text: x.ms ? x.ms + ' мс' : '—' })))))) : h('p', { class: 'sm faint', text: 'Запись сделана прежней версией — подробностей нет.' })))))]);
 }
 
 async function copyText(text) {

@@ -675,3 +675,10 @@ a.over-row:hover { background: var(--soft); }
 .tune span.y { background: var(--ok-soft); color: var(--ok); }
 .tune span.h { background: var(--warn-soft); color: var(--warn); }
 .tune span.best { box-shadow: 0 0 0 2px currentColor; }
+
+/* история подборов: запуск — раскрывающаяся строка */
+.prun { border: 1px solid var(--line); border-radius: var(--radius); padding: 0 12px; }
+.prun > summary { display: flex; align-items: center; gap: 10px; padding: 8px 0; cursor: pointer; list-style: none; min-width: 0; }
+.prun > summary::-webkit-details-marker { display: none; }
+.prun[open] { padding-bottom: 10px; }
+.prun[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 8px; }

@@ -2810,6 +2810,29 @@ function testJob(): void
       $cands[] = ['name' => $name, 'from' => 'стандартный набор', 'steps' => $steps];
     }
   }
+  // То, что уже работало: совпавшие с набором стратегии помечаем, остальные добавляем
+  $own = in_array('hist', $job['sets'], true);
+  $byKey = [];
+  foreach ($cands as $i => $c) {
+    $byKey[implode(' ', $c['steps'])] = $i;
+  }
+  foreach (picksCandidates($job['host'], $status['proto'], $own, in_array('other', $job['sets'], true)) as $hc) {
+    $key = implode(' ', $hc['steps']);
+    if (isset($byKey[$key])) {
+      if ($hc['rank'] === 0) {
+        $cands[$byKey[$key]] += ['hist' => $hc['hist'], 'rank' => 0];
+      }
+      continue;
+    }
+    // стратегия из истории, которая стоит и в конфиге, — показываем, в каком она профиле
+    foreach (configCandidates($status['proto']) as $cc) {
+      if (implode(' ', $cc['steps']) === $key) {
+        $hc['from'] = $cc['from'];
+      }
+    }
+    $byKey[$key] = count($cands);
+    $cands[] = $hc;
+  }
   // Функции, которых нет в подключённых lua-скриптах, пропускаем
   $funcs = luaCatalog()['functions'];
   $cands = array_values(array_filter($cands, function ($c) use ($funcs) {
@@ -2820,6 +2843,13 @@ function testJob(): void
     }
     return true;
   }));
+  if (!$cands) {
+    $status['state'] = 'error';
+    $status['title'] = 'Подбор не запущен';
+    $status['error'] = $own && count($job['sets']) === 1 ? 'В истории нет стратегий, которые работали для этого сайта. Запустите обычный подбор.' : 'Нет ни одной стратегии для проверки.';
+    testSaveStatus($status);
+    return;
+  }
   $filter = $http ? ['--filter-tcp=80', '--filter-l7=http', '--payload=http_req'] : ['--filter-tcp=443', '--filter-l7=tls', '--payload=tls_client_hello'];
   $repeats = max(1, min(5, (int)($job['repeats'] ?? 3)));
   $status['total'] = count($cands) + 1;
@@ -2833,6 +2863,8 @@ function testJob(): void
   $status['baseline'] = curlProbe($job['host'], $http);
   $status['done'] = 1;
   $cands = orderCandidates($cands, $status['baseline']['reason'] ?? null);
+  // работавшее для этого сайта — первым, затем помогавшее другим сайтам
+  usort($cands, fn($a, $b) => ($a['rank'] ?? 2) <=> ($b['rank'] ?? 2));
   $status['phase'] = 'pick';
   testSaveStatus($status);
 
@@ -2869,7 +2901,8 @@ function testJob(): void
     }
     $status['current'] = $c['name'];
     testSaveStatus($status);
-    $status['results'][] = ['name' => $c['name'], 'from' => $c['from'], 'steps' => $c['steps'], 'profile' => array_merge($filter, $c['steps'])] + $try($c['steps']);
+    $status['results'][] = ['name' => $c['name'], 'from' => $c['from'], 'steps' => $c['steps'], 'profile' => array_merge($filter, $c['steps'])]
+      + (isset($c['hist']) ? ['hist' => $c['hist']] : []) + $try($c['steps']);
     $status['done']++;
     testSaveStatus($status);
   }
@@ -2884,13 +2917,82 @@ function testJob(): void
   $status['finished'] = time();
   $status['current'] = null;
   testSaveStatus($status);
-  // Короткая история запусков
-  $hist = json_decode((string)@file_get_contents(UI_CONF_DIR . '/tests.json'), true) ?: [];
-  array_unshift($hist, ['ts' => time(), 'host' => $status['host'], 'proto' => $status['proto'], 'baseline' => $status['baseline'] ?? null,
-    'ok' => count(array_filter($status['results'], fn($r) => $r['ok'] === $repeats)), 'total' => count($status['results']),
-    'best' => ($best = array_values(array_filter($status['results'], fn($r) => $r['ok'] === $repeats))) ? $best[0]['name'] : null]);
+  picksAdd($status, $repeats);
+}
+
+// ----- история подборов: что и когда работало для каждого сайта -----
+
+const PICKS_MAX = 100;       // запусков всего
+const PICKS_PER_HOST = 10;   // и на один сайт
+const PICKS_OTHER = 5;       // сколько чужих находок пробовать в подборе
+
+function picksLoad(): array
+{
+  $f = UI_CONF_DIR . '/picks.json';
+  if (is_file($f)) {
+    return json_decode((string)@file_get_contents($f), true) ?: [];
+  }
+  // записи прежней короткой истории — без подробностей
+  return json_decode((string)@file_get_contents(UI_CONF_DIR . '/tests.json'), true) ?: [];
+}
+
+function picksSave(array $items): void
+{
   @mkdir(UI_CONF_DIR, 0755, true);
-  file_put_contents(UI_CONF_DIR . '/tests.json', json_encode(array_slice($hist, 0, 30), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+  $f = UI_CONF_DIR . '/picks.json';
+  $json = json_encode(array_values($items), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+  if ($json === false) {
+    return;
+  }
+  file_put_contents("$f.tmp", $json);
+  rename("$f.tmp", $f);
+}
+
+function picksAdd(array $status, int $repeats): void
+{
+  $full = array_values(array_filter($status['results'], fn($r) => $r['ok'] === $repeats));
+  usort($full, fn($a, $b) => ($a['ms'] ?? PHP_INT_MAX) <=> ($b['ms'] ?? PHP_INT_MAX));
+  $rec = ['ts' => time(), 'host' => $status['host'], 'proto' => $status['proto'], 'baseline' => $status['baseline'] ?? null,
+    'ok' => count($full), 'total' => count($status['results']), 'best' => $full ? $full[0]['name'] : null,
+    'dur' => time() - $status['started'], 'state' => $status['state'], 'repeats' => $repeats,
+    // параметры храним только у того, что открыло сайт хоть раз: остальное заново не понадобится
+    'results' => array_map(fn($r) => array_filter(['name' => $r['name'], 'from' => $r['from'], 'ok' => $r['ok'], 'tries' => $r['tries'], 'ms' => $r['ms'],
+      'reason' => $r['ok'] === $r['tries'] ? null : ($r['reason'] ?? null), 'steps' => $r['ok'] > 0 ? $r['steps'] : null, 'refined' => $r['refined'] ?? null],
+      fn($v) => $v !== null), $status['results'])];
+  $out = [$rec];
+  $n = 1;
+  foreach (picksLoad() as $e) {
+    if ($e['host'] === $rec['host'] && ++$n > PICKS_PER_HOST) {
+      continue;
+    }
+    $out[] = $e;
+  }
+  picksSave(array_slice($out, 0, PICKS_MAX));
+}
+
+// Стратегии из истории для подбора: работавшие для этого сайта (rank 0) и помогавшие другим (rank 1)
+function picksCandidates(string $host, string $proto, bool $own, bool $other): array
+{
+  $mine = [];
+  $rest = [];
+  foreach (picksLoad() as $e) {
+    if (($e['proto'] ?? 'https') !== $proto || !empty($e['baseline']['ok'])) {
+      continue;
+    }
+    foreach ($e['results'] ?? [] as $r) {
+      if (empty($r['steps']) || $r['ok'] < ($e['repeats'] ?? 1)) {
+        continue;
+      }
+      $key = implode(' ', $r['steps']);
+      if ($e['host'] === $host) {
+        $mine[$key] ??= ['name' => $r['name'], 'from' => 'история подборов', 'steps' => $r['steps'], 'hist' => $e['ts'], 'rank' => 0];
+      } else {
+        $rest[$key] ??= ['name' => $r['name'], 'from' => 'история: помогла ' . $e['host'], 'steps' => $r['steps'], 'rank' => 1];
+      }
+    }
+  }
+  $rest = array_slice(array_diff_key($rest, $mine), 0, PICKS_OTHER);
+  return array_merge($own ? array_values($mine) : [], $other ? array_values($rest) : []);
 }
 
 // ----- уточнение чисел: вторая фаза подбора -----
@@ -4183,7 +4285,7 @@ switch ($cmd) {
       flock($diagLock, LOCK_UN);
       fclose($diagLock);
     }
-    $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : ['config', 'std'], ['config', 'std']));
+    $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : ['config', 'std'], ['config', 'std', 'hist', 'other']));
     @mkdir(TEST_DIR, 0777, true);
     @chmod(TEST_DIR, 0777);
     @unlink(TEST_DIR . '/stop');
@@ -4213,7 +4315,37 @@ switch ($cmd) {
     respond(['config' => configCandidates($proto), 'std' => array_map(fn($x) => ['name' => $x[0], 'steps' => $x[1]], $proto === 'http' ? STD_HTTP : STD_TLS)]);
 
   case 'tests_history':
-    respond(['items' => json_decode((string)@file_get_contents(UI_CONF_DIR . '/tests.json'), true) ?: []]);
+    // без host — все запуски без подробностей; с host — запуски одного сайта целиком
+    $items = picksLoad();
+    $host = cleanHost((string)($in['host'] ?? ''));
+    if ($host !== '') {
+      respond(['items' => array_values(array_filter($items, fn($e) => $e['host'] === $host))]);
+    }
+    respond(['items' => array_map(function ($e) {
+      $e['works'] = count(array_filter($e['results'] ?? [], fn($r) => !empty($r['steps']) && $r['ok'] >= ($e['repeats'] ?? 1)));
+      unset($e['results']);
+      return $e;
+    }, $items)]);
+
+  case 'picks_delete':
+    $host = cleanHost((string)($in['host'] ?? ''));
+    picksSave($host === '' ? [] : array_filter(picksLoad(), fn($e) => $e['host'] !== $host));
+    respond(['ok' => true]);
+
+  case 'pick_applied':
+    // отметка в последнем подборе сайта: что применено и куда
+    $host = cleanHost($str('host'));
+    $steps = array_values(array_filter(is_array($in['steps'] ?? null) ? $in['steps'] : [], fn($t) => is_string($t) && str_starts_with($t, '--lua-desync=')));
+    $items = picksLoad();
+    foreach ($items as &$e) {
+      if ($e['host'] === $host && $steps) {
+        $e['applied'] = ['ts' => time(), 'name' => strategyName($steps), 'steps' => $steps, 'target' => preg_match('/^.{0,80}/us', $str('target'), $tm) ? $tm[0] : ''];
+        picksSave($items);
+        break;
+      }
+    }
+    unset($e);
+    respond(['ok' => true]);
 
   case 'snapshots':
     historyScan('auto');
