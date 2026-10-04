@@ -159,6 +159,7 @@ function uiSettings(): array
     'snapshots' => ['max_count' => 50, 'max_days' => 30],
     'monitor' => ['enabled' => true, 'interval' => 30, 'sites' => ['rutracker.org', 'youtube.com', 'discord.com', 'x.com']],
     'notify' => ['tg_token' => '', 'tg_chat' => ''],
+    'auto' => ['enabled' => false, 'apply' => false, 'fails' => 2, 'pause' => 12],
     'subs' => [],
   ];
   $s = json_decode((string)@file_get_contents(UI_SETTINGS), true);
@@ -2736,6 +2737,10 @@ function testJob(): void
   $http = ($job['proto'] ?? 'https') === 'http';
   $status = ['state' => 'running', 'type' => $job['type'], 'pid' => getmypid(), 'host' => $job['host'], 'proto' => $job['proto'] ?? 'https',
     'started' => time(), 'results' => [], 'done' => 0, 'total' => 0, 'current' => null];
+  $auto = !empty($job['auto']);
+  if ($auto) {
+    $status['auto'] = true;
+  }
   $nfq = null;
   register_shutdown_function(function () use (&$nfq, $iface, &$status) {
     testNfqwsStop($nfq);
@@ -2862,6 +2867,9 @@ function testJob(): void
   testRules('bypass', $iface);
   $status['baseline'] = curlProbe($job['host'], $http);
   $status['done'] = 1;
+  if ($auto && $status['baseline']['ok']) {
+    $cands = [];   // блокировки нет — перебирать нечего
+  }
   $cands = orderCandidates($cands, $status['baseline']['reason'] ?? null);
   // работавшее для этого сайта — первым, затем помогавшее другим сайтам
   usort($cands, fn($a, $b) => ($a['rank'] ?? 2) <=> ($b['rank'] ?? 2));
@@ -2905,8 +2913,11 @@ function testJob(): void
       + (isset($c['hist']) ? ['hist' => $c['hist']] : []) + $try($c['steps']);
     $status['done']++;
     testSaveStatus($status);
+    if ($auto && end($status['results'])['ok'] === $repeats) {
+      break;   // автоподбору хватает первой стратегии, открывшей сайт каждый раз
+    }
   }
-  if ($status['state'] === 'running') {
+  if ($status['state'] === 'running' && !($auto && !$cands)) {
     testRefine($status, $try, $repeats, $http, !empty($job['refine']), $filter);
   }
   testRules('off', $iface);
@@ -2954,7 +2965,7 @@ function picksAdd(array $status, int $repeats): void
   usort($full, fn($a, $b) => ($a['ms'] ?? PHP_INT_MAX) <=> ($b['ms'] ?? PHP_INT_MAX));
   $rec = ['ts' => time(), 'host' => $status['host'], 'proto' => $status['proto'], 'baseline' => $status['baseline'] ?? null,
     'ok' => count($full), 'total' => count($status['results']), 'best' => $full ? $full[0]['name'] : null,
-    'dur' => time() - $status['started'], 'state' => $status['state'], 'repeats' => $repeats,
+    'dur' => time() - $status['started'], 'state' => $status['state'], 'repeats' => $repeats, 'auto' => !empty($status['auto']),
     // параметры храним только у того, что открыло сайт хоть раз: остальное заново не понадобится
     'results' => array_map(fn($r) => array_filter(['name' => $r['name'], 'from' => $r['from'], 'ok' => $r['ok'], 'tries' => $r['tries'], 'ms' => $r['ms'],
       'reason' => $r['ok'] === $r['tries'] ? null : ($r['reason'] ?? null), 'steps' => $r['ok'] > 0 ? $r['steps'] : null, 'refined' => $r['refined'] ?? null],
@@ -2993,6 +3004,276 @@ function picksCandidates(string $host, string $proto, bool $own, bool $other): a
   }
   $rest = array_slice(array_diff_key($rest, $mine), 0, PICKS_OTHER);
   return array_merge($own ? array_values($mine) : [], $other ? array_values($rest) : []);
+}
+
+// ----- автоподбор при поломке: мониторинг увидел, что сайт перестал открываться, — подбираем стратегию сами -----
+// Работает из прохода cron (раз в 10 минут). За проход — один сайт; найденное либо предлагается кнопкой,
+// либо (режим «применять самому») ставится отдельным профилем только для этого сайта с проверкой и откатом.
+
+define('AUTO_FILE', UI_CONF_DIR . '/auto.json');
+
+function autoData(): array
+{
+  $d = json_decode((string)@file_get_contents(AUTO_FILE), true);
+  return (is_array($d) ? $d : []) + ['queue' => [], 'sites' => [], 'offers' => [], 'log' => []];
+}
+
+function autoSave(array $d): void
+{
+  @mkdir(UI_CONF_DIR, 0755, true);
+  $d['log'] = array_slice($d['log'], 0, 60);
+  $json = json_encode($d, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+  if ($json !== false) {
+    file_put_contents(AUTO_FILE . '.tmp', $json);
+    rename(AUTO_FILE . '.tmp', AUTO_FILE);
+  }
+}
+
+function autoLog(array &$d, string $host, string $kind, string $text): void
+{
+  array_unshift($d['log'], ['ts' => time(), 'host' => $host, 'kind' => $kind, 'text' => $text]);
+}
+
+// Сколько проверок подряд сайт не открывается и открывался ли он до этого
+function autoStreak(array $hist): array
+{
+  $n = 0;
+  for ($i = count($hist) - 1; $i >= 0 && !$hist[$i][1]; $i--) {
+    $n++;
+  }
+  return [$n, $i >= 0];
+}
+
+function testLaunch(array $job): void
+{
+  @mkdir(TEST_DIR, 0777, true);
+  @chmod(TEST_DIR, 0777);
+  @unlink(TEST_DIR . '/stop');
+  file_put_contents(TEST_DIR . '/job.json', json_encode($job));
+  touch(TEST_DIR . '/trace.log');
+  chmod(TEST_DIR . '/trace.log', 0666);
+  testSaveStatus(['state' => 'starting', 'host' => $job['host'], 'started' => time()]);
+  // Чистое окружение: иначе php-cgi увидит CGI-переменные запроса и не перейдёт в режим задания
+  exec('(env -i PATH=' . JOB_PATH . ' NFQWS_UI_CLI=test php-cgi -q -f ' . escapeshellarg(__FILE__) . ' >/dev/null 2>&1 &)');
+}
+
+function diagBusy(): bool
+{
+  $l = @fopen(TEST_DIR . '/diag.lock', 'c');
+  if (!$l) {
+    return false;
+  }
+  $busy = !flock($l, LOCK_EX | LOCK_NB);
+  if (!$busy) {
+    flock($l, LOCK_UN);
+  }
+  fclose($l);
+  return $busy;
+}
+
+// Проход cron: перепроверить только что упавшие сайты, поставить сломавшиеся в очередь, запустить подбор для одного
+function autoTick(): void
+{
+  $s = uiSettings();
+  $a = $s['auto'];
+  if (!$a['enabled'] || !$s['monitor']['enabled']) {
+    return;
+  }
+  $mon = monitorData();
+  // быстрая перепроверка: не ждём полного интервала, чтобы отличить сбой от поломки
+  $again = [];
+  foreach ($s['monitor']['sites'] as $h) {
+    [$n, $was] = autoStreak($mon['sites'][$h] ?? []);
+    $lastTs = $n ? end($mon['sites'][$h])[0] : 0;
+    if ($n > 0 && $n < $a['fails'] && $was && time() - $lastTs >= 300) {
+      $again[] = $h;
+    }
+  }
+  if ($again) {
+    $mon = monitorRun(true, $again) ?? $mon;
+  }
+  $d = autoData();
+  $down = [];
+  foreach ($s['monitor']['sites'] as $h) {
+    $hist = $mon['sites'][$h] ?? [];
+    if ($hist && !end($hist)[1]) {
+      $down[] = $h;
+    }
+  }
+  $d['queue'] = array_values(array_intersect($d['queue'], $down));   // пока ждал очереди — поднялся
+  $massive = count($s['monitor']['sites']) >= 3 && count($down) * 2 > count($s['monitor']['sites']);
+  $changed = false;
+  foreach ($down as $h) {
+    [$n, $was] = autoStreak($mon['sites'][$h]);
+    if ($n < $a['fails'] || !$was || in_array($h, $d['queue'], true) || time() - ($d['sites'][$h]['last'] ?? 0) < $a['pause'] * 3600) {
+      continue;
+    }
+    $skip = $massive ? 'не открывается больше половины сайтов мониторинга — похоже на обрыв связи, а не на блокировку'
+      : (findPid() === null ? 'nfqws2 не запущен — подбирать стратегию бессмысленно' : null);
+    if ($skip !== null) {
+      // связь или сервис вернутся — попробуем на следующем проходе; в журнал пишем один раз
+      if (($d['log'][0]['host'] ?? '') !== $h || ($d['log'][0]['kind'] ?? '') !== 'skip') {
+        autoLog($d, $h, 'skip', 'Пропущен: ' . $skip . '.');
+        $changed = true;
+      }
+      continue;
+    }
+    $pk = podkopRoute($h);
+    if ($pk && !empty($pk['proxy'])) {
+      $d['sites'][$h]['last'] = time();
+      autoLog($d, $h, 'skip', 'Пропущен: сайт идёт через podkop, стратегии nfqws2 на него не действуют.');
+      $changed = true;
+      continue;
+    }
+    $d['queue'][] = $h;
+    $changed = true;
+  }
+  $p = pendingGet();
+  if ($d['queue'] && !testRunning() && !diagBusy() && !($p && in_array($p['state'], ['checking', 'waiting'], true))) {
+    $h = array_shift($d['queue']);
+    $d['sites'][$h]['last'] = time();
+    autoLog($d, $h, 'start', 'Перестал открываться — запущен подбор стратегии.');
+    autoSave($d);
+    testLaunch(['type' => 'pick', 'host' => $h, 'proto' => 'https', 'sets' => ['config', 'std', 'hist', 'other'], 'repeats' => 3, 'refine' => false, 'auto' => true]);
+    return;
+  }
+  if ($changed) {
+    autoSave($d);
+  }
+}
+
+// Конец автоподбора: записать итог, предложить или применить найденное, сообщить в Telegram
+function autoFinish(): void
+{
+  $job = json_decode((string)@file_get_contents(TEST_DIR . '/job.json'), true);
+  $st = testStatus();
+  if (empty($job['auto']) || ($st['host'] ?? '') !== $job['host'] || in_array($st['state'] ?? '', ['running', 'starting'], true)) {
+    return;
+  }
+  $h = $job['host'];
+  $d = autoData();
+  $msg = null;
+  $full = array_values(array_filter($st['results'] ?? [], fn($r) => $r['ok'] > 0 && $r['ok'] === ($st['repeats'] ?? 3)));
+  if ($st['state'] === 'error') {
+    autoLog($d, $h, 'none', 'Подбор не запущен: ' . ($st['error'] ?? 'ошибка'));
+    $msg = "🔎 $h: подбор не поможет. " . ($st['error'] ?? '');
+  } elseif ($st['state'] === 'stopped') {
+    autoLog($d, $h, 'none', 'Подбор остановлен вручную.');
+  } elseif (!empty($st['baseline']['ok'])) {
+    autoLog($d, $h, 'none', 'Без обхода сайт открывается — блокировки нет, мешает скорее нынешняя стратегия. Посмотрите диагноз сайта.');
+    $msg = "🔎 $h: без обхода открывается — похоже, мешает нынешняя стратегия.";
+  } elseif (!$full) {
+    autoLog($d, $h, 'none', 'Ни одна стратегия не помогла (' . count($st['results'] ?? []) . ' проверено).');
+    $msg = "🔎 $h: рабочая стратегия не нашлась.";
+  } else {
+    $best = $full[0];
+    $d['offers'][$h] = ['ts' => time(), 'name' => $best['name'], 'steps' => $best['steps'], 'from' => $best['from']];
+    autoLog($d, $h, 'found', 'Найдена рабочая стратегия: ' . $best['name'] . '.');
+    autoSave($d);
+    if (uiSettings()['auto']['apply']) {
+      $r = autoApply($h, $best['steps'], 'автоподбор');
+      $d = autoData();
+      $msg = $r['ok'] ? "🔧 $h: найдена и применена стратегия «{$best['name']}» — отдельный профиль только для этого сайта."
+        : "🔎 $h: найдена стратегия «{$best['name']}», но применить не удалось — {$r['text']}";
+    } else {
+      $msg = "🔎 $h: найдена рабочая стратегия «{$best['name']}». Применить можно в интерфейсе: «Автоподбор».";
+    }
+  }
+  autoSave($d);
+  if ($msg !== null) {
+    notifyTelegram("nfqws2 на роутере:\n" . $msg);
+  }
+}
+
+// Отдельный профиль «только для этого сайта» в начале своих профилей (если такой уже есть — меняем его стратегию),
+// перезапуск и проверка: сайт должен открыться, остальные сайты мониторинга — не сломаться. Иначе — откат.
+function autoApply(string $host, array $steps, string $who): array
+{
+  $d = autoData();
+  $done = function (bool $ok, string $kind, string $text) use (&$d, $host): array {
+    autoLog($d, $host, $kind, $text);
+    if ($ok) {
+      unset($d['offers'][$host]);
+    }
+    autoSave($d);
+    return ['ok' => $ok, 'text' => $text];
+  };
+  $p = pendingGet();
+  if ($p && in_array($p['state'], ['checking', 'waiting'], true)) {
+    return $done(false, 'fail', 'Не применено: идёт перезапуск с проверкой — дождитесь его конца.');
+  }
+  $old = (string)file_get_contents(CONF_FILE);
+  $custom = confRawVars($old)['NFQWS_ARGS_CUSTOM'] ?? '';
+  if (preg_match('/["`$\\\\]/', $custom)) {
+    return $done(false, 'fail', 'Не применено: в «своих профилях» есть подстановки оболочки — такой конфиг правится только вручную.');
+  }
+  $part = array_merge(['--filter-tcp=443', '--filter-l7=tls', "--hostlist-domains=$host", '--payload=tls_client_hello'], $steps);
+  $parts = array_values(array_filter(splitNew(tokens($custom))));
+  $found = false;
+  foreach ($parts as $i => $pt) {
+    if (in_array("--hostlist-domains=$host", $pt, true) && in_array('--filter-tcp=443', $pt, true)) {
+      $parts[$i] = $part;
+      $found = true;
+      break;
+    }
+  }
+  if (!$found) {
+    array_unshift($parts, $part);
+  }
+  $new = confSetVar($old, 'NFQWS_ARGS_CUSTOM', implode("\n--new\n", array_map(fn($pt) => implode("\n", $pt), $parts)));
+  $lint = lintConf(confRawVars($new), $new);
+  if (!$lint['dry_run'] || !$lint['dry_run']['ok']) {
+    return $done(false, 'fail', 'Не применено: nfqws2 не принимает такой конфиг — ' . ($lint['dry_run']['message'] ?? 'проверка не прошла'));
+  }
+  $mon = monitorData();
+  $others = [];
+  foreach (uiSettings()['monitor']['sites'] as $h) {
+    $hist = $mon['sites'][$h] ?? [];
+    if ($h !== $host && $hist && end($hist)[1]) {
+      $others[] = $h;
+    }
+  }
+  set_time_limit(300);
+  if (!writeWithBackup(CONF_FILE, $new, "$who: профиль только для $host")) {
+    return $done(false, 'fail', 'Не применено: не удалось записать конфиг.');
+  }
+  exec(INIT_SCRIPT . ' restart 2>&1');
+  sleep(5);
+  $why = null;
+  if (findPid() === null) {
+    $why = 'nfqws2 не запустился';
+  } else {
+    $twice = function (string $h): bool {
+      return probe($h)['ok'] || (sleep(2) === 0 && probe($h)['ok']);
+    };
+    if (!$twice($host)) {
+      $why = "$host так и не открылся";
+    } else {
+      foreach ($others as $h) {
+        if (!$twice($h)) {
+          $why = "перестал открываться $h";
+          break;
+        }
+      }
+    }
+  }
+  if ($why !== null) {
+    writeWithBackup(CONF_FILE, $old, "откат ($who, $host): $why");
+    exec(INIT_SCRIPT . ' restart 2>&1');
+    return $done(false, 'rolled', "Применено и откачено: $why. Конфиг возвращён как был.");
+  }
+  // отметка в истории подборов и свежая запись в мониторинге
+  $items = picksLoad();
+  foreach ($items as &$e) {
+    if ($e['host'] === $host) {
+      $e['applied'] = ['ts' => time(), 'name' => strategyName($steps), 'steps' => $steps, 'target' => "отдельный профиль для $host ($who)"];
+      picksSave($items);
+      break;
+    }
+  }
+  unset($e);
+  monitorRun(true, [$host]);
+  return $done(true, 'applied', ($found ? 'Стратегия профиля для этого сайта заменена' : 'Создан отдельный профиль только для этого сайта') . ': ' . strategyName($steps) . '. Сайт открывается, остальные не пострадали.');
 }
 
 // ----- уточнение чисел: вторая фаза подбора -----
@@ -3727,6 +4008,14 @@ function state(): array
       }
       return ['enabled' => $cfg['enabled'], 'interval' => $cfg['interval'], 'last' => $d['last'] ?? 0, 'sites' => $sites];
     })(),
+    'auto' => (function () {
+      $d = autoData();
+      $offers = [];
+      foreach ($d['offers'] as $h => $o) {
+        $offers[] = ['host' => (string)$h, 'ts' => $o['ts'], 'name' => $o['name']];
+      }
+      return ['enabled' => uiSettings()['auto']['enabled'], 'offers' => $offers, 'queue' => $d['queue']];
+    })(),
     'snap' => (function () {
       $idx = snapIndex();
       return ['count' => count($idx), 'last' => $idx ? end($idx)['ts'] : null,
@@ -3785,6 +4074,7 @@ $cli = getenv('NFQWS_UI_CLI');
 if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
   if ($cli === 'test') {
     testJob();
+    autoFinish();
     exit(0);
   }
   if ($cli === 'guard') {
@@ -3793,6 +4083,7 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
   }
   historyScan('auto');
   monitorRun(false);
+  autoTick();
   if ($cli === 'daily') {
     snapshotCreate('ежедневный', true);
     if (uiSettings()['subs']) {
@@ -4286,16 +4577,8 @@ switch ($cmd) {
       fclose($diagLock);
     }
     $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : ['config', 'std'], ['config', 'std', 'hist', 'other']));
-    @mkdir(TEST_DIR, 0777, true);
-    @chmod(TEST_DIR, 0777);
-    @unlink(TEST_DIR . '/stop');
-    file_put_contents(TEST_DIR . '/job.json', json_encode(['type' => $cmd === 'trace_start' ? 'trace' : 'pick', 'host' => $host,
-      'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https', 'sets' => $sets ?: ['config', 'std'], 'repeats' => (int)($in['repeats'] ?? 3), 'refine' => !empty($in['refine'])]));
-    touch(TEST_DIR . '/trace.log');
-    chmod(TEST_DIR . '/trace.log', 0666);
-    testSaveStatus(['state' => 'starting', 'host' => $host, 'started' => time()]);
-    // Чистое окружение: иначе php-cgi увидит CGI-переменные запроса и не перейдёт в режим задания
-    exec('(env -i PATH=' . JOB_PATH . ' NFQWS_UI_CLI=test php-cgi -q -f ' . escapeshellarg(__FILE__) . ' >/dev/null 2>&1 &)');
+    testLaunch(['type' => $cmd === 'trace_start' ? 'trace' : 'pick', 'host' => $host,
+      'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https', 'sets' => $sets ?: ['config', 'std'], 'repeats' => (int)($in['repeats'] ?? 3), 'refine' => !empty($in['refine'])]);
     respond(['ok' => true]);
 
   case 'test_status':
@@ -4440,6 +4723,60 @@ switch ($cmd) {
   case 'monitor_run':
     $only = is_array($in['hosts'] ?? null) ? array_values(array_filter($in['hosts'], 'is_string')) : null;
     respond(['data' => monitorRun(true, $only)]);
+
+  case 'auto_get':
+    $s = uiSettings();
+    $d = autoData();
+    $offers = [];
+    foreach ($d['offers'] as $h => $o) {
+      $offers[] = ['host' => (string)$h] + $o;
+    }
+    $st = testStatus();
+    respond(['settings' => $s['auto'], 'monitor' => ['enabled' => $s['monitor']['enabled'], 'sites' => count($s['monitor']['sites']), 'interval' => $s['monitor']['interval']],
+      'tg' => $s['notify']['tg_token'] !== '' && $s['notify']['tg_chat'] !== '', 'offers' => $offers, 'queue' => $d['queue'], 'log' => $d['log'],
+      'running' => testRunning() && !empty($st['auto']) ? $st['host'] : null]);
+
+  case 'auto_set':
+    $s = uiSettings();
+    foreach (['enabled', 'apply'] as $k) {
+      if (isset($in[$k])) {
+        $s['auto'][$k] = (bool)$in[$k];
+      }
+    }
+    if (isset($in['fails'])) {
+      $s['auto']['fails'] = max(2, min(4, (int)$in['fails']));
+    }
+    if (isset($in['pause'])) {
+      $s['auto']['pause'] = in_array((int)$in['pause'], [6, 12, 24], true) ? (int)$in['pause'] : 12;
+    }
+    saveUiSettings($s);
+    respond(['ok' => true]);
+
+  case 'auto_apply':
+    $host = cleanHost($str('host'));
+    $o = autoData()['offers'][$host] ?? null;
+    if (!$o) {
+      fail('Для этого сайта нет найденной стратегии');
+    }
+    session_write_close();
+    $r = autoApply($host, $o['steps'], 'по кнопке');
+    if (!$r['ok']) {
+      fail($r['text']);
+    }
+    respond($r);
+
+  case 'auto_dismiss':
+    $host = cleanHost($str('host'));
+    $d = autoData();
+    unset($d['offers'][$host]);
+    autoSave($d);
+    respond(['ok' => true]);
+
+  case 'auto_clear':
+    $d = autoData();
+    $d['log'] = [];
+    autoSave($d);
+    respond(['ok' => true]);
 
   case 'notify_test':
     $err = notifyTelegram('Проверка уведомлений nfqws2: всё работает.');

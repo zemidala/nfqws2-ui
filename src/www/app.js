@@ -303,9 +303,9 @@ const PAGES = {
   backup: ['#/settings/backup', 'Резервные копии'], hist: ['#/settings/hist', 'История изменений'], log: ['#/log', 'Журнал'],
   look: ['#/settings/look', 'Оформление'], about: ['#/settings/about', 'О программе'],
   // ещё не сделаны: в меню видны, но заблокированы и помечены «скоро»
-  diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], auto: [null, 'Автоподбор'], asn: [null, 'Список по ASN'], report: [null, 'Отчёт для помощи'],
+  diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], auto: ['#/tests/auto', 'Автоподбор'], asn: [null, 'Список по ASN'], report: [null, 'Отчёт для помощи'],
 };
-const NEW_PAGES = ['diag', 'phist'];   // только что появились — помечаются в меню
+const NEW_PAGES = ['diag', 'phist', 'auto'];   // только что появились — помечаются в меню
 const SOON_HINT = 'Ещё в разработке — появится в одной из следующих версий';
 const SYS_PAGES = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'look', 'about'];
 const SYS_NAV = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
@@ -339,7 +339,7 @@ function pageOf(r = parseRoute()) {
   if (r.tab === 'log') return 'log';
   if (r.tab === 'site') return 'site';
   if (r.tab === 'diag') return 'diag';
-  if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace', history: 'phist' }[r.arg] || 'pick';
+  if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace', history: 'phist', auto: 'auto' }[r.arg] || 'pick';
   if (r.tab === 'settings') return SYS_PAGES.includes(r.arg) ? r.arg : ['readme', 'changelog'].includes(r.arg) ? 'about' : 'prof';
   return 'over';
 }
@@ -357,6 +357,7 @@ function pageTail(id) {
   else if (id === 'raw') tail = dot(worst(issues) === 'error' ? 'error' : null);
   else if (id === 'backup') tail = st.snap?.count ? h('span', { class: 'num', text: st.snap.count }) : null;
   else if (id === 'about') tail = st.ui?.update?.available ? h('span', { class: 'chip ok', text: 'обновление' }) : null;
+  else if (id === 'auto') tail = st.auto?.offers?.length ? h('span', { class: 'chip warn num', title: 'Найдены стратегии — ждут применения', text: st.auto.offers.length }) : null;
   else if (id === 'mon') {
     const down = (st.monitor?.sites || []).filter((x) => x.last && !x.last[1]).length;
     tail = down ? h('span', { class: 'chip bad num', title: 'Не открываются', text: down }) : null;
@@ -753,6 +754,9 @@ function problemItems() {
     const tok = x.var && x.tok != null ? st.conf_tokens?.[x.var]?.[x.tok] : null;
     const p = st.conf_profiles.find((cp) => cp.source?.source === x.var && profIssues(cp).includes(x));
     items.push({ level: x.level, title: p ? `Профиль #${p.index} · ${profName(p)}` : (VAR_INFO[x.var]?.[0] || 'Конфиг'), text: x.msg.replace(/^Профиль #\d+: /, ''), code: tok, href: issueTarget(x), fix: fixButton(x) });
+  }
+  for (const o of st.auto?.offers || []) {
+    items.push({ level: 'warning', title: o.host, text: `перестал открываться — автоподбор нашёл рабочую стратегию: ${o.name}`, href: PAGES.auto[0], fix: btn('Применить', () => autoApply(o.host), 'small', 'ok', { title: 'Отдельный профиль только для этого сайта; с проверкой и откатом' }) });
   }
   for (const p of st.profiles) {
     if (p.state === 'dead' || p.state === 'excludes-only') items.push({ level: 'warning', title: `Профиль #${p.index}`, text: p.state === 'dead' ? 'никогда не срабатывает — его порты забирают профили выше' : 'получает только исключения профилей выше', href: `#/settings/p${p.index}` });
@@ -3039,6 +3043,7 @@ async function viewTests(main, r, bare = false) {
   await loadCatalog();
   clearInterval(testPoll);
   if (r.arg === 'history') return viewPickHist(main, r);
+  if (r.arg === 'auto') return viewAuto(main);
   const tab = ['trace', 'monitor', 'notify'].includes(r.arg) ? r.arg : 'pick';
   if (tab === 'monitor') {
     main.append(h('div', { class: 'vh' }, h('h1', { text: layout() === 'site' ? 'Сайты' : 'Мониторинг' })));
@@ -3330,7 +3335,7 @@ async function viewPickHist(main, r, bare = false) {
     body.replaceChildren(...rows.map((g) => h('tr', {},
       h('td', {}, levelIcon(g.last.baseline?.ok ? 'info' : g.last.best ? 'ok' : 'error')),
       h('td', {}, h('a', { class: 'mono', href: pickHistHref(g.host), text: g.host })),
-      h('td', { class: 'date', text: fmtDate(g.last.ts) }),
+      h('td', { class: 'date' }, fmtDate(g.last.ts), g.last.auto ? [' ', chip('авто')] : null),
       h('td', { class: 'sm' }, pickOutcome(g.last), g.applied ? h('div', { class: 'sm muted', text: `применена ${fmtDate(g.applied.ts)}: ${g.applied.name}` }) : null),
       h('td', { class: 'num', text: g.runs }),
       h('td', {}, h('div', { class: 'row', style: 'justify-content:flex-end;flex-wrap:nowrap' },
@@ -3389,7 +3394,7 @@ async function viewPickHistSite(main, host, bare) {
             h('td', {}, btn('Скопировать', () => copyText(g.steps.join('\n')), 'small', 'copy'))))))) : h('p', { class: 'muted', text: 'Ни одна стратегия этот сайт пока не открыла.' })),
       panel('Запуски', h('span', { class: 'sm muted num', text: String(runs.length) }),
         h('div', { class: 'stack', style: 'gap:6px' }, runs.map((e) => h('details', { class: 'prun' },
-          h('summary', {}, levelIcon(e.baseline?.ok ? 'info' : e.best ? 'ok' : 'error'), h('span', { class: 'date', text: fmtDate(e.ts) }),
+          h('summary', {}, levelIcon(e.baseline?.ok ? 'info' : e.best ? 'ok' : 'error'), h('span', { class: 'date', text: fmtDate(e.ts) }), e.auto ? chip('авто') : null,
             h('span', { class: 'grow ellipsis', text: pickOutcome(e) }),
             h('span', { class: 'sm muted num nowrap', text: `${e.ok} из ${e.total}` + (e.dur ? ` · ${e.dur} с` : '') })),
           h('p', { class: 'sm muted', text: 'Без обхода: ' + (e.baseline?.ok ? 'открывается' : e.baseline?.reason || 'нет данных') + (e.proto === 'http' ? ' · HTTP' : '') + (e.applied ? ` · применена ${e.applied.name}` : '') }),
@@ -3398,6 +3403,62 @@ async function viewPickHistSite(main, host, bare) {
             h('td', { text: x.name }), h('td', { class: 'sm muted', text: x.from }),
             h('td', { class: 'sm', text: x.ok ? `${x.ok} из ${x.tries}` : x.reason || 'не открылся' }),
             h('td', { class: 'num', text: x.ms ? x.ms + ' мс' : '—' })))))) : h('p', { class: 'sm faint', text: 'Запись сделана прежней версией — подробностей нет.' })))))]);
+}
+
+// ============ Автоподбор при поломке ============
+
+// Применить найденное автоподбором: отдельный профиль только для сайта, роутер сам проверяет и откатывает
+async function autoApply(host) {
+  if (!confirm(`Применить найденную стратегию только для ${host}?\n\nБудет создан отдельный профиль (или заменена стратегия уже созданного). nfqws2 перезапустится — на несколько секунд обход прервётся. Роутер сам проверит ${host} и сайты мониторинга и вернёт конфиг, если что-то пойдёт не так. Это займёт до минуты.`)) return;
+  toast('Применяю и проверяю — до минуты…');
+  const r = await guarded(() => api('auto_apply', { host }));
+  S.conf = null;
+  await loadState().catch(() => {});
+  if (r) toast(r.text);
+  route(true);
+}
+
+const AUTO_KIND = { start: 'info', found: 'ok', applied: 'ok', none: 'error', rolled: 'warning', fail: 'warning', skip: 'info' };
+
+async function viewAuto(main) {
+  const a = await api('auto_get');
+  const cfg = a.settings;
+  const enabled = h('input', { type: 'checkbox', id: 'au-on', checked: cfg.enabled });
+  const apply = h('input', { type: 'checkbox', id: 'au-apply', checked: cfg.apply });
+  const fails = h('select', { class: 'select', 'aria-label': 'Сколько неудач подряд' }, [2, 3, 4].map((n) => h('option', { value: n, text: `${n} проверки подряд`, selected: n === cfg.fails })));
+  const pause = h('select', { class: 'select', 'aria-label': 'Пауза между попытками' }, [6, 12, 24].map((n) => h('option', { value: n, text: `${n} часов`, selected: n === cfg.pause })));
+  const save = async () => {
+    if (apply.checked && !cfg.apply && !confirm('Разрешить роутеру самому менять конфиг?\n\nКогда сайт из мониторинга сломается и стратегия найдётся, роутер создаст отдельный профиль только для этого сайта и перезапустит nfqws2 — без вашего участия, в любое время суток. Если сайт не откроется или сломается другой сайт мониторинга, конфиг вернётся как был. Чужие профили и списки не меняются.')) { apply.checked = false; return; }
+    if (await guarded(() => api('auto_set', { enabled: enabled.checked, apply: apply.checked, fails: Number(fails.value), pause: Number(pause.value) }), 'Сохранено')) { await loadState().catch(() => {}); route(true); }
+  };
+  [enabled, apply, fails, pause].forEach((el) => el.addEventListener('change', save));
+  main.append(
+    h('div', { class: 'vh' }, h('h1', { text: 'Автоподбор' })),
+    !a.monitor.enabled || !a.monitor.sites ? notice('warn', 'Мониторинг выключен или пуст', 'Автоподбор узнаёт о поломке от мониторинга: включите его и добавьте сайты, за которыми нужно следить.', h('a', { class: 'btn small', href: PAGES.mon[0] }, 'Мониторинг')) : null,
+    a.running ? notice('info', `Сейчас идёт автоподбор для ${a.running}`, 'Ход виден на странице подбора.', h('a', { class: 'btn small', href: pickHref(a.running) }, 'Открыть')) : null,
+    a.offers.length ? panel('Найдено — ждёт вашего решения', null, a.offers.map((o) => h('div', { class: 'stack', style: 'gap:8px' },
+      h('div', { class: 'item-main' }, h('span', { class: 'row', style: 'gap:8px' }, levelIcon('ok'), h('b', { class: 'mono', text: o.host })),
+        h('span', { class: 'sm muted', text: `${fmtDate(o.ts)} · ${o.name} · ${o.from}` }),
+        h('code', { class: 'sm muted', style: 'word-break:break-all', text: o.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') })),
+      h('div', { class: 'row' }, btn('Применить', () => autoApply(o.host), 'small primary', 'ok'),
+        h('a', { class: 'btn small', href: pickHistHref(o.host) }, 'История'),
+        btn('Отклонить', async () => { if (await guarded(() => api('auto_dismiss', { host: o.host }))) { await loadState().catch(() => {}); route(true); } }, 'small ghost'))))) : null,
+    panel(null, null,
+      h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Автоподбор' }), h('div', { class: 'stack', style: 'gap:2px' },
+        h('label', { class: 'row', style: 'flex-wrap:nowrap;align-items:flex-start' }, enabled, 'подбирать стратегию, когда сайт из мониторинга перестаёт открываться'),
+        h('span', { class: 'sm muted', text: `Следит за сайтами мониторинга (сейчас ${a.monitor.sites}). Упавший сайт перепроверяется через 10 минут; если он не открывается и снова — запускается подбор. Первым пробуется то, что для этого сайта уже работало.` }))),
+      h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Что делать с найденным' }), h('div', { class: 'stack', style: 'gap:2px' },
+        h('label', { class: 'row', style: 'flex-wrap:nowrap;align-items:flex-start' }, apply, 'применять самому — отдельным профилем только для этого сайта'),
+        h('span', { class: 'sm muted', text: 'Без галочки найденное только предлагается: здесь, в «Проблемах» и в Telegram. С галочкой роутер сам создаёт профиль для сайта, перезапускает nfqws2 и проверяет: если сайт не открылся или сломался другой сайт мониторинга — возвращает конфиг как был.' }))),
+      h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Считать поломкой' }), h('div', { class: 'row' }, fails, h('span', { class: 'sm muted', text: 'неудачных, после того как сайт открывался' }))),
+      h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Повторять не чаще' }), h('div', { class: 'row' }, h('span', { class: 'sm muted', text: 'раз в' }), pause, h('span', { class: 'sm muted', text: 'для одного сайта' }))),
+      h('p', { class: 'sm faint', text: 'Автоподбор не запускается, если не открывается больше половины сайтов мониторинга (похоже на обрыв связи), если nfqws2 остановлен или сайт идёт через podkop. За один проход — один сайт.' + (a.tg ? '' : ' Чтобы узнавать о находках сразу, настройте Telegram в «Уведомлениях».') })),
+    panel('Журнал', a.log.length ? btn('Очистить', async () => { if (await guarded(() => api('auto_clear'))) route(true); }, 'small ghost') : null,
+      a.queue.length ? h('p', { class: 'sm', text: 'В очереди: ' + a.queue.join(', ') }) : null,
+      a.log.length ? h('div', { class: 'stack', style: 'gap:0' }, a.log.map((e) => h('div', { class: 'act' }, levelIcon(AUTO_KIND[e.kind] || 'info'),
+        h('div', { class: 'item-main' }, h('span', {}, h('a', { class: 'mono', href: pickHistHref(e.host), text: e.host }), h('span', { class: 'sm faint', text: ' · ' + fmtDate(e.ts) })),
+          h('span', { class: 'sm muted', text: e.text })))))
+        : h('p', { class: 'muted', text: cfg.enabled ? 'Пока ничего не происходило — все сайты мониторинга открываются.' : 'Автоподбор выключен.' })));
 }
 
 async function copyText(text) {
