@@ -160,6 +160,8 @@ function uiSettings(): array
     'monitor' => ['enabled' => true, 'interval' => 30, 'sites' => ['rutracker.org', 'youtube.com', 'discord.com', 'x.com']],
     'notify' => ['tg_token' => '', 'tg_chat' => ''],
     'auto' => ['enabled' => false, 'apply' => false, 'fails' => 2, 'pause' => 12],
+    'provider' => '',
+    'asn' => [],
     'subs' => [],
   ];
   $s = json_decode((string)@file_get_contents(UI_SETTINGS), true);
@@ -171,6 +173,9 @@ function uiSettings(): array
   }
   if (isset($s['subs'])) {
     $r['subs'] = array_values($s['subs']);
+  }
+  if (isset($s['asn'])) {
+    $r['asn'] = array_values($s['asn']);
   }
   return $r;
 }
@@ -2815,6 +2820,9 @@ function testJob(): void
       $cands[] = ['name' => $name, 'from' => 'стандартный набор', 'steps' => $steps];
     }
   }
+  if (!empty($job['steps'])) {
+    array_unshift($cands, ['name' => strategyName($job['steps']), 'from' => 'вставленный профиль', 'steps' => $job['steps']]);
+  }
   // То, что уже работало: совпавшие с набором стратегии помечаем, остальные добавляем
   $own = in_array('hist', $job['sets'], true);
   $byKey = [];
@@ -3970,6 +3978,8 @@ function state(): array
   return [
     'now' => time(),
     'running' => $pid !== null,
+    'stop' => $pid === null ? stopReason() : null,
+    'rivals' => rivals(),
     'process' => $proc,
     'version' => packageVersion('nfqws2-keenetic'),
     'globals' => $globals,
@@ -3987,7 +3997,7 @@ function state(): array
     'ui' => (function () {
       $w = uiWeb();
       return ['version' => UI_VERSION, 'conf_file' => CONF_FILE, 'https_port' => $w['https_port'], 'legacy_port' => $w['legacy_port'], 'auth' => authEnabled(),
-        'repo' => REPO_URL, 'update' => updateInfo() + ['running' => updateRunning()]];
+        'provider' => uiSettings()['provider'], 'platform' => ROOT ? 'Keenetic' : 'OpenWrt', 'repo' => REPO_URL, 'update' => updateInfo() + ['running' => updateRunning()]];
     })(),
     'undo' => (function () {
       $u = lastUndoable();
@@ -4075,6 +4085,309 @@ function currentProfiles(): array
   return loadProfiles($pid, expectedProfiles(confValues()), $globals);
 }
 
+// ================= вторая очередь: причина остановки, другие обходчики, обмен профилями, отчёт, списки по ASN =================
+
+// Почему nfqws2 не работает — от самой вероятной причины к общей
+function stopReason(): array
+{
+  $log = [];
+  if (!ROOT) {
+    exec('logread -e nfqws2 2>/dev/null | tail -n 6', $log);
+  }
+  $auto = null;
+  if (!ROOT && is_file(INIT_SCRIPT)) {
+    exec(INIT_SCRIPT . ' enabled 2>/dev/null', $o, $rc);
+    $auto = $rc === 0;
+  }
+  $r = ['log' => array_values(array_filter(array_map('trim', $log))), 'autostart' => $auto];
+  if (!is_file(NFQWS_BIN)) {
+    return $r + ['kind' => 'nobin', 'text' => 'Нет программы nfqws2 (' . NFQWS_BIN . ') — пакет nfqws2-keenetic не установлен или удалён.'];
+  }
+  if (!is_file(INIT_SCRIPT)) {
+    return $r + ['kind' => 'nobin', 'text' => 'Нет скрипта запуска ' . INIT_SCRIPT . ' — пакет nfqws2-keenetic установлен не полностью.'];
+  }
+  $dry = lintCurrent()['dry_run'] ?? null;
+  if ($dry && !$dry['ok']) {
+    return $r + ['kind' => 'conf', 'text' => 'nfqws2 не принимает конфиг: ' . $dry['message']];
+  }
+  if ($auto === false) {
+    return $r + ['kind' => 'disabled', 'text' => 'Сервис остановлен, и автозапуск выключен — после перезагрузки роутера он сам не поднимется.'];
+  }
+  return $r + ['kind' => 'manual', 'text' => 'Конфиг в порядке — сервис остановлен вручную или завершился сам. Попробуйте запустить; если не получится, ниже — последние строки журнала.'];
+}
+
+// Другие обходчики, работающие одновременно: они правят те же пакеты
+function rivals(): array
+{
+  $names = ['nfqws' => 'zapret (nfqws)', 'tpws' => 'zapret (tpws)', 'youtubeUnblock' => 'youtubeUnblock', 'b4' => 'b4',
+    'ciadpi' => 'byedpi', 'byedpi' => 'byedpi', 'dpitunnel' => 'DPITunnel', 'spoofdpi' => 'SpoofDPI', 'goodbyedpi' => 'GoodbyeDPI'];
+  $main = findPid();
+  $found = [];
+  foreach (glob('/proc/[0-9]*/comm') ?: [] as $f) {
+    $c = trim((string)@file_get_contents($f));
+    $pid = (int)basename(dirname($f));
+    if (isset($names[$c])) {
+      $found[$names[$c]] = true;
+    } elseif ($c === 'nfqws2' && $pid !== $main && !str_contains((string)@file_get_contents("/proc/$pid/cmdline"), '--qnum=' . TEST_QNUM)) {
+      $found['ещё один nfqws2 (zapret2)'] = true;
+    }
+  }
+  return array_keys($found);
+}
+
+function ripe(string $call, string $resource = ''): ?array
+{
+  $ch = curl_init("https://stat.ripe.net/data/$call/data.json?sourceapp=nfqws2-ui" . ($resource !== '' ? '&resource=' . rawurlencode($resource) : ''));
+  curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 25, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_NOSIGNAL => 1]);
+  $j = json_decode((string)curl_exec($ch), true);
+  curl_close($ch);
+  return is_array($j['data'] ?? null) ? $j['data'] : null;
+}
+
+// Вставленный из чата профиль: оставляем только известные параметры профиля, поправляем пути, проверяем у nfqws2
+function profileCheck(array $tokens): array
+{
+  $opts = helpInfo()['options'];
+  $clean = [];
+  $rejected = [];
+  $fixed = [];
+  $missing = [];
+  foreach ($tokens as $t) {
+    if (!is_string($t) || !preg_match('/^--([a-z0-9-]+)(=[^"`$\\\\\s]*)?$/', $t, $m)) {
+      $rejected[] = ['tok' => is_string($t) ? $t : '?', 'why' => 'не параметр nfqws2'];
+      continue;
+    }
+    if (!isset($opts[$m[1]])) {
+      $rejected[] = ['tok' => $t, 'why' => 'nfqws2 на этом роутере такого параметра не знает'];
+      continue;
+    }
+    if ($opts[$m[1]]['global'] || $m[1] === 'new') {
+      $rejected[] = ['tok' => $t, 'why' => 'общий параметр процесса, в профиль не входит'];
+      continue;
+    }
+    // nfqws2 при проверке не смотрит, есть ли такая lua-функция, — смотрим сами
+    if ($m[1] === 'lua-desync' && !isset(luaCatalog()['functions'][explode(':', substr($t, 13))[0]])) {
+      $rejected[] = ['tok' => $t, 'why' => 'такой функции нет в lua-скриптах этого роутера (другая версия nfqws2?)'];
+      continue;
+    }
+    if (preg_match('/^--(hostlist|hostlist-exclude|hostlist-auto|ipset|ipset-exclude)=(.+)$/', $t, $f) && !is_file($f[2])) {
+      $alt = LISTS_DIR . '/' . basename($f[2]);
+      if (is_file($alt)) {
+        $fixed[] = ['from' => $f[2], 'to' => $alt];
+        $t = "--{$f[1]}=$alt";
+      } elseif ($f[1] === 'hostlist-auto') {
+        $t = "--{$f[1]}=$alt";   // этот файл nfqws2 создаст сам
+      } else {
+        $missing[] = $f[2];
+      }
+    }
+    $clean[] = $t;
+  }
+  $dry = null;
+  if ($clean && !$missing) {
+    $exp = confValues();
+    $exp['NFQWS_ARGS_CUSTOM'] = implode(' ', $clean) . (trim($exp['NFQWS_ARGS_CUSTOM']) !== '' ? ' --new ' . $exp['NFQWS_ARGS_CUSTOM'] : '');
+    $d = dryRun($exp);
+    $dry = ['ok' => $d['ok'], 'message' => $d['message']];
+  }
+  return ['tokens' => $clean, 'rejected' => $rejected, 'fixed' => $fixed, 'missing' => $missing, 'dry_run' => $dry,
+    'steps' => array_values(array_filter($clean, fn($t) => str_starts_with($t, '--lua-desync=')))];
+}
+
+// Отчёт для помощи: текст без секретов — версии, состояние, профили, списки, мониторинг, подборы
+function reportText(array $sites, bool $hide, string $build): string
+{
+  $st = state();
+  $s = uiSettings();
+  $os = ROOT ? 'Keenetic (Entware)' : 'OpenWrt';
+  if (!ROOT && preg_match("/DISTRIB_DESCRIPTION='([^']*)'/", (string)@file_get_contents('/etc/openwrt_release'), $m)) {
+    $os = $m[1];
+  }
+  $L = ['Отчёт nfqws2-ui · ' . ldate('Y-m-d H:i'), '', '== Версии ==',
+    'nfqws2: ' . ($st['version'] ?: 'не определена'), 'nfqws2-ui: ' . UI_VERSION . ($build !== '' ? " (сборка $build)" : ''),
+    'система: ' . $os . ' · ' . php_uname('m') . ' · ядро ' . php_uname('r'), 'провайдер: ' . ($s['provider'] !== '' ? $s['provider'] : 'не указан'), '', '== Сервис =='];
+  if ($st['running']) {
+    $L[] = 'работает' . (!empty($st['process']['started']) ? ', запущен ' . ldate('Y-m-d H:i', (int)$st['process']['started']) : '')
+      . ($st['restart_needed'] || !$st['in_sync'] ? ' · конфиг изменён после запуска — нужен перезапуск' : '');
+  } else {
+    $L[] = 'ОСТАНОВЛЕН. ' . $st['stop']['text'];
+    foreach ($st['stop']['log'] as $l) {
+      $L[] = '  ' . $l;
+    }
+  }
+  $L[] = 'другие обходчики: ' . ($st['rivals'] ? implode(', ', $st['rivals']) : 'не найдены') . (is_file('/etc/init.d/podkop') ? ' · podkop установлен' : '');
+  $L[] = '';
+  $L[] = '== Замечания к конфигу ==';
+  $issues = array_filter($st['lint']['issues'], fn($x) => $x['level'] !== 'info');
+  foreach ($issues as $x) {
+    $L[] = ($x['level'] === 'error' ? 'ОШИБКА: ' : 'предупреждение: ') . $x['msg'];
+  }
+  if (!$issues) {
+    $L[] = 'нет';
+  }
+  $exp = confValues();
+  $L[] = '';
+  $L[] = '== Основное ==';
+  foreach (['ISP_INTERFACE', 'TCP_PORTS', 'UDP_PORTS', 'IPV6_ENABLED', 'NFQWS_EXTRA_ARGS'] as $v) {
+    $L[] = "$v=" . ($v === 'NFQWS_EXTRA_ARGS' ? (confRawVars((string)file_get_contents(CONF_FILE))[$v] ?? '') : $exp[$v]);
+  }
+  $L[] = 'параметры запуска: ' . implode(' ', tokens($exp['NFQWS_BASE_ARGS']));
+  $L[] = '';
+  $L[] = '== Профили (в порядке проверки) ==';
+  foreach ($st['conf_profiles'] as $p) {
+    $L[] = '#' . $p['index'] . ' [' . ($p['source']['source'] ?? '?') . ']' . (in_array($p['state'] ?? '', ['dead', 'excludes-only'], true) ? ' (не срабатывает)' : '');
+    $L[] = '  ' . implode(' ', $p['args'] ?? []);
+  }
+  $L[] = '';
+  $L[] = '== Списки ==';
+  foreach ($st['lists'] as $l) {
+    $L[] = $l['name'] . ': ' . $l['entries'] . ' записей' . ($l['used'] ? ', профили ' . implode(', ', array_unique(array_map(fn($u) => '#' . $u['profile'], $l['used']))) : ', не используется');
+  }
+  $L[] = '';
+  $L[] = '== Мониторинг ==';
+  foreach ($st['monitor']['sites'] as $m) {
+    $L[] = $m['host'] . ': ' . (!$m['last'] ? 'не проверялся' : ($m['last'][1] ? 'открывается, ' . $m['last'][2] . ' мс' : 'НЕ открывается — ' . $m['last'][3]));
+  }
+  $L[] = '';
+  $L[] = '== Последние подборы ==';
+  foreach (array_slice(picksLoad(), 0, 8) as $e) {
+    $L[] = ldate('m-d H:i', $e['ts']) . ' ' . $e['host'] . ': без обхода — ' . (!empty($e['baseline']['ok']) ? 'открывается' : ($e['baseline']['reason'] ?? '?'))
+      . '; сработало ' . ($e['ok'] ?? 0) . ' из ' . ($e['total'] ?? 0) . ($e['best'] ?? null ? '; лучшая: ' . $e['best'] : '');
+  }
+  if ($sites) {
+    $L[] = '';
+    $L[] = '== Проверка сайтов ==';
+    foreach ($sites as $h) {
+      $dns = diagDns($h);
+      $pr = probe($h);
+      $pk = podkopRoute($h);
+      $L[] = $h . ': DNS — ' . $dns['status'] . ' (' . count($dns['ips'] ?? []) . ' адр.)'
+        . '; через текущий конфиг — ' . ($pr['ok'] ? 'открывается, HTTP ' . $pr['code'] . ', ' . $pr['ms'] . ' мс' : 'НЕ открывается: ' . $pr['reason'])
+        . ($pk && !empty($pk['proxy']) ? '; идёт через podkop' : '');
+    }
+  }
+  $text = implode("\n", $L) . "\n";
+  if ($hide) {
+    // имена сайтов заменяем на «сайт-N»: из мониторинга, подборов, профилей «только для сайта» и запрошенных проверок
+    $hosts = array_merge(array_column($st['monitor']['sites'], 'host'), array_column(picksLoad(), 'host'), $sites);
+    preg_match_all('/--hostlist-domains=(\S+)/', $text, $m);
+    foreach ($m[1] as $v) {
+      $hosts = array_merge($hosts, explode(',', $v));
+    }
+    $hosts = array_values(array_unique(array_filter($hosts)));
+    usort($hosts, fn($a, $b) => strlen($b) <=> strlen($a));
+    foreach ($hosts as $i => $h) {
+      $text = str_replace($h, 'сайт-' . ($i + 1), $text);
+    }
+  }
+  return $text;
+}
+
+// ----- список IP по номеру автономной системы (RIPEstat) -----
+
+function asnResolve(string $q): array
+{
+  $q = trim($q);
+  if (preg_match('/^(?:AS)?(\d{1,10})$/i', $q, $m)) {
+    return ['asn' => (int)$m[1], 'via' => null];
+  }
+  $host = cleanHost($q);
+  if (!validHost($host)) {
+    fail('Введите номер AS (например AS24940) или имя сайта');
+  }
+  $ip = isIp($host) ? $host : (diagDns($host)['ips'][0] ?? null);
+  if (!$ip) {
+    fail("Не удалось узнать адрес $host");
+  }
+  if (isIp4($ip) && ipReserved($ip)) {
+    fail("Адрес $host — служебный ($ip): сайт идёт через podkop или DNS отдаёт заглушку. Укажите номер AS.");
+  }
+  $ni = ripe('network-info', $ip);
+  if (empty($ni['asns'][0])) {
+    fail("RIPEstat не знает, чьей сети принадлежит $ip");
+  }
+  return ['asn' => (int)$ni['asns'][0], 'via' => "$host → $ip → {$ni['prefix']}"];
+}
+
+function asnFetch(int $asn): array
+{
+  $ov = ripe('as-overview', "AS$asn");
+  $pf = ripe('announced-prefixes', "AS$asn");
+  if ($pf === null) {
+    fail('RIPEstat не ответил — попробуйте позже');
+  }
+  $v6 = strtolower(trim(confValues()['IPV6_ENABLED'] ?? '')) === 'true' || (confValues()['IPV6_ENABLED'] ?? '') === '1';
+  $v4 = [];
+  $six = [];
+  foreach ($pf['prefixes'] ?? [] as $p) {
+    $x = (string)($p['prefix'] ?? '');
+    if (preg_match('#^(\d+\.\d+\.\d+\.\d+)/(\d+)$#', $x, $m) && isIp4($m[1]) && (int)$m[2] <= 32) {
+      $start = ip2long($m[1]);
+      $v4[] = [$start, $start + (1 << (32 - (int)$m[2])) - 1, $x];
+    } elseif ($v6 && preg_match('#^[0-9a-f:]+/\d+$#i', $x)) {
+      $six[$x] = true;
+    }
+  }
+  // вложенные префиксы убираем: остаются только самые широкие
+  usort($v4, fn($a, $b) => [$a[0], $b[1]] <=> [$b[0], $a[1]]);
+  $out = [];
+  $end = -1;
+  foreach ($v4 as [$s, $e, $x]) {
+    if ($e > $end) {
+      $out[] = $x;
+      $end = $e;
+    }
+  }
+  return ['asn' => $asn, 'holder' => (string)($ov['holder'] ?? ''), 'prefixes' => array_merge($out, array_keys($six)), 'v6' => $v6];
+}
+
+function asnWrite(array $a, bool $auto): array
+{
+  $name = "ipset_as{$a['asn']}.list";
+  $path = LISTS_DIR . '/' . $name;
+  $text = "# AS{$a['asn']} {$a['holder']} — префиксы по данным RIPEstat, " . ldate('Y-m-d') . "\n" . implode("\n", $a['prefixes']) . "\n";
+  if (!writeWithBackup($path, $text, "список по AS{$a['asn']}: " . count($a['prefixes']) . ' префиксов')) {
+    fail('Не удалось записать список', 500);
+  }
+  $s = uiSettings();
+  $s['asn'] = array_values(array_filter($s['asn'], fn($x) => $x['asn'] !== $a['asn']));
+  $s['asn'][] = ['asn' => $a['asn'], 'holder' => $a['holder'], 'list' => $name, 'auto' => $auto, 'last' => time(), 'count' => count($a['prefixes']), 'error' => null];
+  saveUiSettings($s);
+  return ['name' => $name, 'count' => count($a['prefixes'])];
+}
+
+// Раз в сутки: обновить списки по ASN. Пустой или резко похудевший ответ не принимаем.
+function asnRun(): void
+{
+  $s = uiSettings();
+  foreach ($s['asn'] as $i => $x) {
+    if (empty($x['auto']) || !is_file(LISTS_DIR . '/' . $x['list'])) {
+      continue;
+    }
+    $pf = ripe('announced-prefixes', "AS{$x['asn']}");
+    $err = null;
+    if ($pf === null) {
+      $err = 'RIPEstat не ответил';
+    } else {
+      $a = asnFetch((int)$x['asn']);
+      if (!$a['prefixes'] || count($a['prefixes']) * 3 < (int)$x['count']) {
+        $err = 'ответ подозрительно мал (' . count($a['prefixes']) . ' вместо ' . $x['count'] . ') — список не тронут';
+      } else {
+        asnWrite($a, true);
+        continue;
+      }
+    }
+    $s = uiSettings();
+    foreach ($s['asn'] as $k => $y) {
+      if ($y['asn'] === $x['asn']) {
+        $s['asn'][$k]['error'] = $err;
+        $s['asn'][$k]['last'] = time();
+      }
+    }
+    saveUiSettings($s);
+  }
+}
+
 // ================= запуск по расписанию =================
 // cron (ставит nfqws-ui-setup): NFQWS_UI_CLI=scan|daily php-cgi -q -f /www/nfqws-ui/api.php
 
@@ -4098,6 +4411,7 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
       subsRun();
     }
     updateCheck(false);
+    asnRun();
   }
   exit(0);
 }
@@ -4585,8 +4899,9 @@ switch ($cmd) {
       fclose($diagLock);
     }
     $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : ['config', 'std'], ['config', 'std', 'hist', 'other']));
+    $own = array_values(array_filter(is_array($in['steps'] ?? null) ? $in['steps'] : [], fn($t) => is_string($t) && preg_match('/^--lua-desync=[^\s"`$\\\\]+$/', $t)));
     testLaunch(['type' => $cmd === 'trace_start' ? 'trace' : 'pick', 'host' => $host,
-      'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https', 'sets' => $sets ?: ['config', 'std'], 'repeats' => (int)($in['repeats'] ?? 3), 'refine' => !empty($in['refine'])]);
+      'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https', 'sets' => $own ? $sets : ($sets ?: ['config', 'std']), 'steps' => $own, 'repeats' => (int)($in['repeats'] ?? 3), 'refine' => !empty($in['refine'])]);
     respond(['ok' => true]);
 
   case 'test_status':
@@ -4786,6 +5101,69 @@ switch ($cmd) {
     autoSave($d);
     respond(['ok' => true]);
 
+  case 'provider_detect':
+    $ip = ripe('whats-my-ip')['ip'] ?? null;
+    $asn = $ip ? (ripe('network-info', $ip)['asns'][0] ?? null) : null;
+    $holder = $asn ? (ripe('as-overview', "AS$asn")['holder'] ?? null) : null;
+    if (!$holder) {
+      fail('Не удалось определить провайдера — впишите название вручную');
+    }
+    respond(['provider' => $holder]);   // внешний адрес наружу интерфейса не отдаём
+
+  case 'provider_set':
+    $s = uiSettings();
+    $s['provider'] = preg_match('/^[^\x00-\x1f"`$\\\\]{0,80}/u', trim((string)($in['provider'] ?? '')), $pm) ? $pm[0] : '';
+    saveUiSettings($s);
+    respond(['provider' => $s['provider']]);
+
+  case 'profile_check':
+    respond(profileCheck(array_slice(is_array($in['tokens'] ?? null) ? $in['tokens'] : [], 0, 200)));
+
+  case 'report':
+    session_write_close();
+    set_time_limit(120);
+    $sites = [];
+    foreach (array_slice(is_array($in['sites'] ?? null) ? $in['sites'] : [], 0, 3) as $h) {
+      $h = cleanHost((string)$h);
+      if (validHost($h) && !isIp($h)) {
+        $sites[] = $h;
+      }
+    }
+    respond(['text' => reportText($sites, !empty($in['hide']), preg_replace('/[^0-9a-f]/', '', (string)($in['build'] ?? '')))]);
+
+  case 'asn_get':
+    respond(['items' => uiSettings()['asn']]);
+
+  case 'asn_lookup':
+    session_write_close();
+    $r = asnResolve($str('q'));
+    $a = asnFetch($r['asn']);
+    respond(['asn' => $a['asn'], 'holder' => $a['holder'], 'count' => count($a['prefixes']), 'sample' => array_slice($a['prefixes'], 0, 12), 'v6' => $a['v6'],
+      'via' => $r['via'], 'name' => "ipset_as{$a['asn']}.list", 'exists' => is_file(LISTS_DIR . "/ipset_as{$a['asn']}.list")]);
+
+  case 'asn_create':
+    session_write_close();
+    $a = asnFetch((int)($in['asn'] ?? 0));
+    if (!$a['prefixes']) {
+      fail("У AS{$a['asn']} нет анонсированных префиксов — проверьте номер");
+    }
+    respond(asnWrite($a, !isset($in['auto']) || !empty($in['auto'])));
+
+  case 'asn_set':
+    $s = uiSettings();
+    foreach ($s['asn'] as $k => $x) {
+      if ($x['asn'] === (int)($in['asn'] ?? 0)) {
+        if (!empty($in['forget'])) {
+          unset($s['asn'][$k]);   // сам список остаётся — удалить его можно на странице «Списки»
+        } else {
+          $s['asn'][$k]['auto'] = !empty($in['auto']);
+        }
+      }
+    }
+    $s['asn'] = array_values($s['asn']);
+    saveUiSettings($s);
+    respond(['items' => $s['asn']]);
+
   case 'notify_test':
     $err = notifyTelegram('Проверка уведомлений nfqws2: всё работает.');
     if ($err) {
@@ -4865,7 +5243,7 @@ switch ($cmd) {
 
   case 'service':
     $action = $str('action');
-    if (!in_array($action, ['start', 'stop', 'restart'], true)) {
+    if (!in_array($action, ['start', 'stop', 'restart', 'enable'], true)) {
       fail('bad action');
     }
     exec(INIT_SCRIPT . ' ' . $action . ' 2>&1', $out, $rc);

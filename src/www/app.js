@@ -303,11 +303,11 @@ const PAGES = {
   backup: ['#/settings/backup', 'Резервные копии'], hist: ['#/settings/hist', 'История изменений'], log: ['#/log', 'Журнал'],
   look: ['#/settings/look', 'Оформление'], about: ['#/settings/about', 'О программе'],
   // ещё не сделаны: в меню видны, но заблокированы и помечены «скоро»
-  diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], auto: ['#/tests/auto', 'Автоподбор'], asn: [null, 'Список по ASN'], report: [null, 'Отчёт для помощи'],
+  diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], auto: ['#/tests/auto', 'Автоподбор'], asn: ['#/asn', 'Список по ASN'], report: ['#/settings/report', 'Отчёт для помощи'],
 };
-const NEW_PAGES = ['diag', 'phist', 'auto'];   // только что появились — помечаются в меню
+const NEW_PAGES = ['diag', 'phist', 'auto', 'asn', 'report'];   // только что появились — помечаются в меню
 const SOON_HINT = 'Ещё в разработке — появится в одной из следующих версий';
-const SYS_PAGES = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'look', 'about'];
+const SYS_PAGES = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 const SYS_NAV = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 // Компоновка «Боковое меню»: группы и их страницы
 const MENU = [[null, ['over']], ['Проверка сайта', ['diag', 'pick', 'trace', 'phist']], ['Наблюдение', ['mon', 'auto', 'tg']], ['Обход', ['prof', 'lists', 'asn']], ['Система', SYS_NAV]];
@@ -339,6 +339,7 @@ function pageOf(r = parseRoute()) {
   if (r.tab === 'log') return 'log';
   if (r.tab === 'site') return 'site';
   if (r.tab === 'diag') return 'diag';
+  if (r.tab === 'asn') return 'asn';
   if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace', history: 'phist', auto: 'auto' }[r.arg] || 'pick';
   if (r.tab === 'settings') return SYS_PAGES.includes(r.arg) ? r.arg : ['readme', 'changelog'].includes(r.arg) ? 'about' : 'prof';
   return 'over';
@@ -582,7 +583,7 @@ async function service(action) {
   toast(names[action] + '…');
   const r = await guarded(() => api('service', { action }));
   if (!r) return;
-  if (!r.ok) toast('Не получилось: ' + (r.output || 'без вывода'), { err: true });
+  if (!r.ok) modal('Не получилось: ' + action, h('div', { class: 'stack' }, h('p', { class: 'sm muted', text: 'Вот что ответил скрипт запуска:' }), h('pre', { class: 'box', text: r.output || 'без вывода' })));
   await loadState().catch(() => {});
   if (r.ok) toast(S.state?.running ? 'nfqws2 работает' : 'nfqws2 остановлен');
   route();
@@ -639,7 +640,7 @@ async function route(refresh = false) {
   }
   if (seq !== routeSeq) return;
   if (r.tab !== 'settings' || r.arg !== 'raw') setFocus(false);
-  const views = { '': viewOverview, sites: viewSites, tests: viewTests, settings: viewSettings, log: viewLog, site: viewSite, diag: viewDiag };
+  const views = { '': viewOverview, sites: viewSites, tests: viewTests, settings: viewSettings, log: viewLog, site: viewSite, diag: viewDiag, asn: viewAsn };
   main.replaceChildren(subTabs(pageOf(r)));
   placeSide();
   try {
@@ -732,10 +733,22 @@ function renderSideService(el) {
         : btn('Запустить', () => service('start'), 'small primary', 'play'),
       btn('Обновить', () => route(true), 'small ghost', 'refresh', { title: 'Обновить данные на странице' })),
     h('p', { class: 'muted sm num', text: [st.version && 'nfqws2 v' + st.version, st.running && st.process.started && 'запущен ' + fmtAgo(st.now - st.process.started), st.running && st.process.rss_kb && (st.process.rss_kb / 1024).toFixed(1).replace('.', ',') + ' МБ'].filter(Boolean).join(' · ') }),
+    !st.running && st.stop ? stopNote(st.stop) : null,
     need && !pendingActive() ? notice('warn', 'Нужен перезапуск', 'Конфиг изменён после запуска nfqws2. После перезапуска интерфейс проверит сайты и откатит изменения, если вы их не подтвердите.', btn('Перезапустить с проверкой', safeRestart, 'small warn')) : null,
     st.rollback?.files.length && !pendingActive() ? h('div', { class: 'row sm' },
       h('span', { class: 'muted', text: `С ${fmtDate(st.rollback.since)} изменено: ${st.rollback.files.join(', ')}` }),
       btn('Вернуть рабочее состояние', rollbackToWorking, 'small ghost', 'history', { title: 'Вернуть файлы к моменту последнего запуска или подтверждения и перезапустить nfqws2' })) : null);
+}
+
+// Почему nfqws2 не работает и что с этим сделать
+function stopNote(sp) {
+  const act = sp.kind === 'conf' ? h('a', { class: 'btn small', href: PAGES.raw[0] }, 'Открыть конфиг')
+    : sp.kind === 'disabled' ? btn('Включить автозапуск', async () => { if (await guarded(() => api('service', { action: 'enable' }), 'Автозапуск включён')) { await loadState().catch(() => {}); route(true); } }, 'small')
+      : sp.kind === 'manual' ? h('a', { class: 'btn small', href: PAGES.log[0] }, 'Журнал') : null;
+  return h('div', { class: 'notice bad' }, icon('bad'), h('div', { class: 'grow' },
+    h('b', { text: 'Почему не работает' }), h('div', { class: 't', text: sp.text }),
+    sp.kind !== 'conf' && sp.log?.length ? h('pre', { class: 'box sm', style: 'max-height:120px;margin-top:6px', text: sp.log.join('\n') }) : null),
+    act ? h('div', { class: 'notice-actions' }, act) : null);
 }
 
 function issueTarget(x) {
@@ -757,6 +770,10 @@ function problemItems() {
     const p = st.conf_profiles.find((cp) => cp.source?.source === x.var && profIssues(cp).includes(x));
     items.push({ level: x.level, title: p ? `Профиль #${p.index} · ${profName(p)}` : (VAR_INFO[x.var]?.[0] || 'Конфиг'), text: x.msg.replace(/^Профиль #\d+: /, ''), code: tok, href: issueTarget(x), fix: fixButton(x) });
   }
+  if (st.rivals?.length) {
+    items.push({ level: 'warning', title: 'Работает другой обходчик', text: `${st.rivals.join(', ')} — он правит те же пакеты, что и nfqws2: стратегии мешают друг другу, результаты подбора ненадёжны. Оставьте что-то одно.`, href: PAGES.log[0] });
+  }
+  if (!st.running && st.stop) items.push({ level: 'error', title: 'nfqws2 остановлен', text: st.stop.text, href: st.stop.kind === 'conf' ? PAGES.raw[0] : '#/' });
   for (const o of st.auto?.offers || []) {
     items.push({ level: 'warning', title: o.host, text: `перестал открываться — автоподбор нашёл рабочую стратегию: ${o.name}`, href: PAGES.auto[0], fix: btn('Применить', () => autoApply(o.host), 'small', 'ok', { title: 'Отдельный профиль только для этого сайта; с проверкой и откатом' }) });
   }
@@ -1995,7 +2012,7 @@ async function viewSettings(main, r) {
   }
   // остальные страницы настроек открываются из меню или вкладок «Система»
   main.append(content);
-  const panes = { basic: paneBasic, base: paneBase, raw: paneRaw, backup: paneBackup, hist: paneHistory, look: paneLook, about: paneAbout, readme: (c) => paneDoc(c, 'readme'), changelog: (c) => paneDoc(c, 'changelog') };
+  const panes = { basic: paneBasic, base: paneBase, raw: paneRaw, backup: paneBackup, hist: paneHistory, look: paneLook, about: paneAbout, report: paneReport, readme: (c) => paneDoc(c, 'readme'), changelog: (c) => paneDoc(c, 'changelog') };
   await (panes[pane] || paneBasic)(content, r);
 }
 
@@ -2022,7 +2039,71 @@ function drawSettingsNav(nav, current) {
       return a;
     }),
     h('button', { class: 'ni', type: 'button', onclick: addCustomProfile }, h('span', { class: 'pn', text: '+' }), h('span', { class: 'nm muted', text: 'Свой профиль' })),
-    h('span', { class: 'soon', title: SOON_HINT, 'aria-disabled': 'true' }, h('span', { class: 'sq', text: '⇩' }), h('span', { class: 'nm', text: 'Вставить чужой' }), h('span', { class: 'tag', text: 'скоро' })));
+    h('button', { class: 'ni', type: 'button', onclick: pasteProfile }, h('span', { class: 'pn', text: '⇩' }), h('span', { class: 'nm muted', text: 'Вставить чужой' })));
+}
+
+// Профиль одним куском для чата: подпись + параметры
+function shareProfile(index, args) {
+  const st = S.state;
+  const prov = h('input', { class: 'input grow', value: st.ui.provider || '', placeholder: 'название провайдера', 'aria-label': 'Провайдер' });
+  const ta = h('textarea', { class: 'input mono', rows: 7, readonly: true, style: 'width:100%;resize:vertical' });
+  const draw = () => { ta.value = `# nfqws2 ${st.version ? 'v' + st.version : ''} · ${prov.value.trim() || 'провайдер не указан'} · ${st.ui.platform}\n${args.join(' ')}`; };
+  prov.addEventListener('input', draw);
+  const keep = () => { if (prov.value.trim() !== (st.ui.provider || '')) api('provider_set', { provider: prov.value.trim() }).then((r) => { st.ui.provider = r.provider; }).catch(() => {}); };
+  draw();
+  modal(`Профиль #${index} — для чата`, h('div', { class: 'stack' },
+    h('div', { class: 'row' }, h('span', { class: 'sm muted', text: 'Провайдер' }), prov,
+      btn('Определить', async () => { const r = await guarded(() => api('provider_detect')); if (r) { prov.value = r.provider; draw(); keep(); } }, 'small', 'search', { title: 'Роутер спросит у RIPEstat, чьей сети принадлежит ваш внешний адрес. Сам адрес в текст не попадает.' })),
+    ta, h('p', { class: 'sm faint', text: 'В тексте только параметры профиля и подпись. Пути к спискам остаются как у вас — получателю их поправит «Вставить чужой».' })),
+    btn('Скопировать', () => { keep(); copyText(ta.value); }, 'primary', 'copy'));
+}
+
+// Чужой профиль из чата: разбираем текст, отбрасываем лишнее, проверяем у nfqws2, даём испытать на сайте
+function pasteProfile() {
+  const ta = h('textarea', { class: 'input mono', rows: 6, style: 'width:100%;resize:vertical', placeholder: '--filter-tcp=443 --filter-l7=tls --lua-desync=fake:blob=tls_clienthello:tcp_md5 …', spellcheck: 'false' });
+  const out = h('div', { class: 'stack' });
+  const site = h('input', { class: 'input mono', placeholder: 'сайт для проверки, например rutracker.org', style: 'max-width:300px', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Сайт для проверки' });
+  let res = null;
+  // строки-подписи и комментарии убираем; кавычки, обратные косые и переносы — тоже
+  const parse = () => ta.value.split('\n').filter((l) => !/^\s*#/.test(l)).join(' ').replace(/["'`\\]/g, ' ').replace(/^[A-Z_]+=/, '').split(/\s+/).filter(Boolean);
+  const check = async () => {
+    const parts = splitParts(parse()).filter((x) => x.length);
+    if (!parts.length) { toast('Вставьте текст профиля', { err: true }); return; }
+    res = await guarded(() => api('profile_check', { tokens: parts[0] }));
+    if (!res) return;
+    const bad = res.missing.length || !res.steps.length || (res.dry_run && !res.dry_run.ok);
+    out.replaceChildren(
+      parts.length > 1 ? notice('info', `В тексте ${plural(parts.length, 'профиль', 'профиля', 'профилей')} — взят первый`, 'Остальные вставьте по одному.') : null,
+      res.tokens.length ? h('pre', { class: 'box', style: 'white-space:pre-wrap;word-break:break-all', text: res.tokens.join('\n') }) : null,
+      res.rejected.length ? notice('warn', 'Отброшено', res.rejected.map((x) => `${x.tok} — ${x.why}`).join('; ')) : null,
+      res.fixed.length ? notice('info', 'Пути к спискам поправлены под этот роутер', res.fixed.map((x) => `${x.from} → ${x.to}`).join('; ')) : null,
+      res.missing.length ? notice('bad', 'Нет файлов, на которые ссылается профиль', res.missing.join(', ') + ' — создайте такие списки или уберите эти параметры из текста.') : null,
+      res.dry_run && !res.dry_run.ok ? notice('bad', 'nfqws2 не принимает такой профиль', res.dry_run.message) : null,
+      !res.steps.length ? notice('bad', res.tokens.length ? 'В профиле не осталось стратегии' : 'Параметров профиля в тексте не нашлось', res.tokens.length ? 'Без шагов --lua-desync профиль ничего не делает.' : '') : null,
+      !bad ? notice('ok', 'nfqws2 принимает этот профиль', 'Можно испытать его стратегию на сайте или сразу добавить.') : null,
+      !bad ? h('div', { class: 'row' },
+        res.steps.length ? [site, btn('Проверить на сайте', test, 'small', 'play', { title: 'Стратегия профиля прогоняется отдельным nfqws2 на проверочных соединениях роутера — ваш трафик не затрагивается' })] : null,
+        h('span', { class: 'grow' }), btn('Добавить профилем', add, 'small primary', 'ok')) : null);
+  };
+  const test = async () => {
+    if (!site.value.trim()) { toast('Укажите сайт', { err: true }); return; }
+    if (!await guarded(() => api('test_start', { host: site.value.trim(), sets: [], steps: res.steps, repeats: 3 }))) return;
+    const host = site.value.trim().replace(/^[a-z]+:\/\//i, '').replace(/[/?#].*$/, '');
+    bg.close();
+    go(pickHref(host));
+  };
+  const add = async () => {
+    await loadConf();
+    const cur = S.conf.vars.NFQWS_ARGS_CUSTOM.trim() ? splitParts(tokensOf(S.conf.vars.NFQWS_ARGS_CUSTOM)) : [];
+    if (!confirm('Добавить профиль первым в «свои профили»?\n\nОн будет проверяться раньше остальных; порядок потом можно поменять перетаскиванием. После сохранения nfqws2 перезапустится с проверкой и откатит изменения, если вы их не подтвердите.')) return;
+    if (!await saveVars({ NFQWS_ARGS_CUSTOM: joinParts([res.tokens, ...cur]) }, 'вставлен чужой профиль')) return;
+    bg.close();
+    await safeRestart();
+    go('#/settings/p1');
+  };
+  const bg = modal('Вставить чужой профиль', h('div', { class: 'stack' },
+    h('p', { class: 'sm muted', text: 'Вставьте текст профиля из чата как есть — подписи, кавычки и переносы уберутся сами. Останутся только параметры, которые знает nfqws2 на этом роутере.' }),
+    ta, h('div', { class: 'row' }, btn('Разобрать и проверить', check, 'primary small')), out));
 }
 
 async function moveCustom(from, to) {
@@ -2155,6 +2236,7 @@ async function viewProfile(content, index, r) {
         isCustom ? [btn('', () => moveCustom(s.part, s.part - 1), 'small icon', 'up', { title: 'Выше', 'aria-label': 'Переместить выше', disabled: s.part === 1 }),
           btn('', () => moveCustom(s.part, s.part + 1), 'small icon', 'down', { title: 'Ниже', 'aria-label': 'Переместить ниже', disabled: s.part === customParts.length }),
           btn('Копия', dupCustom, 'small', 'copy'), btn('Удалить', delCustom, 'small danger', 'trash')] : null,
+        btn('Для чата', () => shareProfile(index, p.args), 'small', 'copy', { title: 'Текст профиля с подписью: версия nfqws2, провайдер, система — чтобы поделиться в чате' }),
         h('div', { class: 'seg', role: 'group', 'aria-label': 'Способ правки' },
           h('button', { type: 'button', class: view === 'build' ? 'on' : '', text: 'Конструктор', onclick: () => setView('build') }),
           h('button', { type: 'button', class: view === 'text' ? 'on' : '', text: 'Текст', onclick: () => setView('text') }))),
@@ -3461,6 +3543,76 @@ async function viewAuto(main) {
         h('div', { class: 'item-main' }, h('span', {}, h('a', { class: 'mono', href: pickHistHref(e.host), text: e.host }), h('span', { class: 'sm faint', text: ' · ' + fmtDate(e.ts) })),
           h('span', { class: 'sm muted', text: e.text })))))
         : h('p', { class: 'muted', text: cfg.enabled ? 'Пока ничего не происходило — все сайты мониторинга открываются.' : 'Автоподбор выключен.' })));
+}
+
+// ============ Отчёт для помощи ============
+
+async function paneReport(content) {
+  const sites = h('input', { class: 'input mono grow', placeholder: 'до трёх сайтов через пробел — необязательно', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Сайты для проверки' });
+  const hide = h('input', { type: 'checkbox', id: 'rep-hide' });
+  const ta = h('textarea', { class: 'input mono', rows: 22, readonly: true, style: 'width:100%;resize:vertical;font-size:12px', hidden: true });
+  const acts = h('div', { class: 'row', hidden: true },
+    btn('Скопировать', () => copyText(ta.value), 'primary', 'copy'),
+    btn('Скачать .txt', () => { const a = h('a', { href: URL.createObjectURL(new Blob([ta.value], { type: 'text/plain' })), download: 'nfqws2-report.txt' }); document.body.append(a); a.click(); a.remove(); }, '', 'download'),
+    h('span', { class: 'sm muted', text: 'Перечитайте перед отправкой: отчёт никуда не уходит сам, его отправляете вы.' }));
+  const make = btn('Собрать отчёт', async () => {
+    make.disabled = true;
+    const r = await guarded(() => api('report', { sites: sites.value.split(/[\s,]+/).filter(Boolean).slice(0, 3), hide: hide.checked, build: BUILD.split('-').pop() }));
+    make.disabled = false;
+    if (!r) return;
+    ta.value = r.text; ta.hidden = false; acts.hidden = false;
+  }, 'primary', 'play');
+  content.append(
+    h('div', { class: 'vh' }, h('h1', { text: 'Отчёт для помощи' })),
+    panel(null, null,
+      h('p', { class: 'sm muted', text: 'Текст, который можно приложить к вопросу в чате или в issue: версии, состояние сервиса, замечания к конфигу, профили, названия списков, мониторинг, итоги подборов. Паролей, токена Telegram, внешнего адреса и содержимого списков в нём нет.' }),
+      h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Проверить сайты' }), sites),
+      h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Имена сайтов' }), h('label', { class: 'row', style: 'flex-wrap:nowrap' }, hide, 'заменить на «сайт-1», «сайт-2»…')),
+      h('div', { class: 'row' }, make)),
+    acts, ta);
+}
+
+// ============ Список по ASN ============
+
+const ASN_PRESETS = [[24940, 'Hetzner'], [16276, 'OVH'], [14061, 'DigitalOcean'], [51167, 'Contabo'], [63949, 'Akamai (Linode)'], [13335, 'Cloudflare'], [16509, 'Amazon AWS'], [20473, 'Vultr']];
+
+async function viewAsn(main) {
+  const saved = (await api('asn_get').catch(() => ({ items: [] }))).items;
+  const q = h('input', { class: 'input mono grow', placeholder: 'AS24940 или имя сайта', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Номер AS или сайт' });
+  const out = h('div', { class: 'stack' });
+  const look = async (v) => {
+    if (v) q.value = v;
+    if (!q.value.trim()) return;
+    out.replaceChildren(spinner('Спрашиваю RIPEstat…'));
+    const r = await guarded(() => api('asn_lookup', { q: q.value.trim() }));
+    if (!r) { out.replaceChildren(); return; }
+    const auto = h('input', { type: 'checkbox', id: 'asn-auto', checked: true });
+    out.replaceChildren(panel(`AS${r.asn} · ${r.holder || 'владелец не указан'}`, h('span', { class: 'sm muted num', text: plural(r.count, 'префикс', 'префикса', 'префиксов') }),
+      r.via ? h('p', { class: 'sm muted', text: r.via }) : null,
+      r.count ? h('pre', { class: 'box sm', text: r.sample.join('\n') + (r.count > r.sample.length ? `\n… и ещё ${r.count - r.sample.length}` : '') }) : notice('warn', 'У этой сети нет анонсированных префиксов', 'Проверьте номер AS.'),
+      r.count > 3000 ? notice('warn', 'Очень большая сеть', 'Такой список затронет множество посторонних сайтов и сервисов — подумайте, нужен ли он целиком.') : null,
+      h('p', { class: 'sm faint', text: (r.v6 ? 'IPv4 и IPv6.' : 'Только IPv4: IPv6 в конфиге выключен.') + ' Вложенные префиксы убраны.' }),
+      r.count ? h('div', { class: 'row' }, h('label', { class: 'row', style: 'flex-wrap:nowrap' }, auto, 'обновлять раз в сутки'), h('span', { class: 'grow' }),
+        btn(r.exists ? `Обновить ${r.name}` : `Создать список ${r.name}`, async () => {
+          const c = await guarded(() => api('asn_create', { asn: r.asn, auto: auto.checked }), 'Готово');
+          if (!c) return;
+          await loadState().catch(() => {});
+          go('#/sites/' + encodeURIComponent(c.name));
+        }, 'primary', 'ok')) : null));
+  };
+  main.append(
+    h('div', { class: 'vh' }, h('h1', { text: 'Список по ASN' })),
+    panel(null, null,
+      h('p', { class: 'sm muted', text: 'Собирает список IP-адресов целой сети (хостинга, облака) по номеру её автономной системы. Нужен, когда блокировка идёт по адресам хостинга, а не по имени сайта. Данные — RIPEstat.' }),
+      h('form', { class: 'row', onsubmit: (e) => { e.preventDefault(); look(); } }, q, h('button', { class: 'btn primary', type: 'submit' }, 'Найти', icon('arrow'))),
+      h('div', { class: 'recent' }, ASN_PRESETS.map(([n, t]) => h('button', { class: 'chip', type: 'button', text: t, title: 'AS' + n, onclick: () => look('AS' + n) }))),
+      h('p', { class: 'sm faint', text: 'Можно ввести имя сайта — роутер найдёт, в чьей сети он живёт. Готовый список подключается к профилю на странице «Профили» (поле «Списки IP»).' })),
+    out,
+    saved.length ? panel('Собранные списки', null, saved.map((x) => h('div', { class: 'act' }, levelIcon(x.error ? 'warning' : 'ok'),
+      h('div', { class: 'item-main' }, h('span', {}, h('a', { class: 'mono', href: '#/sites/' + encodeURIComponent(x.list), text: x.list }), h('span', { class: 'sm faint', text: ` · AS${x.asn} ${x.holder}` })),
+        h('span', { class: 'sm muted', text: `${plural(x.count, 'префикс', 'префикса', 'префиксов')} · ${x.auto ? 'обновляется раз в сутки' : 'не обновляется'} · ${fmtDate(x.last)}` + (x.error ? ` · ${x.error}` : '') })),
+      btn('Обновить', () => look('AS' + x.asn), 'small ghost', 'refresh'),
+      btn(x.auto ? 'Не обновлять' : 'Обновлять', async () => { if (await guarded(() => api('asn_set', { asn: x.asn, auto: !x.auto }))) route(true); }, 'small ghost')))) : null);
 }
 
 async function copyText(text) {
