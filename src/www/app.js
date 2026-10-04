@@ -402,15 +402,16 @@ function renderShell() {
     h('header', { class: 'top' },
       h('div', { class: 'top-in' },
         h('button', { class: 'btn ghost icon', id: 'burger', type: 'button', title: 'Меню', 'aria-label': 'Меню', onclick: () => openDrawer() }, icon('menu')),
-        h('a', { class: 'brand', href: PAGES.about[0], title: 'nfqws2-ui — о программе' }, logo(26), h('span', {}, 'nfqws2', h('small', { id: 'ver' }))),
-        h('span', { id: 'svc', class: 'pill muted' }, h('span', { class: 'dot' }), '…'),
-        h('span', { id: 'svc-ctl', class: 'svc-ctl' }),
+        h('a', { class: 'brand', href: PAGES.about[0], title: 'nfqws2-ui — о программе' }, logo(26), h('span', {}, 'nfqws2-ui', h('small', { id: 'ui-ver' }))),
         h('nav', { class: 'tabs', 'aria-label': 'Разделы' }, TOP_TABS[layout()].map(link)),
         h('span', { class: 'grow' }),
+        h('span', { class: 'svc-box' }, h('span', { class: 'svc-name', title: 'Версия nfqws2 на роутере' }, 'nfqws2', h('small', { id: 'ver' })),
+          h('span', { id: 'svc', class: 'pill muted' }, h('span', { class: 'dot' }), '…'),
+          h('span', { id: 'svc-ctl', class: 'svc-ctl' })),
         h('form', { class: 'quick', onsubmit: (e) => { e.preventDefault(); const v = quick.value.trim(); if (!v) return; quick.value = ''; quick.blur(); checkHost(v); } },
           quick, h('button', { class: 'btn primary icon', type: 'submit', title: 'Проверить: открывается ли сайт и каким профилем nfqws2 он пойдёт', 'aria-label': 'Проверить' }, icon('arrow'))),
         h('span', { id: 'https-slot' }),
-        h('a', { class: 'btn ghost small repo-link', id: 'repo-link', href: REPO, target: '_blank', rel: 'noopener', title: 'nfqws2-ui на GitHub', 'aria-label': 'nfqws2-ui на GitHub' }, icon('git'), h('span', { id: 'ui-ver', class: 'num' })),
+        h('a', { class: 'btn ghost small repo-link', id: 'repo-link', href: REPO, target: '_blank', rel: 'noopener', title: 'nfqws2-ui на GitHub', 'aria-label': 'nfqws2-ui на GitHub' }, icon('git')),
         h('button', { class: 'btn ghost small', type: 'button', id: 'undo-btn', hidden: true, onclick: () => undoLast(true) }, icon('undo'), h('span', { class: 'undo-label', text: 'Отменить' })),
         h('button', { class: 'btn ghost small', type: 'button', id: 'focus-off', hidden: true, onclick: () => setFocus(false) }, 'Показать обзор'),
         h('button', { class: 'btn ghost icon', id: 'refresh-top', type: 'button', title: 'Обновить', 'aria-label': 'Обновить', onclick: () => route(true) }, icon('refresh')),
@@ -451,7 +452,7 @@ function updateChrome() {
         btn(h('span', { class: 'ctl-label', text: 'Остановить' }), () => service('stop'), 'small ghost danger', 'stop', { title: 'Остановить nfqws2 — обход блокировок перестанет работать', 'aria-label': 'Остановить', disabled: busy })]
       : btn(h('span', { class: 'ctl-label', text: 'Запустить' }), () => service('start'), 'small primary', 'play', { title: 'Запустить nfqws2', 'aria-label': 'Запустить' }));
   document.getElementById('ver').textContent = st.version ? 'v' + st.version : '';
-  document.getElementById('ui-ver').textContent = 'nfqws2-ui' + (st.ui?.version ? ' v' + st.ui.version : '');
+  document.getElementById('ui-ver').textContent = st.ui?.version ? 'v' + st.ui.version : '';
   const need = st.running && (st.restart_needed || !st.in_sync) && !pendingActive();
   const u = st.ui?.update;
   const repoLink = document.getElementById('repo-link');

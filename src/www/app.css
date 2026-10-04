@@ -682,3 +682,10 @@ a.over-row:hover { background: var(--soft); }
 .prun > summary::-webkit-details-marker { display: none; }
 .prun[open] { padding-bottom: 10px; }
 .prun[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+
+/* верхняя панель: слева — знак и имя интерфейса, справа — сам nfqws2: версия, состояние, управление */
+.svc-box { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+.svc-name { font-weight: 600; font-size: 13.5px; display: inline-flex; align-items: baseline; gap: 5px; }
+.svc-name small { font-weight: 500; color: var(--muted); font-size: 12px; }
+@media (max-width: 1099px) { .svc-name { display: none; } .svc-box { gap: 4px; } }
+@media (min-width: 1100px) and (max-width: 1439px) { :root[data-layout="site"] .svc-name { display: none; } }
