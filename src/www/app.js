@@ -874,7 +874,7 @@ function checkHost(host) {
 
 // Ограничение ТСПУ «16-20 КБ»: соединение с зарубежным хостингом замирает на объёме. Стратегии nfqws2 его не снимают.
 const isFreeze = (reason) => !!reason && reason.includes('на объёме');
-const FREEZE_HINT = 'Похоже на ограничение ТСПУ «16-20 КБ»: соединения с зарубежными хостингами (Hetzner, DigitalOcean, OVH, Contabo…) зависают после ~16–20 КБ — маленькие страницы открываются, остальное нет. Стратегии nfqws2 его, как правило, не снимают, а обход DPI к таким адресам бывает только хуже — нужен VPN или прокси. Проверить провайдера можно чекером hyperion-cs.github.io/dpi-checkers/ru/tcp-16-20.';
+const FREEZE_HINT = 'Похоже на ограничение ТСПУ «16-20 КБ»: соединения с зарубежными хостингами (Hetzner, DigitalOcean, OVH, Contabo…) зависают после ~16–20 КБ — маленькие страницы открываются, остальное нет. Обычные стратегии его не снимают, но иногда помогает много фейков с разрешённым именем — это пробует подбор с уточнением. Если не поможет и он — нужен VPN или прокси. Проверить провайдера можно чекером hyperion-cs.github.io/dpi-checkers/ru/tcp-16-20.';
 
 function probeVerdict(res, pr) {
   const p = res.routes.https.profile ? prof(res.routes.https.profile) : null;
@@ -3051,6 +3051,7 @@ async function viewTests(main, r, bare = false) {
   const setCfg = h('input', { type: 'checkbox', id: 't-cfg', checked: true });
   const setStd = h('input', { type: 'checkbox', id: 't-std', checked: true });
   const repeats = h('select', { class: 'select', 'aria-label': 'Повторов' }, [1, 2, 3, 5].map((n) => h('option', { value: n, text: plural(n, 'повтор', 'повтора', 'повторов'), selected: n === 3 })));
+  const refine = h('input', { type: 'checkbox', id: 't-refine' });
   const out = h('div', { class: 'stack', style: 'gap:14px' });
   const startBtn = btn(tab === 'trace' ? 'Запустить трассировку' : 'Запустить тест', start, 'primary', 'play');
   let routeInfo = null;
@@ -3061,7 +3062,7 @@ async function viewTests(main, r, bare = false) {
     const cmd = tab === 'trace' ? 'trace_start' : 'test_start';
     const sets = [setCfg.checked && 'config', setStd.checked && 'std'].filter(Boolean);
     if (tab !== 'trace' && !sets.length) { toast('Выберите, что пробовать', { err: true }); return; }
-    if (!await guarded(() => api(cmd, { host: host.value, proto: proto.value, sets, repeats: Number(repeats.value) }))) return;
+    if (!await guarded(() => api(cmd, { host: host.value, proto: proto.value, sets, repeats: Number(repeats.value), refine: refine.checked }))) return;
     poll();
   }
   function poll() {
@@ -3117,16 +3118,47 @@ async function viewTests(main, r, bare = false) {
         h('td', {}, x.ok ? applyMenu(x.steps, s) : null));
     });
     return h('div', { class: 'stack', style: 'gap:14px' },
+      flow(s, running, res, best),
       baseline ? (baseline.ok ? notice('info', 'Без обхода сайт открывается', `HTTP ${baseline.code}, ${baseline.ms} мс — блокировки нет, стратегия не нужна.`)
-        : notice('warn', 'Без обхода сайт не открывается: ' + baseline.reason, baseline.reason === 'соединение сброшено' || baseline.reason === 'обрыв TLS' ? 'Похоже на блокировку по SNI (DPI) — обход поможет.' : isFreeze(baseline.reason) ? FREEZE_HINT : 'Похоже на блокировку по DPI или IP.')) : null,
+        : notice('warn', 'Без обхода сайт не открывается: ' + baseline.reason, baseline.reason === 'соединение сброшено' || baseline.reason === 'обрыв TLS' ? 'Похоже на блокировку по SNI (DPI) — обход поможет.' : isFreeze(baseline.reason) ? (best ? 'Это ограничение ТСПУ «16–20 КБ» для зарубежных хостингов. Ниже — стратегия, которая его снимает.' : FREEZE_HINT) : 'Похоже на блокировку по DPI или IP.')) : null,
       !running ? recommendation(s, good, best) : null,
       !running && best ? h('div', { class: 'notice ok' }, icon('ok'), h('div', { class: 'grow' },
         h('b', { text: `Работают ${good.length} из ${res.length}. Быстрее всех — ${best.name}, ${best.ms} мс.` }),
         h('div', { class: 't', text: best.from }), h('code', { class: 'sm', style: 'word-break:break-all', text: best.steps.join(' ') })),
         h('div', { class: 'notice-actions' }, applyMenu(best.steps, s, 'primary'), btn('Скопировать', () => copyText(best.steps.join('\n')), 'small', 'copy'))) : null,
       !running && !best && res.length ? notice('bad', 'Ни одна стратегия не помогла', isFreeze(baseline?.reason) ? FREEZE_HINT : 'Попробуйте больше повторов, протокол HTTP или другой сайт. Если без обхода соединение не устанавливается вовсе — возможно, заблокирован IP, тогда nfqws2 не поможет.') : null,
+      refinePanel(s, rep),
       panel(`Результаты для ${s.host}`, h('span', { class: 'sm muted num', text: `${res.length} стратегий · ${rep} повт.` + (s.finished ? ` · ${Math.round((s.finished - s.started))} с` : '') }),
         h('div', { class: 'scroll' }, h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, h('th'), h('th', { text: 'Стратегия' }), h('th', { text: 'Откуда' }), h('th', { text: 'Результат' }), h('th', { class: 'num', text: 'Время' }), h('th'))), h('tbody', {}, rows)))));
+  }
+
+  // Ход подбора: без обхода → перебор → уточнение → итог
+  function flow(s, running, res, best) {
+    const now = running ? (s.phase || 'baseline') : 'done';
+    const order = ['baseline', 'pick', 'refine', 'done'];
+    const cell = (id, title, text) => h('div', { class: order.indexOf(id) < order.indexOf(now) || now === 'done' ? 'done' : id === now ? 'now' : '' }, h('b', { text: title }), h('span', { text }));
+    const tried = res.filter((x) => !x.refined);
+    const full = tried.filter((x) => x.ok && x.ok === x.tries).length;
+    const part = tried.filter((x) => x.ok && x.ok < x.tries).length;
+    return h('div', { class: 'flow' },
+      cell('baseline', '1 · Без обхода', s.baseline ? (s.baseline.ok ? 'сайт открывается' : s.baseline.reason) : 'проверяю…'),
+      cell('pick', '2 · Перебор', res.length ? `${plural(tried.length, 'стратегия', 'стратегии', 'стратегий')}: работают ${full}` + (part ? `, почти — ${part}` : '') : 'ожидает'),
+      cell('refine', '3 · Уточнение', s.refine ? `основа — ${s.refine.base}` : now === 'done' ? 'не понадобилось' : 'если рабочих не найдётся'),
+      cell('done', '4 · Итог', now !== 'done' ? '' : best ? best.name : 'рабочей стратегии нет'));
+  }
+
+  // Что перебрало уточнение: зелёное — открылся каждый раз, жёлтое — не каждый, красное — не открылся
+  function refinePanel(s, rep) {
+    const rf = s.refine;
+    if (!rf) return null;
+    return panel(`Уточнение: ${rf.base}`, h('span', { class: 'sm muted', text: rf.from }),
+      rf.tried?.length ? h('p', { class: 'sm muted', text: `Сначала уточнялась «${rf.tried.join('», «')}» — ничего не дала, взята следующая.` }) : null,
+      rf.axes.filter(Boolean).map((a) => h('div', { class: 'frow' }, h('span', { class: 'lbl', text: a.title }),
+        h('div', { class: 'tune' }, a.items.map((it) => h('span', { class: (it.ok >= rep ? 'y' : it.ok ? 'h' : '') + (it.picked ? ' best' : ''),
+          title: it.ok ? `открылся ${it.ok} из ${it.tries}` + (it.ms ? `, ${it.ms} мс` : '') : it.reason || 'не открылся', text: it.label }))))),
+      rf.state === 'time' ? notice('warn', 'Уточнение остановлено по времени', 'На эту фазу отведено 5 минут; ниже — то, что успели проверить.') : null,
+      h('p', { class: 'sm faint', text: 'Зелёное — открылся каждый раз, жёлтое — не каждый, красное — не открылся. Рамкой отмечено то, что вошло в итоговую стратегию. Значения перебираются по одной строке за раз: каждая следующая строка проверяется уже с выбранным в предыдущей.' }),
+      rf.final ? h('p', { class: 'sm' }, 'Итог уточнения: ', h('b', { class: 'mono', text: rf.final }), ' — он есть в таблице ниже.') : rf.state === 'done' ? h('p', { class: 'sm muted', text: 'Лучше исходной стратегии ничего не нашлось.' }) : null);
   }
 
   function traceResult(s) {
@@ -3248,7 +3280,10 @@ async function viewTests(main, r, bare = false) {
       tab === 'pick' ? [
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Что пробовать' }), h('div', { class: 'row' },
           h('label', { class: 'row' }, setCfg, 'стратегии из вашего конфига'), h('label', { class: 'row' }, setStd, 'стандартный набор'))),
-        h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Повторов' }), h('div', { class: 'row' }, repeats, h('span', { class: 'sm muted', text: 'Стратегия засчитывается, если сайт открылся каждый раз.' })))] :
+        h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Повторов' }), h('div', { class: 'row' }, repeats, h('span', { class: 'sm muted', text: 'Стратегия засчитывается, если сайт открылся каждый раз.' }))),
+        h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Уточнение' }), h('div', { class: 'stack', style: 'gap:2px' },
+          h('label', { class: 'row' }, refine, 'искать вариант полегче, даже если рабочая стратегия найдена'),
+          h('span', { class: 'sm muted', text: 'Если рабочих стратегий нет, подбор сам пробует довести лучшую: меняет число фейков (до 20), способ их порчи и имя в фейке. Это ещё 2–5 минут.' })))] :
         h('p', { class: 'sm muted', text: 'Трассировка открывает сайт через копию текущей конфигурации с подробным журналом nfqws2 — видно, какой профиль сработал и что сделали стратегии.' }),
       h('div', { class: 'row' }, startBtn, h('span', { class: 'sm muted grow', text: 'Работает отдельный процесс nfqws2 на очереди 301 только для проверочных соединений роутера. Ваш трафик и основной nfqws2 не затрагиваются.' }))),
     out,
