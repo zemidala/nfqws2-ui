@@ -2692,7 +2692,7 @@ async function paneAbout(content) {
   content.append(h('div', { class: 'vh' }, h('h1', { text: 'О программе' })),
     panel(null, null,
       h('div', { class: 'about-brand' }, logo(48), h('div', {}, h('h2', { text: 'nfqws2-ui' }), h('div', { class: 'sm muted', text: 'веб-интерфейс для nfqws2 · zemidala' }))),
-      row('Версия', h('b', { text: st.ui?.version || '?' })),
+      row('Версия', h('b', { text: st.ui?.version || '?' }), BUILD.includes('-') ? h('span', { class: 'muted mono', title: 'Хеш файлов интерфейса, загруженных в браузер', text: '  сборка ' + BUILD.split('-').pop() }) : null),
       row('nfqws2', st.version ? 'v' + st.version : 'не определена'),
       row('Исходный код', link(REPO, REPO.replace('https://', ''))),
       row('Описание и помощь', h('a', { href: '#/settings/readme', text: 'справка (README)' }), ' · ', h('a', { href: '#/settings/changelog', text: 'изменения по версиям' }), ' · ', link(REPO + '/discussions/categories/q-a', 'задать вопрос'), ' · ', link(REPO + '/issues/new/choose', 'сообщить о проблеме')),
@@ -3330,6 +3330,30 @@ function updateSkipped(v) {
   try { return localStorage.getItem('nfqws-ui-update-skip') === v; } catch { return false; }
 }
 
+// Сборка, которую загрузил браузер: версия и хеш файлов из адреса app.js?v=… (подставляет scripts/build.sh)
+const BUILD = (() => { try { return new URL(document.currentScript.src).searchParams.get('v') || ''; } catch { return ''; } })();
+
+// Браузер может держать в кеше старую страницу. Сверяемся с роутером: если там уже другая сборка —
+// предлагаем перезагрузить (при открытии и при возврате на вкладку, не чаще раза в 5 минут).
+let freshChecked = 0;
+async function checkFresh() {
+  if (!BUILD || Date.now() - freshChecked < 300000) return;
+  freshChecked = Date.now();
+  try {
+    const text = await (await fetch('index.html?_=' + Date.now(), { cache: 'no-store', credentials: 'same-origin' })).text();
+    const onRouter = text.match(/app\.js\?v=([^"]+)/)?.[1];
+    if (!onRouter || onRouter === BUILD || document.getElementById('stale')) return;
+    const reload = async () => {
+      // обновляем запись в кеше браузера и только потом перезагружаем страницу
+      await fetch('index.html', { cache: 'reload', credentials: 'same-origin' }).catch(() => {});
+      location.reload();
+    };
+    document.getElementById('upd-banner')?.before(h('div', { id: 'stale', class: 'banner info' }, h('div', { class: 'banner-in' },
+      h('span', { text: 'Интерфейс на роутере обновился, а в браузере открыта прежняя сборка.' }), btn('Перезагрузить', reload, 'small primary', 'refresh'))));
+  } catch { /* роутер недоступен — проверим в следующий раз */ }
+}
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.auth) checkFresh(); });
+
 // Проверка в фоне при открытии интерфейса — если последняя была больше 12 часов назад
 async function autoUpdateCheck() {
   if (!S.state) { setTimeout(autoUpdateCheck, 3000); return; }
@@ -3448,6 +3472,7 @@ async function start() {
   SIDE.root = null;
   route(true);
   setTimeout(autoUpdateCheck, 3000);
+  setTimeout(checkFresh, 1500);
 }
 
 setInterval(() => {
