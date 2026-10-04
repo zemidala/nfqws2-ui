@@ -8,7 +8,13 @@ VERSION=${VERSION#v}
 OUT=dist
 STAGE=$(mktemp -d)
 trap 'rm -rf "$STAGE"' EXIT
-export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct 2>/dev/null || date +%s)}
+# Время файлов — от последнего коммита (сборка повторяема). Если в рабочей копии есть незакоммиченные правки,
+# берём текущее время: иначе пересборка даёт файлы с прежним временем, и браузер считает index.html неизменившимся.
+if git diff --quiet HEAD -- 2>/dev/null; then
+	export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(git log -1 --format=%ct 2>/dev/null || date +%s)}
+else
+	export SOURCE_DATE_EPOCH=${SOURCE_DATE_EPOCH:-$(date +%s)}
+fi
 TAR="tar --owner=0 --group=0 --numeric-owner --sort=name --mtime=@$SOURCE_DATE_EPOCH"
 
 rm -rf "$OUT"; mkdir -p "$OUT"
