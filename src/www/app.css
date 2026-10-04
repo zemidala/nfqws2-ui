@@ -593,13 +593,40 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 .about-brand { display: flex; gap: 14px; align-items: center; }
 .lthumb { width: 100%; max-width: 200px; height: auto; display: block; }
 
-/* обзор как страница: блоки — карточками в несколько колонок */
-:root[data-variant] main > .side-in { padding: 0; min-height: 0; background: none; }
-@media (min-width: 760px) {
-  :root[data-variant] main > .side-in { grid-template-columns: repeat(auto-fill, minmax(320px, 1fr)); gap: 14px; align-items: start; }
-  :root[data-variant="a"] main > .side-in > .blk { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
-}
-@media (max-width: 759px) { :root[data-variant="a"] main > .side-in > .blk { background: var(--surface); } :root[data-variant="a"] main > .side-in + .side-in > .blk:first-child { border-top: 1px solid var(--line); } }
+/* страница «Обзор»: четыре вида раскладки одних и тех же блоков */
+.ov .blk { align-content: start; }
+/* группы: внутри группы блоки соприкасаются */
+.ov-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; align-items: start; }
+.ogrp { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; min-width: 0; }
+:root[data-variant="b"] .ogrp { border-color: transparent; }
+.ogrp > h3 { padding: 10px 16px; font-size: 15px; background: var(--soft); border-bottom: 1px solid var(--line); }
+.ogrp > .blk, .ocell > .blk { border: 0; border-radius: 0; box-shadow: none; border-bottom: 1px solid var(--line); padding: 14px 16px; }
+.ogrp > .blk:last-child, .ocell > .blk:last-child { border-bottom: 0; }
+/* плитки и две колонки */
+.ov-tiles { display: grid; gap: 14px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 2px; color: inherit; box-shadow: var(--shadow); min-width: 0; }
+:root[data-variant="b"] .tile { border-color: transparent; }
+.tile:hover { border-color: var(--accent); }
+.tile small { font-size: 11.5px; text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.tile b { font-size: 22px; line-height: 1.2; }
+.tile span { font-size: 12.5px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile.ok b { color: var(--ok); } .tile.bad b { color: var(--bad); }
+.ov-cols { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.ov-cols > .stack { gap: 14px; }
+.ov-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+@media (max-width: 1099px) { .ov-cols { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 759px) { .ov-pair { grid-template-columns: minmax(0, 1fr); } }
+/* кладка: карточки плотно уложены в колонки */
+.ov-masonry { columns: 3 320px; column-gap: 14px; }
+.ov-masonry > .blk { break-inside: avoid; margin-bottom: 14px; }
+/* панель: одна поверхность, ячейки разделены линиями */
+.ov-panel { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.ov-panel > .blk, .ocell { border: 0; border-radius: 0; box-shadow: none; background: var(--surface); }
+.ov-panel > .blk { padding: 14px 16px; }
+.ocell { display: grid; align-content: start; min-width: 0; }
+@media (max-width: 1099px) { .ov-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ov-panel > :last-child:nth-child(odd) { grid-column: 1 / -1; } }
+@media (max-width: 759px) { .ov-panel { grid-template-columns: minmax(0, 1fr); } }
 .over-rows { display: grid; gap: 1px; margin-inline: -6px; }
 .over-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 7px; color: inherit; min-width: 0; font-size: 13px; }
 a.over-row:hover { background: var(--soft); }

@@ -670,8 +670,8 @@ function sideBlocks() {
     SIDE.monitor = h('section', { class: 'blk' });
     SIDE.root = h('div', { class: 'side-in' }, SIDE.service, S.check.el, SIDE.problems, SIDE.monitor, SIDE.backup, SIDE.traffic);
   }
-  // проверку сайта могла забрать карточка сайта — возвращаем на место
-  if (S.check.el.parentNode !== SIDE.root) SIDE.service.after(S.check.el);
+  // блоки могла забрать страница «Обзор» или карточка сайта — возвращаем на место
+  SIDE.root.append(SIDE.service, S.check.el, SIDE.problems, SIDE.monitor, SIDE.backup, SIDE.traffic);
   return SIDE.root;
 }
 // Слева на широком экране: «Вкладки» — колонка обзора, «Боковое меню» — меню, «Вокруг сайта» — ничего
@@ -687,7 +687,7 @@ function placeSide() {
   updateSide();
 }
 function updateSide() {
-  if (!SIDE.root || !S.state || !SIDE.root.isConnected) return;
+  if (!SIDE.root || !S.state) return;   // блоки могут стоять в колонке или на странице «Обзор», причём не все сразу
   renderSideService(SIDE.service);
   renderSideProblems(SIDE.problems);
   renderSideBackup(SIDE.backup);
@@ -741,7 +741,7 @@ function issueTarget(x) {
   return '#/settings/raw';
 }
 
-function renderSideProblems(el) {
+function problemItems() {
   const st = S.state;
   const items = [];
   const lint = st.lint || { issues: [] };
@@ -770,7 +770,11 @@ function renderSideProblems(el) {
         }, 'small', 'wand', { title: '«*.домен» → «домен», удалить повторы и лишние записи. Отменить можно кнопкой «Отменить».' }) : null });
     }
   }
-  items.sort((a, b) => LEVEL_RANK[b.level] - LEVEL_RANK[a.level]);
+  return items.sort((a, b) => LEVEL_RANK[b.level] - LEVEL_RANK[a.level]);
+}
+
+function renderSideProblems(el) {
+  const items = problemItems();
   const counts = { error: 0, warning: 0, info: 0 };
   items.forEach((x) => counts[x.level]++);
   const LIMIT = 6;
@@ -921,17 +925,55 @@ function actionsBlock(res) {
   return box;
 }
 
+// Виды страницы «Обзор»: одни и те же блоки, разложенные по-разному. Выбор хранится вместе с оформлением.
+const OVERVIEWS = [['groups', 'Группы'], ['tiles', 'Плитки'], ['masonry', 'Кладка'], ['panel', 'Панель']];
+
 async function viewOverview(main, r) {
-  main.append(sideBlocks());
+  sideBlocks();
+  const look = getLook();
+  const view = OVERVIEWS.some(([v]) => v === look.overview) ? look.overview : 'groups';
+  const B = { svc: SIDE.service, check: S.check.el, prob: SIDE.problems, mon: SIDE.monitor, backup: SIDE.backup, traffic: SIDE.traffic, ...overviewExtra() };
+  const grp = (title, ...blocks) => h('div', { class: 'ogrp' }, h('h3', { text: title }), ...blocks);
+  const body = {
+    // три колонки по смыслу, внутри группы блоки соприкасаются
+    groups: () => h('div', { class: 'ov ov-groups' }, grp('Сейчас', B.svc, B.check, B.prob, B.mon, B.traffic), grp('Настроено', B.profs, B.lists, B.backup), grp('Недавно', B.picks, B.changes, B.ver)),
+    // ряд плиток с главными цифрами, ниже слева главное, справа недавнее
+    tiles: () => h('div', { class: 'ov ov-tiles' }, overviewTiles(),
+      h('div', { class: 'ov-cols' }, h('div', { class: 'stack' }, B.check, h('div', { class: 'ov-pair' }, B.mon, B.profs)), h('div', { class: 'stack' }, B.prob, B.picks, B.changes, B.lists, B.traffic, B.ver))),
+    // отдельные карточки, плотно уложенные в колонки
+    masonry: () => h('div', { class: 'ov ov-masonry' }, B.svc, B.check, B.prob, B.mon, B.profs, B.lists, B.picks, B.changes, B.backup, B.traffic, B.ver),
+    // одна панель, поделённая линиями на ячейки
+    panel: () => h('div', { class: 'ov ov-panel' }, B.svc, B.check, B.prob, B.mon, B.profs, h('div', { class: 'ocell' }, B.lists, B.backup, B.traffic), B.picks, B.changes, B.ver),
+  }[view]();
+  main.append(
+    h('div', { class: 'vh' }, h('h1', { text: 'Обзор' }), h('span', { class: 'grow' }),
+      h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Вид обзора' }, OVERVIEWS.map(([v, t]) =>
+        h('button', { type: 'button', role: 'radio', 'aria-checked': String(v === view), class: v === view ? 'on' : '', text: t, onclick: () => { setLook({ overview: v }); route(); } })))),
+    body);
   updateSide();
   if (r.q.get('q')) S.check.run(r.q.get('q'));
-  // когда обзор — страница, а не узкая колонка, на нём хватает места для сводки по остальным разделам
-  const extra = h('div', { class: 'side-in' });
-  main.append(extra);
-  drawOverviewExtra(extra);
 }
 
-function drawOverviewExtra(el) {
+// Плитки с главными цифрами — состояние читается с одного взгляда
+function overviewTiles() {
+  const st = S.state;
+  const tile = (cls, href, label, value, sub) => h('a', { class: 'tile ' + cls, href }, h('small', { text: label }), h('b', { text: value }), h('span', { text: sub }));
+  const m = st.monitor?.sites || [];
+  const okN = m.filter((x) => x.last && x.last[1]).length;
+  const problems = problemItems().filter((x) => x.level !== 'info');
+  const profs = st.conf_profiles;
+  const bad = profs.filter((p) => worst(profIssues(p)) === 'error' || ['dead', 'excludes-only'].includes(p.state)).length;
+  const used = st.lists.filter((l) => l.used.length);
+  return h('div', { class: 'tiles' },
+    tile(st.running ? 'ok' : 'bad', '#/', 'Сервис', st.running ? 'Работает' : 'Остановлен', st.running && st.process?.started ? 'запущен ' + fmtAgo(st.now - st.process.started) : 'обход не работает'),
+    tile(!m.length ? '' : okN === m.length ? 'ok' : 'bad', PAGES.mon[0], 'Сайты', m.length ? `${okN} из ${m.length}` : '—', m.length ? (st.monitor.last ? 'проверены ' + fmtAgo(st.now - st.monitor.last) : 'ещё не проверялись') : 'мониторинг пуст'),
+    tile(problems.length ? 'bad' : 'ok', problems[0]?.href || PAGES.raw[0], 'Проблемы', String(problems.length), problems.length ? problems[0].title : 'конфиг и списки в порядке'),
+    tile(bad ? 'bad' : '', PAGES.prof[0], 'Профили', String(profs.length), bad ? `${bad} с проблемами` : 'все срабатывают'),
+    tile('', PAGES.lists[0], 'Списки', `${used.length} из ${st.lists.length}`, fmtNum(used.reduce((a, l) => a + l.entries, 0)) + ' записей'),
+    tile('', PAGES.backup[0], 'Копии', String(st.snap?.count || 0), st.snap?.last ? 'последняя ' + fmtAgo(st.now - st.snap.last) : 'снимков нет'));
+}
+
+function overviewExtra() {
   const st = S.state;
   const blk = (title, href, ...body) => h('section', { class: 'blk' },
     h('div', { class: 'blk-h' }, h('h2', { text: title }), href ? h('a', { class: 'sm', href, text: 'открыть' }) : null), ...body);
@@ -943,25 +985,25 @@ function drawOverviewExtra(el) {
   const changes = h('div', { class: 'over-rows' }, h('span', { class: 'sm muted', text: 'загрузка…' }));
   const picks = h('div', { class: 'over-rows' }, h('span', { class: 'sm muted', text: 'загрузка…' }));
   const u = st.ui?.update || {};
-  el.replaceChildren(
-    blk('Профили', PAGES.prof[0],
+  const out = {};
+  out.profs = blk('Профили', PAGES.prof[0],
       h('p', { class: 'sm' }, plural(profs.length, 'профиль', 'профиля', 'профилей'), bad ? h('span', { class: 'status-bad', text: ` · ${bad} с проблемами` }) : h('span', { class: 'status-ok', text: ' · все в порядке' })),
       h('div', { class: 'over-rows' }, profs.map((p) => h('a', { class: 'over-row', href: `#/settings/p${p.index}`, title: profScope(p) },
         h('span', { class: 'pn ' + (worst(profIssues(p)) === 'error' ? 'err' : p.state), text: p.index }),
-        h('span', { class: 'ellipsis', text: profName(p) }), h('span', { class: 'sm faint ellipsis', text: strategyText(p) }))))),
-    blk('Списки', PAGES.lists[0],
+        h('span', { class: 'ellipsis', text: profName(p) }), h('span', { class: 'sm faint ellipsis', text: strategyText(p) })))));
+  out.lists = blk('Списки', PAGES.lists[0],
       h('p', { class: 'sm' }, `${used.length} из ${st.lists.length} используются · ${fmtNum(used.reduce((a, l) => a + l.entries, 0))} записей`,
         withProblems ? h('span', { class: 'status-bad', text: ` · ${withProblems} с замечаниями` }) : null),
       h('div', { class: 'over-rows' }, [...used].sort((a, b) => b.entries - a.entries).slice(0, 6).map((l) => h('a', { class: 'over-row', href: '#/sites/' + encodeURIComponent(l.name), title: l.name },
-        h('span', { class: 'ellipsis', text: listName(l.name) }), h('span', { class: 'sm faint num', text: fmtNum(l.entries) }))))),
-    blk('Последние подборы', PAGES.pick[0], picks),
-    blk('Последние изменения', PAGES.hist[0], changes),
-    blk('Версии', PAGES.about[0],
+        h('span', { class: 'ellipsis', text: listName(l.name) }), h('span', { class: 'sm faint num', text: fmtNum(l.entries) })))));
+  out.picks = blk('Последние подборы', PAGES.pick[0], picks);
+  out.changes = blk('Последние изменения', PAGES.hist[0], changes);
+  out.ver = blk('Версии', PAGES.about[0],
       kv('nfqws2', st.version ? 'v' + st.version : 'не определена'),
       kv('nfqws2-ui', 'v' + (st.ui?.version || '?'), u.available ? h('a', { class: 'chip ok', href: PAGES.about[0], text: `есть ${u.latest}` }) : null),
       kv('Конфиг', h('a', { class: 'mono', href: PAGES.raw[0], text: st.ui?.conf_file || 'nfqws2.conf' })),
       kv('Изменён', st.conf_mtime ? fmtAgo(st.now - st.conf_mtime) : '—'),
-      h('p', { class: 'sm' }, h('a', { href: '#/settings/readme', text: 'Справка' }), ' · ', h('a', { href: '#/settings/changelog', text: 'изменения по версиям' }))));
+      h('p', { class: 'sm' }, h('a', { href: '#/settings/readme', text: 'Справка' }), ' · ', h('a', { href: '#/settings/changelog', text: 'изменения по версиям' })));
   api('tests_history').then((r) => {
     const items = (r.items || []).slice(0, 5);
     picks.replaceChildren(items.length ? items.map((x) => h('a', { class: 'over-row', href: '#/tests?host=' + encodeURIComponent(x.host) },
@@ -975,6 +1017,7 @@ function drawOverviewExtra(el) {
       h('span', { class: 'ellipsis', title: e.note || '', text: e.file === '*' ? e.note : [e.file === 'nfqws2.conf' ? 'Конфиг' : listName(e.file), e.note].filter(Boolean).join(': ') })))
       : h('span', { class: 'sm muted', text: 'Изменений пока не было.' }));
   }).catch(() => changes.replaceChildren());
+  return out;
 }
 
 // ============ Карточка сайта: проверка, подбор и трассировка одного сайта (компоновка «Вокруг сайта») ============
