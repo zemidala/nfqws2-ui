@@ -2785,7 +2785,22 @@ function testJob(): void
     return;
   }
 
-  // Подбор стратегии
+  // Подбор стратегии. Сначала — имеет ли он смысл: если имя не находится или адрес не отвечает вовсе,
+  // перебор стратегий только зря займёт несколько минут.
+  $dns = diagDns($job['host']);
+  $why = null;
+  if ($dns['status'] === 'nxdomain') {
+    $why = 'Имя сайта не находится — ни у роутера, ни у защищённого DNS. Проверьте написание.';
+  } elseif ($dns['ips'] && !array_filter(diagTcp($dns['ips'], $http ? 80 : 443), fn($x) => $x['ok'])) {
+    $why = 'С адресом сайта нет соединения (' . implode(', ', $dns['ips']) . ') — похоже на блокировку по IP. Стратегии nfqws2 меняют пакеты, а не маршрут, и тут не помогут: нужен туннель (podkop, VPN).';
+  }
+  if ($why !== null) {
+    $status['state'] = 'error';
+    $status['title'] = 'Подбор не запущен';
+    $status['error'] = $why;
+    testSaveStatus($status);
+    return;
+  }
   $cands = [];
   if (in_array('config', $job['sets'], true)) {
     $cands = array_merge($cands, configCandidates($status['proto']));
@@ -2869,6 +2884,369 @@ function testJob(): void
     'best' => ($best = array_values(array_filter($status['results'], fn($r) => $r['ok'] === $repeats))) ? $best[0]['name'] : null]);
   @mkdir(UI_CONF_DIR, 0755, true);
   file_put_contents(UI_CONF_DIR . '/tests.json', json_encode(array_slice($hist, 0, 30), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+}
+
+// ================= диагноз блокировки =================
+// Ступени: имя (DNS) → соединение (TCP) → запрос мимо nfqws2 → «по имени или по адресу» → открытый HTTP →
+// запрос через nfqws2. Каждая ступень — отдельный запрос интерфейса: виден ход, нет долгих ответов.
+// diagVerdict сводит результаты ступеней в один диагноз.
+
+// Защищённый DNS для сверки: адреса серверов заданы явно, чтобы не зависеть от проверяемого резолвера
+const DIAG_DOH = [['Яндекс', 'common.dot.dns.yandex.net', '77.88.8.8'], ['Google', 'dns.google', '8.8.8.8']];
+// Заведомо разрешённое имя: с ним проверяем, режут соединение по имени сайта или по адресу
+const DIAG_SNI = 'ya.ru';
+const DIAG_UA = 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130 Safari/537.36';
+// Признаки страницы-заглушки провайдера: в адресе перенаправления и в тексте короткой страницы
+const DIAG_REDIRECT_MARKS = ['warning.rt.ru', 'lawfilter', 'zapret-info', 'rkn.gov.ru', 'eais.rkn', 'blocked', 'blackhole', 'access-denied'];
+const DIAG_PAGE_MARKS = ['доступ к ресурсу ограничен', 'доступ ограничен', 'ресурс заблокирован', 'единый реестр', 'eais.rkn.gov.ru', 'rkn.gov.ru', 'warning.rt.ru', 'по решению суда', 'роскомнадзор'];
+
+// Запрос A-записи в двоичном формате DNS (для DoH по RFC 8484)
+function dnsWireQuery(string $host): string
+{
+  $q = "\x00\x00\x01\x00\x00\x01\x00\x00\x00\x00\x00\x00";
+  foreach (explode('.', $host) as $label) {
+    $q .= chr(strlen($label)) . $label;
+  }
+  return $q . "\x00\x00\x01\x00\x01";
+}
+
+// Ответ DNS → код ответа и адреса IPv4
+function dnsWireParse(string $r): ?array
+{
+  $n = strlen($r);
+  if ($n < 12) {
+    return null;
+  }
+  $h = unpack('nid/nflags/nqd/nan', $r);
+  $pos = 12;
+  $skipName = function () use ($r, $n, &$pos): void {
+    while ($pos < $n) {
+      $len = ord($r[$pos]);
+      if ($len === 0) {
+        $pos++;
+        return;
+      }
+      if (($len & 0xC0) === 0xC0) {
+        $pos += 2;
+        return;
+      }
+      $pos += $len + 1;
+    }
+  };
+  for ($i = 0; $i < $h['qd']; $i++) {
+    $skipName();
+    $pos += 4;
+  }
+  $ips = [];
+  for ($i = 0; $i < $h['an'] && $pos + 10 <= $n; $i++) {
+    $skipName();
+    if ($pos + 10 > $n) {
+      break;
+    }
+    $a = unpack('ntype/nclass/Nttl/nlen', substr($r, $pos, 10));
+    $pos += 10;
+    if ($a['type'] === 1 && $a['len'] === 4 && $pos + 4 <= $n) {
+      $ips[] = inet_ntop(substr($r, $pos, 4));
+    }
+    $pos += $a['len'];
+  }
+  return ['rcode' => $h['flags'] & 15, 'ips' => $ips];
+}
+
+function dohResolve(string $server, string $ip, string $host): array
+{
+  $ch = curl_init("https://$server/dns-query?dns=" . rtrim(strtr(base64_encode(dnsWireQuery($host)), '+/', '-_'), '='));
+  curl_setopt_array($ch, [
+    CURLOPT_RETURNTRANSFER => true,
+    CURLOPT_CONNECTTIMEOUT => 4,
+    CURLOPT_TIMEOUT => 5,
+    CURLOPT_NOSIGNAL => 1,
+    CURLOPT_RESOLVE => ["$server:443:$ip"],
+    CURLOPT_HTTPHEADER => ['accept: application/dns-message'],
+  ]);
+  $t = microtime(true);
+  $body = curl_exec($ch);
+  $err = curl_error($ch);
+  $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  curl_close($ch);
+  $ms = (int)round((microtime(true) - $t) * 1000);
+  $ans = is_string($body) && $code === 200 ? dnsWireParse($body) : null;
+  if (!$ans) {
+    return ['ok' => false, 'ips' => [], 'ms' => $ms, 'error' => $err ?: "HTTP $code"];
+  }
+  return ['ok' => true, 'ips' => $ans['ips'], 'rcode' => $ans['rcode'], 'ms' => $ms];
+}
+
+function isIp4(string $s): bool
+{
+  $b = @inet_pton($s);
+  return $b !== false && strlen($b) === 4;
+}
+
+// Адрес, по которому сайт в интернете жить не может: такой ответ DNS — заглушка
+function ipReserved(string $ip): bool
+{
+  $b = inet_pton($ip);
+  foreach (['0.0.0.0/8', '10.0.0.0/8', '100.64.0.0/10', '127.0.0.0/8', '169.254.0.0/16', '172.16.0.0/12', '192.168.0.0/16', '224.0.0.0/3'] as $net) {
+    if (ipInEntry($b, $net)) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Ступень 1: ответ резолвера роутера против защищённого DNS
+function diagDns(string $host): array
+{
+  $system = array_values(array_filter(gethostbynamel($host) ?: [], 'isIp4'));
+  $doh = [];
+  $ref = [];
+  $answered = 0;
+  foreach (DIAG_DOH as [$name, $server, $ip]) {
+    $r = dohResolve($server, $ip, $host);
+    $doh[] = ['name' => $name] + $r;
+    if ($r['ok']) {
+      $answered++;
+      $ref = array_merge($ref, $r['ips']);
+    }
+  }
+  $ref = array_values(array_unique($ref));
+  $podkop = is_file('/etc/init.d/podkop') && (bool)array_filter($system, fn($ip) => ipInEntry(inet_pton($ip), '198.18.0.0/15'));
+  if (!$ref) {
+    // защищённый DNS адреса не дал: либо имени нет, либо сверить не с чем (нет связи с DoH, локальное имя)
+    $status = $system ? 'unverified' : 'nxdomain';
+  } elseif (!$system) {
+    $status = 'no_system';
+  } elseif ($podkop) {
+    $status = 'podkop';
+  } elseif (array_intersect($system, $ref)) {
+    $status = 'ok';
+  } elseif (!array_filter($system, fn($ip) => !ipReserved($ip))) {
+    $status = 'fake';
+  } else {
+    $status = 'differs';   // у CDN ответы разным резолверам отличаются — решит запрос к сайту
+  }
+  $useRef = in_array($status, ['no_system', 'podkop', 'fake'], true);
+  return ['status' => $status, 'system' => $system, 'ref' => $ref, 'doh' => $doh, 'doh_answered' => $answered, 'podkop' => $podkop,
+    'ips' => array_slice($useRef ? $ref : $system, 0, 3), 'alt' => $status === 'differs' ? array_slice($ref, 0, 2) : []];
+}
+
+// Ступень 2: устанавливается ли соединение с адресами сайта
+function diagTcp(array $ips, int $port = 443): array
+{
+  $out = [];
+  foreach ($ips as $ip) {
+    $t = microtime(true);
+    $f = @fsockopen($ip, $port, $errno, $errstr, 4);
+    $ms = (int)round((microtime(true) - $t) * 1000);
+    if ($f) {
+      fclose($f);
+    }
+    $out[] = ['ip' => $ip, 'ok' => (bool)$f, 'ms' => $ms, 'error' => $f ? null : ($errno === 110 || $ms >= 3900 ? 'нет ответа' : ($errno === 111 ? 'соединение отклонено' : ($errstr ?: "ошибка $errno")))];
+  }
+  return $out;
+}
+
+// Запросы «мимо nfqws2»: правила подбора пропускают проверочные соединения роутера мимо основной очереди.
+// Правила общие с подбором стратегии, поэтому одновременно с ним диагноз не работает.
+function diagBypass(callable $fn)
+{
+  if (testRunning()) {
+    fail('Сейчас идёт подбор стратегии — диагноз использует те же проверочные правила. Дождитесь окончания подбора.');
+  }
+  @mkdir(TEST_DIR, 0777, true);
+  $lock = fopen(TEST_DIR . '/diag.lock', 'c');
+  flock($lock, LOCK_EX);
+  $iface = explode(' ', trim(confValues()['ISP_INTERFACE']))[0] ?: 'eth1';
+  testRules('bypass', $iface);
+  try {
+    return $fn();
+  } finally {
+    testRules('off', $iface);
+    flock($lock, LOCK_UN);
+    fclose($lock);
+  }
+}
+
+// Один запрос curl с проверочного порта. Возвращает код выхода, код HTTP, времена, текст ошибки и её вид.
+function diagCurl(string $args, int $max): array
+{
+  [$lo, $hi] = array_map('intval', explode(':', TEST_PORTS));
+  $w = '%{http_code}|%{time_connect}|%{time_appconnect}|%{time_total}|%{size_download}|%{redirect_url}|%{errormsg}';
+  $out = [];
+  exec('curl -4 -sk --local-port ' . mt_rand($lo, $hi - 50) . '-' . $hi . ' --connect-timeout 5 -m ' . $max . ' -A ' . escapeshellarg(DIAG_UA)
+    . ' -w ' . escapeshellarg($w) . ' ' . $args . ' 2>/dev/null', $out, $rc);
+  $f = array_pad(explode('|', (string)end($out), 7), 7, '');
+  $code = (int)$f[0];
+  $tls = (float)$f[2] > 0;
+  $msg = strtolower($f[6]);
+  if ($rc === 0 && $code > 0) {
+    $kind = 'ok';
+  } elseif ($rc === 6) {
+    $kind = 'dns';
+  } elseif ($rc === 7) {
+    $kind = 'connect';
+  } elseif ($rc === 28) {
+    $kind = $code > 0 ? 'freeze' : ($tls ? 'stall' : 'timeout');
+  } elseif ($rc === 35) {
+    $kind = str_contains($msg, 'alert') ? 'alert' : (str_contains($msg, 'reset') ? 'reset' : 'tls');
+  } elseif ($rc === 56) {
+    $kind = 'reset';
+  } elseif ($rc === 52) {
+    $kind = 'empty';
+  } else {
+    $kind = 'other';
+  }
+  return ['ok' => $kind === 'ok', 'kind' => $kind, 'rc' => $rc, 'code' => $code, 'tls' => $tls, 'ms' => (int)round((float)$f[3] * 1000),
+    'size' => (int)$f[4], 'redirect' => $f[5], 'error' => $f[6]];
+}
+
+// Похоже ли на заглушку провайдера: код 451, перенаправление на страницу блокировки или её текст
+function diagIspPage(string $host, array $r, string $bodyFile): bool
+{
+  if ($r['code'] === 451) {
+    return true;
+  }
+  $to = strtolower((string)parse_url($r['redirect'], PHP_URL_HOST));
+  if ($to !== '' && $to !== $host && !str_ends_with($to, '.' . $host) && !str_ends_with($host, '.' . $to)) {
+    foreach (DIAG_REDIRECT_MARKS as $m) {
+      if (str_contains(strtolower($r['redirect']), $m)) {
+        return true;
+      }
+    }
+  }
+  // настоящие сайты длиннее; на длинной странице такие слова встречаются и в обычном тексте
+  if ($r['ok'] && $r['size'] > 0 && $r['size'] < 8192) {
+    $body = (string)@file_get_contents($bodyFile, false, null, 0, 8192);
+    // в сборке PHP для роутера нет ни iconv, ни mbstring
+    if (function_exists('iconv') && preg_match('/charset=["\']?windows-1251/i', $body)) {
+      $body = (string)@iconv('windows-1251', 'utf-8//IGNORE', $body);
+    }
+    static $lower = null;
+    $lower ??= array_combine(preg_split('//u', 'АБВГДЕЁЖЗИЙКЛМНОПРСТУФХЦЧШЩЪЫЬЭЮЯ', -1, PREG_SPLIT_NO_EMPTY), preg_split('//u', 'абвгдеёжзийклмнопрстуфхцчшщъыьэюя', -1, PREG_SPLIT_NO_EMPTY));
+    $body = strtolower(strtr($body, $lower));
+    foreach (DIAG_PAGE_MARKS as $m) {
+      if (str_contains($body, $m)) {
+        return true;
+      }
+    }
+  }
+  return false;
+}
+
+// Ступень 3: запрос сайта мимо nfqws2, с привязкой к адресу. Маленькая страница дополнительно проверяется
+// на заморозку объёмом, как в проверке сайта.
+function diagDirect(string $host, string $ip): array
+{
+  $body = TEST_DIR . '/diag.body';
+  @unlink($body);
+  $pin = '--resolve ' . escapeshellarg("$host:443:$ip");
+  $r = diagCurl($pin . ' -r 0-' . (VOLUME_BYTES - 1) . ' -o ' . escapeshellarg($body) . ' ' . escapeshellarg("https://$host/"), 8);
+  $r['ip'] = $ip;
+  $r['isp_page'] = diagIspPage($host, $r, $body);
+  @unlink($body);
+  if ($r['ok'] && !$r['isp_page'] && $r['size'] < VOLUME_SMALL) {
+    $blob = TEST_DIR . '/volume.bin';
+    if (!is_file($blob) || filesize($blob) !== VOLUME_BYTES) {
+      file_put_contents($blob, random_bytes(VOLUME_BYTES));
+    }
+    $v = diagCurl($pin . ' -H "Expect:" -H "Content-Type: application/octet-stream" --data-binary @' . escapeshellarg($blob)
+      . ' -o /dev/null ' . escapeshellarg("https://$host/?t=" . mt_rand()), 8);
+    if ($v['rc'] === 28 && $v['tls']) {
+      $r['ok'] = false;
+      $r['kind'] = 'freeze';
+    }
+  }
+  return $r;
+}
+
+// Ступень 4: по имени режут или по адресу. Две пробы:
+//  — адрес сайта с чужим (разрешённым) именем: если сервер ответил хоть чем-то, путь до адреса открыт;
+//  — чужой адрес с именем сайта: если соединение рвётся и там, режут само имя.
+function diagSni(string $host, string $ip): array
+{
+  $res = ['foreign_name' => null, 'foreign_addr' => null, 'by_name' => false];
+  if ($host === DIAG_SNI) {
+    return $res;
+  }
+  $a = diagCurl('--connect-to ' . escapeshellarg(DIAG_SNI . ":443:$ip:443") . ' -o /dev/null ' . escapeshellarg('https://' . DIAG_SNI . '/'), 6);
+  // TLS-alert прислал сам сервер — значит, наш запрос до него дошёл
+  $reached = $a['ok'] || $a['tls'] || $a['kind'] === 'alert';
+  $res['foreign_name'] = ['reached' => $reached, 'kind' => $a['kind']];
+  $other = array_values(array_filter(gethostbynamel(DIAG_SNI) ?: [], 'isIp4'))[0] ?? null;
+  if ($other) {
+    $b = diagCurl('--connect-to ' . escapeshellarg("$host:443:$other:443") . ' -o /dev/null ' . escapeshellarg("https://$host/"), 6);
+    $blocked = in_array($b['kind'], ['reset', 'timeout', 'tls', 'empty'], true);
+    $res['foreign_addr'] = ['blocked' => $blocked, 'kind' => $b['kind']];
+  }
+  $res['by_name'] = $reached || !empty($res['foreign_addr']['blocked']);
+  return $res;
+}
+
+// Ступень 5: открытый HTTP на 80-м порту — заглушка провайдера и «закрыт весь адрес или только HTTPS»
+function diagHttp(string $host, string $ip): array
+{
+  $body = TEST_DIR . '/diag.body';
+  @unlink($body);
+  $r = diagCurl('--resolve ' . escapeshellarg("$host:80:$ip") . ' -r 0-8191 -o ' . escapeshellarg($body) . ' ' . escapeshellarg("http://$host/"), 6);
+  $r['isp_page'] = diagIspPage($host, $r, $body);
+  @unlink($body);
+  return $r;
+}
+
+// Ступень 6: как сайт открывается сейчас — через основной nfqws2 и с обычным DNS роутера
+function diagVia(string $host): array
+{
+  $r = probe($host);
+  $ips = gethostbynamel($host) ?: [];
+  $route = matchRoute(currentProfiles(), $host, $ips, 'tcp', 443, 'tls', new ListCache());
+  return $r + ['profile' => $route['profile'] ?? null, 'running' => findPid() !== null];
+}
+
+// Сводит результаты ступеней в диагноз. pick — имеет ли смысл подбирать стратегию.
+function diagVerdict(array $r): array
+{
+  $dns = $r['dns'] ?? [];
+  $direct = $r['direct'] ?? null;
+  $via = $r['via'] ?? null;
+  $tcpOk = (bool)array_filter($r['tcp'] ?? [], fn($x) => !empty($x['ok']));
+  $v = fn(string $code, bool $pick = false) => ['code' => $code, 'pick' => $pick, 'profile' => $via['profile'] ?? null];
+  $status = $dns['status'] ?? '';
+  if ($status === 'nxdomain') {
+    return $v('nxdomain');
+  }
+  if ($status === 'podkop') {
+    return $v(!empty($via['ok']) ? 'podkop_ok' : 'podkop_fail');
+  }
+  // роутер получил не тот адрес: по своему не открывается, по адресу из защищённого DNS — открывается
+  if (in_array($status, ['fake', 'no_system'], true) || ($status === 'differs' && !empty($r['alt_ok']))) {
+    return $v($status === 'no_system' ? 'dns_noanswer' : 'dns_fake');
+  }
+  if ($direct && !empty($direct['isp_page']) || !empty($r['http']['isp_page'])) {
+    return $v(!empty($via['ok']) ? 'fixed' : 'isp_page', empty($via['ok']));
+  }
+  if ($direct && !empty($direct['ok'])) {
+    return $v(!$via || !empty($via['ok']) ? 'ok' : 'broken_by_nfqws');
+  }
+  if (!empty($via['ok'])) {
+    return $v('fixed');
+  }
+  if (($direct['kind'] ?? '') === 'freeze') {
+    return $v('freeze');
+  }
+  if (!$tcpOk) {
+    return $v(!empty($r['http']['ok']) ? 'port_block' : 'ip_block');
+  }
+  if (!empty($r['sni']['by_name'])) {
+    return $v('sni_block', true);
+  }
+  if (($direct['kind'] ?? '') === 'alert') {
+    return $v('site_error');
+  }
+  if (in_array($direct['kind'] ?? '', ['reset', 'timeout', 'tls', 'stall', 'empty'], true)) {
+    return $v('tls_block', true);
+  }
+  return $v('unknown', true);
 }
 
 // ================= обновление интерфейса =================
@@ -3245,6 +3623,35 @@ switch ($cmd) {
     }
     respond(probe($host));
 
+  case 'diag':
+    $host = cleanHost($str('host'));
+    if (!validHost($host) || isIp($host)) {
+      fail('Введите имя сайта, например rutracker.org');
+    }
+    $step = $str('step');
+    $ip = is_string($in['ip'] ?? null) ? $in['ip'] : '';
+    if (in_array($step, ['direct', 'sni', 'http'], true) && !isIp4($ip)) {
+      fail('нет адреса сайта');
+    }
+    switch ($step) {
+      case 'dns':
+        respond(['host' => $host] + diagDns($host));
+      case 'tcp':
+        $ips = array_slice(array_values(array_filter(is_array($in['ips'] ?? null) ? $in['ips'] : [], fn($x) => is_string($x) && isIp4($x))), 0, 3);
+        respond(['results' => diagTcp($ips)]);
+      case 'direct':
+        respond(diagBypass(fn() => diagDirect($host, $ip)));
+      case 'sni':
+        respond(diagBypass(fn() => diagSni($host, $ip)));
+      case 'http':
+        respond(diagBypass(fn() => diagHttp($host, $ip)));
+      case 'via':
+        respond(diagVia($host));
+      case 'verdict':
+        respond(diagVerdict(is_array($in['r'] ?? null) ? $in['r'] : []));
+    }
+    fail('неизвестная ступень');
+
   case 'list_get':
     $path = editablePath($str('name'));
     if (!is_file($path)) {
@@ -3558,6 +3965,15 @@ switch ($cmd) {
     }
     if (testRunning()) {
       fail('Тест уже идёт — дождитесь окончания или остановите его');
+    }
+    @mkdir(TEST_DIR, 0777, true);
+    $diagLock = fopen(TEST_DIR . '/diag.lock', 'c');
+    if ($diagLock && !flock($diagLock, LOCK_EX | LOCK_NB)) {
+      fail('Сейчас идёт диагноз сайта — он использует те же проверочные правила. Повторите через несколько секунд.');
+    }
+    if ($diagLock) {
+      flock($diagLock, LOCK_UN);
+      fclose($diagLock);
     }
     $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : ['config', 'std'], ['config', 'std']));
     @mkdir(TEST_DIR, 0777, true);

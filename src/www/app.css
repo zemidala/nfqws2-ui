@@ -652,3 +652,13 @@ a.over-row:hover { background: var(--soft); }
 .lhead { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
 .lhead > .row:first-child { flex: 1 1 100%; }
 .lhead > .row:empty { display: none; }
+
+/* диагноз блокировки: ступени проверки */
+.dsteps { display: grid; }
+.dstep { display: grid; grid-template-columns: 22px 210px minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 0; border-top: 1px solid var(--line); }
+.dstep:first-child { border-top: 0; }
+.dstep > :first-child { align-self: center; justify-self: center; }
+.dstep.skip b { color: var(--faint); font-weight: 500; }
+@media (max-width: 759px) { .dstep { grid-template-columns: 22px minmax(0, 1fr); } .dstep > :last-child { grid-column: 2; } }
+.tag.new { border-color: var(--accent); color: var(--accent); }
+.subtabs a { display: inline-flex; align-items: center; gap: 6px; }

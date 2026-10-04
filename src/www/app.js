@@ -303,8 +303,9 @@ const PAGES = {
   backup: ['#/settings/backup', 'Резервные копии'], hist: ['#/settings/hist', 'История изменений'], log: ['#/log', 'Журнал'],
   look: ['#/settings/look', 'Оформление'], about: ['#/settings/about', 'О программе'],
   // ещё не сделаны: в меню видны, но заблокированы и помечены «скоро»
-  diag: [null, 'Диагноз блокировки'], phist: [null, 'История подборов'], auto: [null, 'Автоподбор'], asn: [null, 'Список по ASN'], report: [null, 'Отчёт для помощи'],
+  diag: ['#/diag', 'Диагноз блокировки'], phist: [null, 'История подборов'], auto: [null, 'Автоподбор'], asn: [null, 'Список по ASN'], report: [null, 'Отчёт для помощи'],
 };
+const NEW_PAGES = ['diag'];   // только что появились — помечаются в меню
 const SOON_HINT = 'Ещё в разработке — появится в одной из следующих версий';
 const SYS_PAGES = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'look', 'about'];
 const SYS_NAV = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
@@ -319,7 +320,7 @@ const TOP_TABS = {
     ['prof', 'Профили', 'layers', ['prof']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
 };
 // Нижняя панель телефона — одна для всех компоновок; остальное — в меню
-const BOTTOM = [['over', 'Обзор', 'home', ['over']], ['pick', 'Подбор', 'tests', ['pick', 'trace', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'tg']], ['prof', 'Профили', 'layers', ['prof']]];
+const BOTTOM = [['over', 'Обзор', 'home', ['over']], ['pick', 'Подбор', 'tests', ['diag', 'pick', 'trace', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'tg']], ['prof', 'Профили', 'layers', ['prof']]];
 
 const layout = () => document.documentElement.dataset.layout || 'menu';
 // Колонка обзора слева — только в компоновке «Вкладки» на широком экране
@@ -337,6 +338,7 @@ function pageOf(r = parseRoute()) {
   if (r.tab === 'sites') return 'lists';
   if (r.tab === 'log') return 'log';
   if (r.tab === 'site') return 'site';
+  if (r.tab === 'diag') return 'diag';
   if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace' }[r.arg] || 'pick';
   if (r.tab === 'settings') return SYS_PAGES.includes(r.arg) ? r.arg : ['readme', 'changelog'].includes(r.arg) ? 'about' : 'prof';
   return 'over';
@@ -368,7 +370,7 @@ function menuNav() {
     head ? h('div', { class: 'nav-h', text: head }) : null,
     ids.map((id) => PAGES[id][0]
       ? h('a', { href: PAGES[id][0], 'data-pages': id === 'pick' ? 'pick site' : id, class: id === cur || (id === 'pick' && cur === 'site') ? 'on' : null },
-        h('span', { class: 'nm', text: PAGES[id][1] }), pageTail(id))
+        h('span', { class: 'nm', text: PAGES[id][1] }), NEW_PAGES.includes(id) ? h('span', { class: 'tag new', text: 'новое' }) : pageTail(id))
       : soonItem(id))]));
 }
 
@@ -389,7 +391,7 @@ function subTabs(page) {
   const tab = TOP_TABS[layout()].find((t) => t[3].includes(page));
   const ids = tab ? tab[3].filter((id) => id !== 'site') : [];
   if (ids.length < 2 || page === 'site') return null;
-  return h('nav', { class: 'subtabs', 'aria-label': tab[1] }, ids.map((id) => PAGES[id][0] ? h('a', { href: PAGES[id][0], class: id === page ? 'on' : null, text: PAGES[id][1] }) : soonItem(id)));
+  return h('nav', { class: 'subtabs', 'aria-label': tab[1] }, ids.map((id) => PAGES[id][0] ? h('a', { href: PAGES[id][0], class: id === page ? 'on' : null }, PAGES[id][1], NEW_PAGES.includes(id) ? h('span', { class: 'tag new', text: 'новое' }) : null) : soonItem(id)));
 }
 
 function renderShell() {
@@ -634,7 +636,7 @@ async function route(refresh = false) {
   }
   if (seq !== routeSeq) return;
   if (r.tab !== 'settings' || r.arg !== 'raw') setFocus(false);
-  const views = { '': viewOverview, sites: viewSites, tests: viewTests, settings: viewSettings, log: viewLog, site: viewSite };
+  const views = { '': viewOverview, sites: viewSites, tests: viewTests, settings: viewSettings, log: viewLog, site: viewSite, diag: viewDiag };
   main.replaceChildren(subTabs(pageOf(r)));
   placeSide();
   try {
@@ -841,7 +843,8 @@ function createCheck() {
       h('div', {}, h('h3', { text: res.host }), h('div', { class: 'sm muted', text: res.ips.length ? 'IP: ' + res.ips.slice(0, 3).join(', ') + (res.ips.length > 3 ? ` +${res.ips.length - 3}` : '') : 'IP не определился' })),
       res.podkop?.proxy ? notice('info', 'Идёт через podkop (прокси на VPS)', 'Для клиентов сети этот сайт уходит в туннель podkop, nfqws2 видит только соединение до сервера прокси. Проверка ниже — с самого роутера, мимо podkop.') : null,
       probeBox, routesBlock(res), actionsBlock(res),
-      h('div', { class: 'row' }, btn('Подобрать стратегию', () => go(layout() === 'site' ? `#/site/${encodeURIComponent(res.host)}/pick` : '#/tests?host=' + encodeURIComponent(res.host)), 'small', 'tests'),
+      h('div', { class: 'row' }, btn('Подробный диагноз', () => go(diagHref(res.host)), 'small', 'search', { title: 'По шагам: DNS, блокировка по имени или по адресу, заморозка — и поможет ли подбор' }),
+        btn('Подобрать стратегию', () => go(pickHref(res.host)), 'small', 'tests'),
         h('span', { class: 'grow' }), btn('Свернуть', () => { collapse(); input.value = ''; }, 'small ghost', 'up')));
     shown = res.host;
     const pr = await api('probe', { host: res.host }).catch((e) => ({ ok: false, reason: e.message }));
@@ -1020,18 +1023,171 @@ function overviewExtra() {
   return out;
 }
 
+// ============ Диагноз блокировки ============
+// Шесть ступеней на роутере (api: diag): имя → соединение → запрос мимо nfqws2 → по имени или по адресу →
+// открытый HTTP → запрос через nfqws2. Итог — один диагноз и что с ним делать.
+
+const pickHref = (host) => layout() === 'site' ? `#/site/${encodeURIComponent(host)}/pick` : '#/tests?host=' + encodeURIComponent(host);
+const diagHref = (host) => layout() === 'site' ? `#/site/${encodeURIComponent(host)}/diag` : '#/diag?host=' + encodeURIComponent(host);
+
+const DIAG_STEPS = [['dns', 'Имя сайта (DNS)'], ['tcp', 'Соединение (TCP 443)'], ['direct', 'Запрос мимо nfqws2'],
+  ['sni', 'По имени или по адресу'], ['http', 'Открытый HTTP (порт 80)'], ['via', 'Как открывается сейчас']];
+const DIAG_KIND = { timeout: 'нет ответа при установке шифрования', reset: 'соединение сброшено', tls: 'обрыв при установке шифрования', alert: 'сервер отказал в соединении',
+  stall: 'шифрование установлено, но ответа нет', freeze: 'загрузка замирает на объёме (16–20 КБ)', connect: 'не удалось подключиться', empty: 'пустой ответ', dns: 'имя не разрешается', other: 'ошибка соединения' };
+
+// Диагноз: уровень плашки, заголовок, пояснение
+function diagVerdictText(R) {
+  const v = R.verdict;
+  const p = v.profile ? `профиль #${v.profile}` : null;
+  const how = R.direct && !R.direct.ok ? DIAG_KIND[R.direct.kind] || 'не открывается' : 'не открывается';
+  return {
+    ok: ['ok', 'Сайт открывается, блокировки нет', p ? `Открывается и мимо nfqws2, и через него (${p}).` : 'nfqws2 его не обрабатывает — и не нужно.'],
+    fixed: ['ok', 'Заблокирован, но nfqws2 справляется', `Мимо nfqws2: ${how}. Через ${p || 'nfqws2'} сайт открывается — менять ничего не нужно.`],
+    broken_by_nfqws: ['warn', 'Сайт не заблокирован — его ломает nfqws2', `Мимо nfqws2 сайт открывается, а через ${p || 'nfqws2'} — нет. Исключите сайт из этого профиля или подберите для него другую стратегию.`],
+    nxdomain: ['warn', 'Имя сайта не находится', 'Такого имени нет ни у роутера, ни у защищённого DNS. Проверьте написание — подбор стратегии тут не поможет.'],
+    dns_noanswer: ['bad', 'Роутер не получает адрес сайта', 'Защищённый DNS адрес знает, а резолвер роутера — нет. Дело в DNS, а не в nfqws2: стратегии и списки тут не помогут.'],
+    dns_fake: ['bad', 'Роутер получает не тот адрес (подмена DNS)', 'По адресу от резолвера роутера сайт не открывается, а по адресу от защищённого DNS — открывается. Дело в DNS, а не в nfqws2.'],
+    podkop_ok: ['info', 'Сайт идёт через podkop и открывается', 'Соединение уходит в туннель, nfqws2 его не видит.' + (R.direct ? (R.direct.ok ? ' Напрямую, мимо туннеля, сайт тоже открывается.' : ' Напрямую, мимо туннеля, сайт не открывается — туннель ему нужен.') : '')],
+    podkop_fail: ['bad', 'Сайт идёт через podkop и не открывается', 'Соединение уходит в туннель, nfqws2 его не видит. Проблема на стороне туннеля или самого сайта.'],
+    sni_block: ['bad', 'Блокировка по имени сайта (DPI)', 'Это тот случай, с которым справляется nfqws2. ' + (p ? `Нынешний ${p} не помогает — нужна другая стратегия.` : 'Сейчас nfqws2 этот сайт не обрабатывает.')],
+    tls_block: ['bad', 'Соединение рвётся при установке шифрования', 'Похоже на блокировку DPI, но подтвердить, что режут именно по имени, не удалось. Подбор стратегии стоит попробовать.'],
+    ip_block: ['bad', 'Заблокирован адрес (по IP)', 'Пакеты до сервера не доходят вовсе. nfqws2 меняет пакеты, а не маршрут, поэтому подбор стратегии не поможет — нужен туннель (podkop, VPN).'],
+    port_block: ['bad', 'Не отвечает порт 443', 'Открытый HTTP на этом адресе отвечает, а HTTPS — нет. Стратегии nfqws2 это не исправят — нужен туннель (podkop, VPN).'],
+    freeze: ['bad', 'Ограничение «16–20 КБ»', FREEZE_HINT],
+    isp_page: ['bad', 'Вместо сайта — страница провайдера о блокировке', 'Провайдер подменяет ответ сайта. Подбор стратегии может помочь.'],
+    site_error: ['warn', 'Сервер сайта отказал в соединении', 'Отказ пришёл от самого сервера, а не от провайдера — похоже на неполадку сайта.'],
+    unknown: ['warn', 'Причину определить не удалось', 'Сайт не открывается, но ни под один известный вид блокировки это не подходит. Можно попробовать подбор стратегии.'],
+  }[v.code] || ['warn', 'Причину определить не удалось', ''];
+}
+
+async function viewDiag(main, r, bare = false) {
+  const KEY = 'nfqws-ui-recent';
+  const recentGet = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
+  const input = h('input', { class: 'input mono grow', id: 'd-host', value: r.q.get('host') || '', placeholder: 'rutracker.org', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', inputmode: 'url', enterkeyhint: 'go', 'aria-label': 'Сайт для диагноза' });
+  const verdictBox = h('div', {});
+  const rows = {};
+  const stepsEl = h('div', { class: 'dsteps' }, DIAG_STEPS.map(([id, title]) => (rows[id] = h('div', { class: 'dstep' }, h('span', { class: 'lvl' }), h('b', { text: title }), h('span', { class: 'sm muted' })))));
+  const panelEl = panel('Что проверено', null, stepsEl);
+  panelEl.hidden = true;
+  const ICON = { ok: () => levelIcon('ok'), bad: () => levelIcon('error'), warn: () => levelIcon('warning'), info: () => levelIcon('info'), run: () => h('span', { class: 'spin' }), skip: () => h('span', { class: 'lvl faint', text: '–' }) };
+  const set = (id, state, text) => { rows[id].firstChild.replaceWith(ICON[state]()); rows[id].lastChild.textContent = text; rows[id].classList.toggle('skip', state === 'skip'); };
+  let seq = 0;
+
+  async function run(raw) {
+    const my = ++seq;
+    let host = raw.trim().replace(/^[a-z]+:\/\//i, '').replace(/[/?#].*$/, '');
+    if (!host) return;
+    input.value = host;
+    panelEl.hidden = false;
+    verdictBox.replaceChildren();
+    DIAG_STEPS.forEach(([id]) => set(id, 'skip', 'ожидает'));
+    const R = {};
+    const step = async (id, data) => {
+      set(id, 'run', 'проверяю…');
+      const res = await api('diag', { step: id, host, ...data });
+      if (my !== seq || !stepsEl.isConnected) throw new Error('cancelled');
+      return res;
+    };
+    try {
+      // 1. имя
+      const d = R.dns = await step('dns');
+      host = d.host;
+      const names = d.doh.filter((x) => x.ok).map((x) => x.name).join(' и ') || 'защищённый DNS';
+      const sys = d.system.slice(0, 3).join(', ');
+      const ref = d.ref.slice(0, 3).join(', ');
+      set('dns', { ok: 'ok', podkop: 'info', differs: 'warn', unverified: 'warn' }[d.status] || 'bad', {
+        ok: `Адрес ${sys} — тот же, что отвечает защищённый DNS (${names}). Подмены нет.`,
+        nxdomain: d.doh_answered ? 'Такого имени нет — ни у роутера, ни у защищённого DNS.' : 'Роутер адрес не нашёл, а защищённый DNS недоступен — сверить не с чем.',
+        no_system: `Роутер адрес не получил, а защищённый DNS отвечает: ${ref}.`,
+        podkop: `Роутер отдаёт служебный адрес podkop (${sys}): сайт уходит в туннель. Настоящий адрес — ${ref}.`,
+        fake: `Роутер получил ${sys} — это не адрес сайта. Защищённый DNS отвечает: ${ref}.`,
+        differs: `Роутер получил ${sys}, защищённый DNS — ${ref}. У больших сетей ответы различаются; решит запрос к сайту.`,
+        unverified: `Адрес ${sys}. Сверить не с чем: защищённый DNS ${d.doh_answered ? 'такого имени не знает' : 'недоступен'}.`,
+      }[d.status]);
+      if (d.status !== 'nxdomain') {
+        // 2. соединение
+        const tcp = R.tcp = (await step('tcp', { ips: d.ips })).results;
+        const up = tcp.filter((x) => x.ok);
+        const ip = up[0]?.ip;
+        set('tcp', !up.length ? 'bad' : up.length < tcp.length ? 'warn' : 'ok', !up.length ? `Нет ответа ни от одного из ${plural(tcp.length, 'адреса', 'адресов', 'адресов')} — пакеты не доходят.`
+          : `Установлено за ${up[0].ms} мс` + (up.length < tcp.length ? `; не отвечают: ${tcp.filter((x) => !x.ok).map((x) => x.ip).join(', ')}.` : ' — адрес не заблокирован.'));
+        // 3. запрос мимо nfqws2
+        if (ip) {
+          const dr = R.direct = await step('direct', { ip });
+          if (!dr.ok && d.alt.length) {
+            const alt = await step('direct', { ip: d.alt[0] });
+            if (alt.ok) R.alt_ok = true;
+          }
+          set('direct', dr.isp_page ? 'bad' : dr.ok ? 'ok' : 'bad', dr.isp_page ? 'Вместо сайта пришла страница провайдера о блокировке.'
+            : dr.ok ? `Сайт отвечает: HTTP ${dr.code}, ${dr.ms} мс.` : `Не открывается: ${DIAG_KIND[dr.kind] || dr.error}.` + (R.alt_ok ? ' По адресу от защищённого DNS — открывается.' : ''));
+          // 4. по имени или по адресу
+          if (!dr.ok && !dr.isp_page && ['timeout', 'reset', 'tls', 'alert', 'stall', 'empty'].includes(dr.kind) && !R.alt_ok) {
+            const s = R.sni = await step('sni', { ip });
+            set('sni', s.by_name ? 'ok' : 'warn', s.foreign_addr?.blocked ? 'Имя сайта рвётся даже на постороннем адресе — режут именно по имени.'
+              : s.foreign_name?.reached ? 'С именем ya.ru этот же адрес отвечает — значит, режут именно по имени сайта.'
+                : 'Не показательно: с чужим именем этот адрес тоже не отвечает.');
+          } else set('sni', 'skip', dr.ok ? 'Не нужно: сайт отвечает.' : 'Не проверялось.');
+        } else {
+          set('direct', 'skip', 'Не проверялось: соединения нет.');
+          set('sni', 'skip', 'Не проверялось: соединения нет.');
+        }
+        // 5. открытый HTTP — когда HTTPS не отвечает
+        if (!ip || (R.direct && !R.direct.ok && R.direct.kind !== 'freeze')) {
+          const ht = R.http = await step('http', { ip: ip || d.ips[0] });
+          set('http', ht.isp_page ? 'bad' : ht.ok ? 'ok' : 'warn', ht.isp_page ? 'Отвечает страница провайдера о блокировке.'
+            : ht.ok ? `Отвечает: HTTP ${ht.code}` + (ht.redirect ? ` → ${ht.redirect.slice(0, 60)}` : '') + '.' : `Тоже не отвечает (${ht.kind === 'timeout' || ht.kind === 'stall' ? 'нет ответа' : DIAG_KIND[ht.kind] || 'ошибка'}).`);
+        } else set('http', 'skip', 'Не нужно.');
+        // 6. как сейчас
+        const via = R.via = await step('via');
+        const where = d.podkop ? 'через podkop' : via.profile ? `через профиль #${via.profile}` : 'nfqws2 его не обрабатывает';
+        set('via', via.ok ? 'ok' : 'bad', (via.ok ? `Открывается: HTTP ${via.code}, ${via.ms} мс — ${where}.` : `Не открывается: ${via.reason} — ${where}.`) + (via.running ? '' : ' nfqws2 сейчас остановлен.'));
+      } else {
+        DIAG_STEPS.slice(1).forEach(([id]) => set(id, 'skip', 'Не проверялось.'));
+      }
+      R.verdict = await api('diag', { step: 'verdict', host, r: R });
+      if (my !== seq) return;
+      const [lvl, title, text] = diagVerdictText(R);
+      const prof = R.verdict.profile;
+      verdictBox.replaceChildren(notice(lvl, title, text, h('div', { class: 'notice-actions' },
+        R.verdict.pick ? btn('Подобрать стратегию', () => go(pickHref(host)), 'small primary', 'tests') : null,
+        prof && ['broken_by_nfqws', 'sni_block', 'tls_block', 'fixed'].includes(R.verdict.code) ? h('a', { class: 'btn small', href: `#/settings/p${prof}`, text: `Профиль #${prof}` }) : null,
+        btn('Ещё раз', () => run(host), 'small ghost', 'refresh'))));
+      try { localStorage.setItem(KEY, JSON.stringify([host, ...recentGet().filter((x) => x !== host)].slice(0, 8))); } catch { /* нет хранилища */ }
+    } catch (e) {
+      if (e.message === 'cancelled' || my !== seq) return;
+      DIAG_STEPS.forEach(([id]) => { if (rows[id].querySelector('.spin')) set(id, 'bad', 'не удалось проверить'); });
+      verdictBox.replaceChildren(notice('bad', 'Диагноз не завершён', e.message));
+    }
+  }
+
+  const start = () => {
+    const v = input.value.trim();
+    if (!v) return;
+    if (bare || r.q.get('host') === v) run(v); else go(diagHref(v.replace(/^[a-z]+:\/\//i, '').replace(/[/?#].*$/, '')));
+  };
+  main.append(
+    bare ? null : h('div', { class: 'vh' }, h('h1', { text: 'Диагноз блокировки' })),
+    panel(null, null,
+      h('form', { class: 'row', onsubmit: (e) => { e.preventDefault(); start(); } }, input, h('button', { class: 'btn primary', type: 'submit' }, 'Проверить', icon('arrow'))),
+      bare ? null : h('div', { class: 'recent' }, recentGet().map((x) => h('button', { class: 'chip', type: 'button', text: x, onclick: () => go(diagHref(x)) }))),
+      h('p', { class: 'sm muted', text: 'Роутер по шагам выясняет, почему сайт не открывается: DNS, блокировка по имени или по адресу, заморозка — и поможет ли подбор стратегии. Занимает 10–30 секунд. Ваш трафик и основной nfqws2 не затрагиваются.' })),
+    verdictBox, panelEl);
+  if (r.q.get('host')) run(r.q.get('host'));
+}
+
 // ============ Карточка сайта: проверка, подбор и трассировка одного сайта (компоновка «Вокруг сайта») ============
 
 async function viewSite(main, r) {
   const host = r.arg;
   if (!host) { go(PAGES.mon[0]); return; }
-  const sub = ['pick', 'trace'].includes(r.sub) ? r.sub : 'check';
+  const sub = ['diag', 'pick', 'trace'].includes(r.sub) ? r.sub : 'check';
   const href = (s) => '#/site/' + encodeURIComponent(host) + (s === 'check' ? '' : '/' + s);
   main.append(
     h('div', { class: 'vh' }, h('a', { class: 'btn ghost small', href: PAGES.mon[0] }, icon('back'), 'Сайты'), h('h1', { class: 'site-name', text: host })),
     h('nav', { class: 'subtabs', 'aria-label': 'Сайт' },
-      [['check', 'Проверка'], ['pick', 'Подбор стратегии'], ['trace', 'Трассировка']].map(([s, t]) => h('a', { href: href(s), class: s === sub ? 'on' : null, text: t })),
-      soonItem('diag'), soonItem('phist')));
+      [['check', 'Проверка'], ['diag', 'Диагноз'], ['pick', 'Подбор стратегии'], ['trace', 'Трассировка']].map(([s, t]) => h('a', { href: href(s), class: s === sub ? 'on' : null, text: t })),
+      soonItem('phist')));
+  if (sub === 'diag') return viewDiag(main, { q: new URLSearchParams({ host }) }, true);
   if (sub !== 'check') return viewTests(main, { arg: sub, q: new URLSearchParams({ host }) }, true);
   if (overviewCol()) main.append(h('p', { class: 'muted', text: 'Результат проверки — в колонке слева.' }));
   else main.append(S.check.el);
@@ -2939,7 +3095,7 @@ async function viewTests(main, r, bare = false) {
         h('span', { class: 'sm muted num', text: s.total ? `${s.done} из ${s.total}` : 'запуск…' }), btn('Остановить', () => api('test_stop'), 'small danger', 'stop')),
       s.total ? h('div', { class: 'progress', style: 'height:6px;border-radius:99px;background:var(--soft);overflow:hidden' }, h('i', { style: `display:block;height:100%;width:${Math.round(s.done / s.total * 100)}%;background:var(--accent)` })) : null,
       s.current ? h('p', { class: 'sm muted', text: 'Сейчас: ' + s.current }) : null) : null;
-    if (s.state === 'error') { out.replaceChildren(notice('bad', 'Тест не удался', s.error || '')); return; }
+    if (s.state === 'error') { out.replaceChildren(notice('bad', s.title || 'Тест не удался', s.error || '', s.host && s.title ? btn('Подробный диагноз', () => go(diagHref(s.host)), 'small', 'search') : null)); return; }
     if (s.type === 'trace') { out.replaceChildren(head, s.state === 'done' ? traceResult(s) : null); return; }
     out.replaceChildren(head, s.results?.length || s.baseline ? pickResult(s, running) : null);
   }
