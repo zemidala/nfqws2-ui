@@ -3891,6 +3891,17 @@ const BUILD = (() => { try { return new URL(document.currentScript.src).searchPa
 // Браузер может держать в кеше старую страницу. Сверяемся с роутером: если там уже другая сборка —
 // предлагаем перезагрузить (при открытии и при возврате на вкладку, не чаще раза в 5 минут).
 let freshChecked = 0;
+// Один раз после обновления до 1.5: разделы переехали из вкладок сверху в меню. Тем, кто компоновку уже выбрал, не показываем.
+function layoutNote() {
+  let seen = true;
+  try { seen = !!localStorage.getItem('nfqws-ui-layout-note') || 'layout' in JSON.parse(localStorage.getItem('nfqws-ui-look') || '{}'); } catch { /* нет хранилища */ }
+  if (seen || document.getElementById('layout-note')) return;
+  const done = () => { try { localStorage.setItem('nfqws-ui-layout-note', '1'); } catch { /* нет хранилища */ } document.getElementById('layout-note')?.remove(); };
+  document.getElementById('upd-banner')?.before(h('div', { id: 'layout-note', class: 'banner info' }, h('div', { class: 'banner-in' },
+    h('span', { text: 'Вид изменился: разделы теперь в меню — слева на широком экране, кнопка «Меню» на узком. Привычные вкладки сверху можно вернуть в «Оформлении».' }),
+    btn('Оформление', () => { done(); go(PAGES.look[0]); }, 'small primary'), btn('Понятно', done, 'small ghost'))));
+}
+
 async function checkFresh() {
   if (!BUILD || Date.now() - freshChecked < 300000) return;
   freshChecked = Date.now();
@@ -4026,6 +4037,7 @@ async function start() {
   renderShell();
   SIDE.root = null;
   route(true);
+  layoutNote();
   setTimeout(autoUpdateCheck, 3000);
   setTimeout(checkFresh, 1500);
 }
