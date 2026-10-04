@@ -3259,8 +3259,16 @@ function autoApply(string $host, array $steps, string $who): array
   }
   if ($why !== null) {
     writeWithBackup(CONF_FILE, $old, "откат ($who, $host): $why");
-    exec(INIT_SCRIPT . ' restart 2>&1');
-    return $done(false, 'rolled', "Применено и откачено: $why. Конфиг возвращён как был.");
+    // после отката сервис обязан работать: ждём запуска, при неудаче пробуем ещё раз
+    $up = false;
+    for ($try = 0; $try < 2 && !$up; $try++) {
+      exec(INIT_SCRIPT . ' restart 2>&1');
+      for ($i = 0; $i < 10 && !($up = findPid() !== null); $i++) {
+        sleep(1);
+      }
+    }
+    return $done(false, 'rolled', "Применено и откачено: $why. Конфиг возвращён как был"
+      . ($up ? ', nfqws2 работает.' : ', но nfqws2 после отката не запустился — проверьте сервис.'));
   }
   // отметка в истории подборов и свежая запись в мониторинге
   $items = picksLoad();
