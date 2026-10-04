@@ -1321,7 +1321,7 @@ async function viewSites(main, r) {
   if (r.arg === '~dups') {
     const nav = h('nav', { class: 'nav lnav', 'aria-label': 'Списки' });
     const content = h('div', { class: 'stack', style: 'gap:14px' });
-    main.append(h('div', { class: 'split' }, nav, content));
+    main.append(h('div', { class: 'vh' }, h('h1', { text: 'Списки' })), h('div', { class: 'split' }, nav, content));
     drawListNav(nav, '~dups');
     return viewDups(content, r);
   }
@@ -1329,7 +1329,7 @@ async function viewSites(main, r) {
   const name = r.arg || (lists.find((l) => l.name === 'user.list') ? 'user.list' : lists[0]?.name);
   const nav = h('nav', { class: 'nav lnav', 'aria-label': 'Списки' });
   const content = h('div', { class: 'stack', style: 'gap:14px' });
-  main.append(h('div', { class: 'split' }, nav, content));
+  main.append(h('div', { class: 'vh' }, h('h1', { text: 'Списки' })), h('div', { class: 'split' }, nav, content));
   drawListNav(nav, name);
   if (name) await drawList(content, name);
 }
@@ -1340,19 +1340,22 @@ function drawListNav(nav, current) {
   const unused = lists.filter((l) => !l.used.length);
   const row = (l) => {
     const pr = l.problems || {};
-    return h('a', { href: '#/sites/' + encodeURIComponent(l.name), class: l.name === current ? 'on' : null, title: l.name },
-      h('span', { class: 'nm', text: listName(l.name) }),
+    const friendly = LIST_NAMES[l.name] || (l.kind === 'ip' ? 'адреса' : 'сайты');
+    return h('a', { href: '#/sites/' + encodeURIComponent(l.name), class: 'lrow' + (l.name === current ? ' on' : ''), title: l.name },
+      h('span', { class: 'nm' }, h('b', { class: 'mono', text: l.name }), h('span', { class: 'sm muted ellipsis', text: friendly })),
       h('span', { class: 'tail num' }, pr.error ? h('span', { class: 'errdot' }) : pr.warning ? h('span', { class: 'warndot' }) : null, fmtNum(l.entries)));
   };
+  const act = (ic, label, onclick) => h('button', { class: 'ni', type: 'button', onclick }, h('span', { class: 'sq', text: ic }), h('span', { class: 'nm muted', text: label }));
+  const file = h('input', { type: 'file', accept: '.list,.txt,text/plain', hidden: true, onchange: (e) => importListFile(e.target.files[0]) });
   nav.replaceChildren(
-    h('div', { class: 'row', style: 'padding:4px' },
-      btn('Новый список', createList, 'small primary grow', 'plus'),
-      h('label', { class: 'btn small icon', title: 'Импорт из файла', 'aria-label': 'Импорт списка из файла' }, icon('upload'),
-        h('input', { type: 'file', accept: '.list,.txt,text/plain', hidden: true, onchange: (e) => importListFile(e.target.files[0]) })),
-      btn('', importListUrl, 'small icon', 'download', { title: 'Список по ссылке (с автообновлением)', 'aria-label': 'Список по ссылке' })),
-    h('a', { href: '#/sites/~dups', class: current === '~dups' ? 'on' : null }, icon('dup'), h('span', { class: 'nm', text: 'Дубликаты и конфликты' })),
     h('div', { class: 'nav-h', text: 'Используются' }), used.map(row),
-    unused.length ? h('div', { class: 'nav-h', text: 'Не используются' }) : null, unused.map(row));
+    unused.length ? h('div', { class: 'nav-h', text: 'Не используются' }) : null, unused.map(row),
+    h('div', { class: 'lnav-acts' },
+      act('+', 'Новый список', () => createList()),
+      act('⇩', 'Загрузить по ссылке', importListUrl),
+      act('⇧', 'Импорт из файла', () => file.click()), file,
+      h('a', { href: '#/sites/~dups', class: current === '~dups' ? 'on' : null }, h('span', { class: 'sq', text: '≡' }), h('span', { class: 'nm', text: 'Дубликаты и конфликты' })),
+      h('span', { class: 'soon', title: SOON_HINT, 'aria-disabled': 'true' }, h('span', { class: 'sq', text: '#' }), h('span', { class: 'nm', text: 'Собрать по ASN' }), h('span', { class: 'tag', text: 'скоро' }))));
 }
 
 async function createList(initial = '') {
@@ -1456,23 +1459,23 @@ async function drawList(content, name) {
   let filter = '';
   let sortMode = 'file';
   const selected = new Set();
-  const pr = meta.problems || {};
   const readers = meta.used.map((u) => {
     const p = S.state.conf_profiles.find((x) => x.index === u.profile) || prof(u.profile);
     return h('a', { class: 'chip ' + (u.role === 'exclude' ? 'bad' : 'accent'), href: `#/settings/p${u.profile}`, text: `${u.role === 'exclude' ? 'исключает из ' : ''}#${u.profile} ${p ? profName(p) : ''}` });
   });
 
-  const head = h('section', { class: 'panel' }, h('div', { class: 'lhead' },
-    h('div', { class: 'row' }, h('h1', { text: listName(name) }), chip(name, 'mono'),
-      pr.error ? chip(plural(pr.error, 'ошибка', 'ошибки', 'ошибок'), 'bad') : null, pr.warning ? chip(plural(pr.warning, 'повтор', 'повтора', 'повторов'), 'warn') : null, pr.info ? chip(plural(pr.info, 'лишняя', 'лишние', 'лишних')) : null,
-      h('span', { class: 'grow' }),
-      btn('Переименовать', renameList, 'small'),
-      btn('Копия', copyList, 'small', 'copy'),
-      btn('История', () => openHistory(name, reload), 'small', 'history'),
-      btn('Удалить', deleteList, 'small danger', 'trash', { disabled: !meta.removable, title: meta.removable ? null : meta.used.length ? 'Список используется профилями — сначала отключите его' : 'Этот список защищён' })),
-    h('div', { class: 'row sm' }, h('span', { class: 'muted', text: meta.used.length ? 'Читают профили:' : 'Ни один профиль не читает этот список — правки в нём ничего не меняют.' }), readers,
-      attachMenu(meta)),
-    subRow()));
+  // переключатель «Списком / Текстом» и число записей рисует draw()
+  const viewSlot = h('span', { class: 'row' });
+  const moreList = h('div', { class: 'menu-list', hidden: true, role: 'menu', style: 'right:0;left:auto' });
+  const more = h('span', { class: 'menu' }, btn('', () => { moreList.hidden = !moreList.hidden; }, 'small icon', 'down', { 'aria-haspopup': 'menu', title: 'Ещё: переименовать, копия, удалить', 'aria-label': 'Ещё' }), moreList);
+  const moreItem = (label, fn, attrs = {}) => h('button', { type: 'button', role: 'menuitem', text: label, onclick: () => { moreList.hidden = true; fn(); }, ...attrs });
+  moreList.append(moreItem('Переименовать', () => renameList()), moreItem('Сделать копию', () => copyList()),
+    moreItem('Удалить список', () => deleteList(), { disabled: !meta.removable, title: meta.removable ? null : meta.used.length ? 'Список используется профилями — сначала отключите его' : 'Этот список защищён' }));
+  const head = h('div', { class: 'lhead' },
+    h('div', { class: 'row' }, h('h2', { class: 'mono ltitle', text: name }), LIST_NAMES[name] ? h('span', { class: 'muted', text: LIST_NAMES[name] }) : null, readers,
+      h('span', { class: 'grow' }), viewSlot, btn('История', () => openHistory(name, reload), 'small', 'history'), more),
+    h('div', { class: 'row sm' }, meta.used.length ? null : h('span', { class: 'muted', text: 'Ни один профиль не читает этот список — правки в нём ничего не меняют.' }), attachMenu(meta)),
+    subRow());
 
   function subRow() {
     const sub = (S.state.subs || []).find((x) => x.list === name);
@@ -1505,8 +1508,8 @@ async function drawList(content, name) {
     await loadState();
     route();
   }
-  const body = h('section', { class: 'panel' });
-  content.replaceChildren(head, body);
+  const body = h('div', { class: 'stack', style: 'gap:14px' });
+  content.replaceChildren(h('section', { class: 'panel' }, head, body));
 
   async function reload() {
     data = await api('list_get', { name });
@@ -1540,17 +1543,19 @@ async function drawList(content, name) {
     const byLine = {};
     for (const x of data.issues) (byLine[x.line] ||= []).push(x);
     const fixable = data.issues.filter((x) => 'fix' in x).length;
-    const tools = h('div', { class: 'row' },
+    viewSlot.replaceChildren(
+      h('span', { class: 'sm muted num', text: plural(all.filter((l) => l.trim() && !/^\s*#/.test(l)).length, 'запись', 'записи', 'записей') }),
       h('div', { class: 'seg', role: 'group', 'aria-label': 'Вид' },
         h('button', { type: 'button', class: raw ? '' : 'on', text: 'Списком', onclick: () => { raw = false; draw(); } }),
-        h('button', { type: 'button', class: raw ? 'on' : '', text: 'Текстом', onclick: () => { raw = true; draw(); } })),
-      fixable ? btn(`Исправить автоматически (${fixable})`, async () => {
-        if (!confirm('Исправить: «*.домен» → «домен», удалить повторы и лишние записи? Текущая версия сохранится в историю.')) return;
+        h('button', { type: 'button', class: raw ? 'on' : '', text: 'Текстом', onclick: () => { raw = true; draw(); } })));
+    // замечания к списку — плашкой с кнопкой исправления
+    const prNow = S.state.lists.find((l) => l.name === name)?.problems || {};
+    const prText = [prNow.error && plural(prNow.error, 'ошибка', 'ошибки', 'ошибок'), prNow.warning && plural(prNow.warning, 'повтор', 'повтора', 'повторов'), prNow.info && plural(prNow.info, 'лишняя запись', 'лишние записи', 'лишних записей')].filter(Boolean).join(', ');
+    const tools = prText ? notice(prNow.error ? 'bad' : 'warn', prText[0].toUpperCase() + prText.slice(1), fixable ? '«*.домен» → «домен», повторы и лишние записи удаляются. Текущая версия сохранится в историю.' : 'Исправьте отмеченные записи вручную.',
+      fixable ? btn(`Исправить (${fixable})`, async () => {
         const r = await guarded(() => api('list_fix', { name }));
-        if (r) { toast(`Исправлено: ${r.fixed}`); await reload(); }
-      }, 'small', 'wand') : null,
-      h('span', { class: 'grow' }),
-      h('span', { class: 'sm muted num', text: plural(all.filter((l) => l.trim() && !/^\s*#/.test(l)).length, 'запись', 'записи', 'записей') }));
+        if (r) { toast(`Исправлено: ${r.fixed}`, { undo: () => undoLast(false) }); await reload(); }
+      }, 'small', 'wand') : null) : null;
 
     if (raw) {
       const issBox = h('div', {});
@@ -1641,7 +1646,9 @@ async function drawList(content, name) {
             canDrag ? h('span', { class: 'grip', title: 'Перетащите, чтобы изменить порядок', text: '⋮⋮' }) : h('span'),
             isComment || isIp ? h('span', { class: 't', text: t }) : h('button', { type: 'button', class: 't' + (lvl === 'error' ? ' error' : ''), text: t, title: 'Проверить сайт', onclick: () => checkHost(t.replace(/^\^/, '').replace(/^\*\./, '')) }));
           if (!isComment) {
-            row.append(h('span', { class: 'note ' + (lvl || ''), text: iss ? iss[0].msg : '', title: iss ? iss.map((x) => x.msg).join('\n') : null }),
+            const host = t.replace(/^\^/, '').replace(/^\*\./, '');
+            row.append(h('span', { class: 'note ' + (lvl || 'faint'), text: iss ? iss[0].msg : isIp ? '' : t.startsWith('^') ? 'без поддоменов' : 'и поддомены', title: iss ? iss.map((x) => x.msg).join('\n') : null }),
+              isIp ? h('span') : btn('Проверить', () => checkHost(host), 'small ghost chk', null, { title: 'Открывается ли сайт и каким профилем он пойдёт' }),
               h('button', { class: 'btn ghost small icon', type: 'button', title: 'Удалить', 'aria-label': 'Удалить ' + t, onclick: async () => {
                 if (!await guarded(() => api('list_remove', { name, items: [t] }))) return;
                 toast(`Удалено: ${t}`, { undo: async () => { await guarded(() => api('list_add', { name, items: [t] })); reload(); } });
@@ -1667,7 +1674,7 @@ async function drawList(content, name) {
       h('div', { class: 'row' }, addInput, btn('Добавить', add, 'primary', 'plus')),
       h('div', { class: 'row' }, search, sortSel),
       bulk, listBox,
-      h('p', { class: 'sm muted', text: 'Порядок меняется перетаскиванием за ⋮⋮. nfqws2 перечитывает списки сам — перезапуск не нужен. Нажмите на сайт, чтобы проверить его.' }));
+      h('p', { class: 'sm muted', text: 'Порядок меняется перетаскиванием за ⋮⋮. nfqws2 перечитывает списки сам — перезапуск не нужен.' }));
   }
   draw();
 
@@ -1776,8 +1783,8 @@ async function viewSettings(main, r) {
   const m = pane.match(/^p(\d+)$/);
   if (m) {
     // «Профили»: слева список профилей, справа выбранный
-    const nav = h('nav', { class: 'nav scrollable', 'aria-label': 'Профили' });
-    main.append(h('div', { class: 'split settings' }, nav, content));
+    const nav = h('nav', { class: 'nav lnav scrollable', 'aria-label': 'Профили' });
+    main.append(h('div', { class: 'vh' }, h('h1', { text: 'Профили' })), h('div', { class: 'split settings' }, nav, content));
     drawSettingsNav(nav, pane);
     return viewProfile(content, Number(m[1]), r);
   }
@@ -1809,7 +1816,8 @@ function drawSettingsNav(nav, current) {
       }
       return a;
     }),
-    h('button', { class: 'ni', type: 'button', onclick: addCustomProfile }, h('span', { class: 'pn', text: '+' }), h('span', { class: 'nm muted', text: 'Свой профиль' })));
+    h('button', { class: 'ni', type: 'button', onclick: addCustomProfile }, h('span', { class: 'pn', text: '+' }), h('span', { class: 'nm muted', text: 'Свой профиль' })),
+    h('span', { class: 'soon', title: SOON_HINT, 'aria-disabled': 'true' }, h('span', { class: 'sq', text: '⇩' }), h('span', { class: 'nm', text: 'Вставить чужой' }), h('span', { class: 'tag', text: 'скоро' })));
 }
 
 async function moveCustom(from, to) {

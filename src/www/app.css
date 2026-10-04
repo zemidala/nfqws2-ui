@@ -606,3 +606,22 @@ a.over-row:hover { background: var(--soft); }
 .over-row .ellipsis { flex: 1; }
 .over-row .faint { flex: 0 1 auto; max-width: 50%; }
 .kv { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 13px; }
+
+/* ширина содержимого в «Боковом меню»: строки не растягиваются на весь широкий экран; конфигу целиком ширина нужна */
+@media (min-width: 1100px) { :root[data-layout="menu"] main { max-width: 1320px; } :root[data-layout="menu"] main:has(.cfg) { max-width: none; } }
+
+/* меню списков: имя файла и пояснение в две строки, действия закреплены внизу */
+.lrow .nm { display: grid; white-space: normal; }
+.lrow b { font-weight: 600; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lrow.on .muted { color: inherit; opacity: .8; }
+.sq { width: 22px; height: 22px; border-radius: 5px; background: var(--soft); display: inline-grid; place-items: center; font-size: 12px; font-weight: 700; flex: none; color: var(--muted); }
+.lnav-acts { position: sticky; bottom: -6px; display: grid; gap: 1px; margin-top: 6px; padding: 4px 0 6px; background: var(--surface); border-top: 1px solid var(--line); }
+.ltitle { font-size: 15px; font-weight: 700; }
+.ent { grid-template-columns: 22px 16px minmax(0, 1fr) auto auto auto; }
+.ent .note.faint { color: var(--faint); }
+.ent .chk { min-height: 28px; color: var(--muted); }
+@media (max-width: 759px) { .ent { grid-template-columns: 22px minmax(0, 1fr) auto; } .ent .chk { display: none; } }
+@media (max-width: 899px) { .lnav-acts { position: static; border-top: 0; display: contents; } }
+.lhead { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.lhead > .row:first-child { flex: 1 1 100%; }
+.lhead > .row:empty { display: none; }
