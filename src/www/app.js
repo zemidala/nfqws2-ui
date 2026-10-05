@@ -2937,7 +2937,7 @@ async function paneBackup(content) {
         h('p', { class: 'sm muted', text: 'Архив .tar.gz сохраняется на устройство, с которого открыт интерфейс — ПК или телефон. Из него же можно восстановить: перед этим делается снимок текущего состояния.' }),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Копия на NAS' }), h('span', { class: 'sm muted', text: 'настраивается следующим этапом — нужен ключ доступа к NAS' })))),
     panel('Снимки на роутере', null, data.items.length ? h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
-      h('thead', {}, h('tr', {}, h('th', { text: 'Когда' }), h('th', { text: 'Почему' }), h('th', { text: 'По сравнению с текущим' }), h('th', { class: 'num', text: 'Размер' }), h('th'))),
+      h('thead', {}, h('tr', {}, h('th', { text: 'Когда' }), h('th', { text: 'Почему' }), h('th', { class: 'wide', text: 'По сравнению с текущим' }), h('th', { class: 'num', text: 'Размер' }), h('th'))),
       h('tbody', {}, rows))) : h('p', { class: 'muted', text: 'Снимков пока нет.' })));
 }
 
@@ -3111,12 +3111,12 @@ async function viewMonitor(main) {
     if (checking.has(host)) {
       return h('div', { class: 'act' }, h('span', { class: 'spin' }), h('div', { class: 'item-main' }, h('b', { class: 'mono', text: host }), h('span', { class: 'sm muted', text: 'проверяю…' })));
     }
-    return h('div', { class: 'act' },
+    return h('div', { class: 'act mon-site' },
       levelIcon(!last ? 'info' : !last[1] ? 'error' : last[2] > 5000 ? 'warning' : 'ok'),
       h('div', { class: 'item-main' }, h('b', { class: 'mono', text: host }),
         h('span', { class: 'sm muted', text: last ? (last[1] ? (last[2] > 5000 ? `открывается медленно, ${(last[2] / 1000).toFixed(1).replace(".", ",")} с` : `открывается, ${last[2]} мс`) : `не открывается: ${last[3]}`) + ` · ${fmtAgo(Math.floor(Date.now() / 1000) - last[0])}` + (hist.length ? ` · доступность ${Math.round(okCount / hist.length * 100)}% за ${plural(hist.length, 'проверку', 'проверки', 'проверок')}` : '') : 'ещё не проверялся' })),
       uptimeBar(hist.slice(-48).map((x) => x[1])),
-      btn('Проверить', () => checkNow([host]), 'small ghost', 'refresh', { title: 'Проверить сейчас и записать результат в историю', 'aria-label': 'Проверить ' + host }),
+      btn('Проверить', () => checkNow([host]), 'small ghost chk-now', 'refresh', { title: 'Проверить сейчас и записать результат в историю', 'aria-label': 'Проверить ' + host }),
       btn('', () => checkHost(host), 'small icon ghost', 'search', { title: 'Подробно: какой профиль обрабатывает сайт', 'aria-label': 'Подробно о ' + host }),
       btn('', async () => { sites.splice(i, 1); await save(); draw(); }, 'small icon ghost', 'x', { title: 'Убрать из мониторинга', 'aria-label': 'Убрать ' + host }));
   }) : h('p', { class: 'muted', text: 'Сайтов нет — добавьте хотя бы один.' })); };
@@ -3491,7 +3491,7 @@ async function viewTests(main, r, bare = false) {
           h('label', { class: 'row' }, refine, 'искать вариант полегче, даже если рабочая стратегия найдена'),
           h('span', { class: 'sm muted', text: 'Если рабочих стратегий нет, подбор сам пробует довести лучшую: меняет число фейков (до 20), способ их порчи и имя в фейке. Это ещё 2–5 минут.' })))] :
         h('p', { class: 'sm muted', text: 'Трассировка открывает сайт через копию текущей конфигурации с подробным журналом nfqws2 — видно, какой профиль сработал и что сделали стратегии.' }),
-      h('div', { class: 'row' }, startBtn, h('span', { class: 'sm muted grow', text: 'Работает отдельный процесс nfqws2 на очереди 301 только для проверочных соединений роутера. Ваш трафик и основной nfqws2 не затрагиваются.' }))),
+      h('div', { class: 'row' }, startBtn, h('span', { class: 'sm muted grow note-wide', text: 'Работает отдельный процесс nfqws2 на очереди 301 только для проверочных соединений роутера. Ваш трафик и основной nfqws2 не затрагиваются.' }))),
     out,
     tab === 'pick' && !bare && hist.items.length ? panel('Последние подборы', h('a', { class: 'sm', href: PAGES.phist[0], text: 'вся история' }), h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
       h('thead', {}, h('tr', {}, h('th', { text: 'Когда' }), h('th', { text: 'Сайт' }), h('th', { text: 'Без обхода' }), h('th', { class: 'num', text: 'Сработало' }), h('th', { text: 'Лучшая' }))),
@@ -3549,7 +3549,7 @@ async function viewPickHist(main, r, bare = false) {
       h('div', { class: 'row' }, search, h('span', { class: 'grow' }), h('span', { class: 'sm muted num', text: `${plural(sites.size, 'сайт', 'сайта', 'сайтов')} · ${plural(all.length, 'подбор', 'подбора', 'подборов')}` }),
         btn('Очистить всё', async () => { if (confirm('Удалить всю историю подборов? На профили и конфиг это не влияет.') && await guarded(() => api('picks_delete', {}), 'История очищена')) route(true); }, 'small danger', 'trash')),
       h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
-        h('thead', {}, h('tr', {}, h('th'), h('th', { text: 'Сайт' }), h('th', { text: 'Последний подбор' }), h('th', { text: 'Итог' }), h('th', { class: 'num', text: 'Запусков' }), h('th'))), body)),
+        h('thead', {}, h('tr', {}, h('th'), h('th', { text: 'Сайт' }), h('th', { text: 'Последний подбор' }), h('th', { class: 'wide', text: 'Итог' }), h('th', { class: 'num', text: 'Запусков' }), h('th'))), body)),
       h('p', { class: 'sm faint', text: 'Хранится до 100 подборов, не больше 10 на сайт. Работавшие стратегии подбор пробует первыми — галочка «что работало раньше».' })));
 }
 

@@ -151,7 +151,7 @@ button.chip { cursor: pointer; font-size: 12px; }
 .frow { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 8px 14px; align-items: start; }
 .frow > .lbl { font-size: 13px; color: var(--muted); padding-top: 5px; }
 .frow > .hint { grid-column: 2; font-size: 12px; color: var(--faint); margin-top: -4px; }
-@media (max-width: 759px) { .frow { grid-template-columns: 1fr; } .frow > .hint { grid-column: 1; } .frow > .lbl { padding-top: 0; } }
+@media (max-width: 759px) { .frow { grid-template-columns: minmax(0, 1fr); } .frow > .hint { grid-column: 1; } .frow > .lbl { padding-top: 0; } }
 .spin { width: 15px; height: 15px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; flex: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .skeleton { color: var(--muted); display: flex; gap: 10px; align-items: center; }
@@ -432,6 +432,20 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .mon-row:hover { background: var(--soft); }
 .mon-row .ellipsis { flex: 1; }
 .mon-row .upbar i { width: 3px; height: 11px; }
+/* сайт в мониторинге на узком экране: описание — на всю ширину, полоса истории и кнопки — строкой ниже
+   (иначе текст сжимается в столбик, а полоса и кнопки уходят за край) */
+@media (max-width: 899px) {
+  .mon-site { flex-wrap: wrap; row-gap: 6px; padding: 10px 0; }
+  .mon-site .item-main { flex: 1 1 calc(100% - 40px); }
+  .mon-site .upbar { flex: 1 1 0; min-width: 0; overflow: hidden; margin-left: 28px; gap: 1px; }
+  .mon-site .upbar i { flex: 1 1 0; min-width: 1px; max-width: 5px; }
+  .mon-site .btn { flex: none; }
+}
+/* на телефоне у «Проверить» остаётся значок — место отдаём полосе истории */
+@media (max-width: 479px) {
+  .mon-site .chk-now { font-size: 0; gap: 0; width: 36px; padding: 0; justify-content: center; }
+  .mon-site .upbar i { min-width: 2px; }
+}
 @media (max-width: 759px) { .https-link span { display: none; } .top-in { gap: 8px; padding: 0 12px; } }
 
 /* перезапуск с проверкой */
@@ -716,3 +730,32 @@ a.over-row:hover { background: var(--soft); }
 /* боковое меню: названия групп — заметные заголовки, а не ещё один пункт */
 :root .mnav .nav-h { margin: 12px 2px 4px; padding: 12px 8px 6px; border-top: 1px solid var(--line); font-size: 11.5px; font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--accent); }
 :root .mnav .nav-h::before { content: ""; width: 3px; height: 12px; border-radius: 2px; background: var(--accent); flex: none; }
+
+/* ---- телефон: всё помещается по ширине, ничего не уезжает за край ---- */
+/* верхняя панель: на узком экране остаётся знак без названия, иначе «Остановить» оказывается за краем */
+@media (max-width: 479px) {
+  .brand > span { display: none; }
+  .top-in { padding: 0 10px; }
+  .top .pill { padding: 2px 8px; }
+}
+@media (max-width: 339px) { .top .pill { font-size: 0; gap: 0; padding: 6px; } }
+/* таблицы из четырёх и более колонок не сжимаем в столбики — пусть прокручиваются вбок */
+@media (max-width: 759px) { .scroll > .tbl:has(th:nth-child(4)) { min-width: 600px; } }
+/* колонка с длинным текстом: без минимума браузер сжимает её до слова в строке */
+.tbl th.wide { min-width: 230px; }
+/* крестик на метке — под палец */
+@media (max-width: 759px), (pointer: coarse) {
+  .chip .x { min-width: 26px; min-height: 26px; margin: -5px -8px -5px -2px; font-size: 15px; }
+}
+/* пояснение рядом с кнопкой: если рядом ему тесно — переносится под кнопку, а не сжимается в столбик */
+.note-wide { flex: 1 1 220px; min-width: 0; }
+/* компоновка «Вкладки» на планшете: вкладки, кнопки и состояние nfqws2 в одну строку помещаются только без названия */
+@media (min-width: 760px) and (max-width: 899px) {
+  :root[data-layout="tabs"] .brand > span { display: none; }
+  :root[data-layout="tabs"] .tabs a { padding: 0 9px; }
+}
+/* поле ввода в строке с кнопкой или списком: если ему осталось меньше 180px — сосед переносится на следующую строку */
+.row > .input.grow { flex: 1 1 180px; min-width: 0; }
+/* галочка с длинной подписью: подпись переносится по словам рядом с галочкой, а не уезжает под неё */
+label.row { flex-wrap: nowrap; }
+label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none; }
