@@ -274,6 +274,7 @@ nfqws-ui-setup remove               убрать конфиг lighttpd и зад
 
 ## Помощь и обратная связь
 
+- **Чат в Telegram** — [t.me/nfqws2_ui](https://t.me/nfqws2_ui): помощь с установкой и настройкой, идеи, ошибки и новости о выпусках — по темам.
 - **Вопрос по настройке** («как сделать…», «почему не открывается сайт») — [Обсуждения → Q&A](https://github.com/zemidala/nfqws2-ui/discussions/categories/q-a).
 - **Идея** — [Обсуждения → Ideas](https://github.com/zemidala/nfqws2-ui/discussions/categories/ideas), там за неё можно проголосовать.
 - **Ошибка** — [новый issue](https://github.com/zemidala/nfqws2-ui/issues/new/choose): укажите версии nfqws2-ui и nfqws2-keenetic, роутер и шаги.

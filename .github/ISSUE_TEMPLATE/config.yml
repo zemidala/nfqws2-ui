@@ -1,5 +1,8 @@
 blank_issues_enabled: false
 contact_links:
+  - name: Чат в Telegram
+    url: https://t.me/nfqws2_ui
+    about: Быстрый вопрос, обсуждение и новости о выпусках — в чате программы, там темы «Помощь», «Идеи», «Ошибки»
   - name: Вопрос по настройке
     url: https://github.com/zemidala/nfqws2-ui/discussions/categories/q-a
     about: Как настроить, какую стратегию выбрать, почему не открывается сайт — в Обсуждения, раздел Q&A
