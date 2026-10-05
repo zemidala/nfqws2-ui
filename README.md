@@ -11,6 +11,7 @@
 
 [![Release](https://img.shields.io/github/v/release/zemidala/nfqws2-ui)](https://github.com/zemidala/nfqws2-ui/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+[![Telegram](https://img.shields.io/badge/Telegram-%D1%87%D0%B0%D1%82-26A5E4?logo=telegram&logoColor=white)](https://t.me/nfqws2_ui)
 
 ![Обзор](docs/screenshots/overview.png)
 
