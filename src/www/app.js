@@ -1458,8 +1458,13 @@ function createSuggest() {
   }
 }
 
+// Блобы, которые nfqws2 объявляет сам (как BUILTIN_BLOBS в api.php)
+const BUILTIN_BLOBS = ['fake_default_tls', 'fake_default_http', 'fake_default_quic'];
+
+// Блобы, которые можно подставить в blob=…: объявленные в параметрах запуска и встроенные
 function declaredBlobs() {
-  return tokensOf(S.conf?.vars?.NFQWS_BASE_ARGS).map((t) => (t.match(/^--blob=([^:]+):/) || [])[1]).filter(Boolean);
+  const own = tokensOf(S.conf?.vars?.NFQWS_BASE_ARGS).map((t) => (t.match(/^--blob=([^:]+):/) || [])[1]).filter(Boolean);
+  return [...new Set([...own, ...BUILTIN_BLOBS])];
 }
 
 // Справка по аргументу под курсором

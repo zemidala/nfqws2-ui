@@ -1235,7 +1235,9 @@ function probe(string $host): array
 // Результат $fn кэшируется в /tmp, пока не изменятся файлы-зависимости
 function cached(string $key, array $deps, callable $fn)
 {
-  $sig = CACHE_VER . md5(json_encode(array_map(fn($f) => file_exists($f) ? [$f, filemtime($f), is_file($f) ? filesize($f) : 0] : $f, $deps)));
+  // filemtime(__FILE__): после обновления программы прежние результаты проверок не годятся — иначе исправленная
+  // проверка продолжала бы показывать старую ошибку, пока не изменится конфиг
+  $sig = CACHE_VER . '.' . filemtime(__FILE__) . md5(json_encode(array_map(fn($f) => file_exists($f) ? [$f, filemtime($f), is_file($f) ? filesize($f) : 0] : $f, $deps)));
   $file = CACHE_DIR . '/' . preg_replace('/[^a-z0-9_.-]/i', '_', $key) . '.json';
   if (is_file($file)) {
     $c = json_decode(file_get_contents($file), true);
