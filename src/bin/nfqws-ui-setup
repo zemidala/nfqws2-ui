@@ -411,7 +411,8 @@ update() {
 	fetch "https://github.com/$REPO/releases/download/v$want/install.sh" "$tmp" || { rm -f "$tmp"; die "не удалось скачать установщик v$want"; }
 	# Если нас запустил lighttpd (кнопка в интерфейсе), выходим из его cgroup: при перезапуске
 	# lighttpd procd может убить её целиком, а с ней и opkg посреди установки.
-	echo $$ > /sys/fs/cgroup/cgroup.procs 2>/dev/null
+	# На Keenetic cgroup нет — без проверки shell сам пишет «can't create», и 2>/dev/null это не глушит.
+	[ -w /sys/fs/cgroup/cgroup.procs ] && echo $$ > /sys/fs/cgroup/cgroup.procs 2>/dev/null
 	NFQWS_UI_FORCE=$force sh "$tmp" "v$want"
 	rc=$?
 	rm -f "$tmp"
