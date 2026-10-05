@@ -446,7 +446,7 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
   .mon-site .chk-now { font-size: 0; gap: 0; width: 36px; padding: 0; justify-content: center; }
   .mon-site .upbar i { min-width: 2px; }
 }
-@media (max-width: 759px) { .top-in { gap: 8px; padding: 0 12px; } }
+@media (max-width: 759px) { .https-link span { display: none; } .top-in { gap: 8px; padding: 0 12px; } }
 
 /* перезапуск с проверкой */
 #pending:empty { display: none; }
@@ -474,12 +474,12 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .svc-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
 .svc-ctl { display: inline-flex; gap: 2px; }
 .svc-ctl .ctl-label { display: none; }
-@media (min-width: 1100px) { .svc-ctl { display: none; } }
+@media (min-width: 1100px) { .svc-ctl { display: none; } #refresh-top { display: none; } }
 /* меню «Применить» с пояснениями */
 .menu-list.wide { width: min(460px, 92vw); }
 .menu-list .opt { display: grid; gap: 2px; text-align: left; white-space: normal; padding: 8px 10px; }
 .menu-list .opt.dim b { color: var(--muted); }
-@media (max-width: 759px) { .brand small { display: none; } .top-in { gap: 4px; } .top-in .btn.icon, .svc-ctl .btn { width: 36px; min-height: 36px; padding: 0; } }
+@media (max-width: 759px) { .brand small, .https-link { display: none; } .top-in { gap: 4px; } .top-in .btn.icon, .svc-ctl .btn { width: 36px; min-height: 36px; padding: 0; } }
 
 /* ---------- обновление ---------- */
 .banner.info { background: var(--accent-soft); color: var(--accent); }
@@ -543,7 +543,7 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 .list-search { flex: 1 1 240px; min-width: 0; }
 
 /* шапка на средних ширинах: подписи у второстепенных кнопок прячем, иконки с подсказками остаются */
-@media (max-width: 1439px) { .undo-label { display: none; } }
+@media (max-width: 1439px) { .repo-link span, .https-link span, .undo-label { display: none; } }
 /* 760–1099px: вкладки без подписей, кроме открытой, — иначе шапка шире экрана */
 @media (min-width: 760px) and (max-width: 1099px) { .tabs a:not(.on) span { display: none; } .tabs a { padding: 0 10px; } .brand small { display: none; } }
 
@@ -576,15 +576,16 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
   /* без колонки обзора управление сервисом и плашка «нужен перезапуск» остаются в шапке */
   :root:not([data-layout="tabs"]) #banner { display: block; }
   :root:not([data-layout="tabs"]) .svc-ctl { display: inline-flex; }
+  :root:not([data-layout="tabs"]) #refresh-top { display: inline-flex; }
 }
 @media (min-width: 1280px) { :root[data-layout="menu"] .svc-ctl .ctl-label { display: inline; } }
 /* «Вокруг сайта»: в шапке ещё и вкладки, и поле проверки — подписи второстепенных кнопок появляются только на очень широком экране */
 @media (min-width: 1760px) { :root[data-layout="site"] .svc-ctl .ctl-label { display: inline; } }
-@media (max-width: 1759px) { :root[data-layout="site"] .undo-label { display: none; } }
+@media (max-width: 1759px) { :root[data-layout="site"] .repo-link span, :root[data-layout="site"] .https-link span, :root[data-layout="site"] .undo-label { display: none; } }
 /* шапка не должна быть шире экрана: на промежуточных ширинах подписи остаются только у открытой вкладки */
 @media (min-width: 1100px) and (max-width: 1279px) { :root[data-layout="tabs"] .tabs a:not(.on) span { display: none; } }
 @media (min-width: 1100px) and (max-width: 1439px) { :root[data-layout="site"] .tabs a:not(.on) span { display: none; } :root[data-layout="site"] .quick .input { width: 150px; } }
-@media (min-width: 760px) and (max-width: 1099px) { .top-in { gap: 8px; } :root[data-layout="site"] .quick { display: none; } .quick .input { width: 130px; } }
+@media (min-width: 760px) and (max-width: 1099px) { .repo-link { display: none; } .top-in { gap: 8px; } :root[data-layout="site"] .quick { display: none; } .quick .input { width: 130px; } }
 .mnav { padding: 10px 8px 20px; background: var(--surface); min-height: 100%; }
 .soon { display: flex; align-items: center; gap: 8px; padding: 6px 10px; min-height: 34px; font-size: 13.5px; color: var(--faint); cursor: not-allowed; user-select: none; }
 .tag { margin-left: auto; flex: none; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; line-height: 16px; color: var(--faint); }
@@ -754,8 +755,13 @@ a.over-row:hover { background: var(--soft); }
 label.row { flex-wrap: nowrap; }
 label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none; }
 
-/* ---------- #9: короткое меню, «⋯» в шапке, «Обзор» — «Кратко» ---------- */
-.mnav a { min-height: 40px; gap: 10px; font-size: 14px; }
+/* версия интерфейса у ссылки на репозиторий */
+.repo-link { color: var(--muted); font-size: 12px; font-weight: 500; gap: 5px; }
+.repo-link:hover { color: var(--fg); }
+@media (max-width: 759px) { .repo-link { display: none; } }
+
+/* ---------- упрощённый вид (#9, по выбору): короткое меню, «⋯» в шапке; «Обзор» — «Кратко» для всех ---------- */
+:root[data-simple] .mnav a { min-height: 40px; gap: 10px; font-size: 14px; }
 .mnav a > svg { color: var(--muted); }
 .mnav a.on > svg { color: var(--accent); }
 .more-wrap { position: relative; display: inline-flex; }
@@ -766,8 +772,8 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
   text-align: left; border-radius: calc(var(--radius) * .7); cursor: pointer; text-decoration: none; white-space: nowrap; }
 .more-pop a:hover, .more-pop button:hover { background: var(--soft); }
 .more-pop svg, .more-pop .mi { width: 17px; color: var(--muted); text-align: center; }
-#https-slot:empty { display: none; }
-#https-slot { display: grid; }
+.more-pop #https-slot:empty { display: none; }
+.more-pop #https-slot { display: grid; }
 /* на узком экране кнопка «⋯» у левого края — меню прижимаем к краю экрана, чтобы оно не уходило за него */
 @media (max-width: 759px) { .more-pop { position: fixed; top: calc(var(--top-h) + 4px); left: 8px; right: auto; max-width: calc(100vw - 16px); } }
 

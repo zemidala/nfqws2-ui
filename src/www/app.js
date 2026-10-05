@@ -216,6 +216,7 @@ function applyLook(look = getLook()) {
   document.documentElement.dataset.variant = look.variant;
   document.documentElement.dataset.mode = look.mode;
   document.documentElement.dataset.layout = ['menu', 'tabs', 'site'].includes(look.layout) ? look.layout : 'menu';
+  document.documentElement.toggleAttribute('data-simple', !!look.simple);
 }
 function setLook(patch) {
   const look = { ...getLook(), ...patch };
@@ -306,12 +307,14 @@ const PAGES = {
   // ещё не сделаны: в меню видны, но заблокированы и помечены «скоро»
   diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], auto: ['#/tests/auto', 'Автоподбор'], asn: ['#/asn', 'Список по ASN'], report: ['#/settings/report', 'Отчёт для помощи'],
 };
-const NEW_PAGES = [];   // только что появились — помечаются во вкладках («новое»)
+const NEW_PAGES = ['diag', 'phist', 'auto', 'asn', 'report'];   // только что появились — помечаются в меню (в упрощённом виде — нет)
 const SOON_HINT = 'Ещё в разработке — появится в одной из следующих версий';
 const SYS_PAGES = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 const SYS_NAV = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
-// Компоновка «Боковое меню»: шесть разделов, страницы раздела — вкладками над страницей (как в TOP_TABS)
-const MENU = [['over', 'Обзор', 'home', ['over']], ['pick', 'Проверка сайта', 'tests', ['diag', 'pick', 'trace', 'phist', 'site']], ['mon', 'Наблюдение', 'pulse', ['mon', 'auto', 'tg']],
+// Компоновка «Боковое меню»: группы и их страницы
+const MENU = [[null, ['over']], ['Проверка сайта', ['diag', 'pick', 'trace', 'phist']], ['Наблюдение', ['mon', 'auto', 'tg']], ['Обход', ['prof', 'lists', 'asn']], ['Система', SYS_NAV]];
+// Упрощённый вид (галочка в «Оформлении»): шесть разделов, страницы раздела — вкладками над страницей (как в TOP_TABS)
+const MENU_SIMPLE = [['over', 'Обзор', 'home', ['over']], ['pick', 'Проверка сайта', 'tests', ['diag', 'pick', 'trace', 'phist', 'site']], ['mon', 'Наблюдение', 'pulse', ['mon', 'auto', 'tg']],
   ['prof', 'Профили', 'layers', ['prof']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]];
 // Верхние вкладки компоновок: страница по клику, подпись, значок, страницы вкладки, «только на узком экране»
 const TOP_TABS = {
@@ -368,12 +371,23 @@ function pageTail(id) {
   return tail ? h('span', { class: 'tail' }, tail) : null;
 }
 
-// У раздела — отметка первой из его страниц, у которой она есть (упавшие сайты, ошибки, обновление); число снимков — только во вкладке
+// Упрощённый вид — по выбору в «Оформлении»; по умолчанию интерфейс полный
+const simple = () => document.documentElement.hasAttribute('data-simple');
+
 function menuNav() {
   const cur = pageOf();
-  return h('nav', { class: 'nav mnav', 'aria-label': 'Разделы' }, MENU.map(([id, label, ic, pages]) =>
-    h('a', { href: PAGES[id][0], 'data-pages': pages.join(' '), class: pages.includes(cur) ? 'on' : null },
-      icon(ic), h('span', { class: 'nm', text: label }), pages.filter((x) => x !== 'backup').map(pageTail).find(Boolean) || null)));
+  if (simple()) {
+    // у раздела — отметка первой из его страниц, у которой она есть (упавшие сайты, ошибки, обновление); число снимков — только во вкладке
+    return h('nav', { class: 'nav mnav', 'aria-label': 'Разделы' }, MENU_SIMPLE.map(([id, label, ic, pages]) =>
+      h('a', { href: PAGES[id][0], 'data-pages': pages.join(' '), class: pages.includes(cur) ? 'on' : null },
+        icon(ic), h('span', { class: 'nm', text: label }), pages.filter((x) => x !== 'backup').map(pageTail).find(Boolean) || null)));
+  }
+  return h('nav', { class: 'nav mnav', 'aria-label': 'Разделы' }, MENU.map(([head, ids]) => [
+    head ? h('div', { class: 'nav-h', text: head }) : null,
+    ids.map((id) => PAGES[id][0]
+      ? h('a', { href: PAGES[id][0], 'data-pages': id === 'pick' ? 'pick site' : id, class: id === cur || (id === 'pick' && cur === 'site') ? 'on' : null },
+        h('span', { class: 'nm', text: PAGES[id][1] }), NEW_PAGES.includes(id) ? h('span', { class: 'tag new', text: 'новое' }) : pageTail(id))
+      : soonItem(id))]));
 }
 
 // Пункт для ещё не сделанной страницы: виден, но не нажимается
@@ -388,12 +402,12 @@ function openDrawer(on = true) {
   if (on) d.firstChild.replaceChildren(menuNav());
 }
 
-// Ряд вкладок над страницей — страницы текущего раздела
+// Второй ряд вкладок — страницы текущей верхней вкладки («Вкладки», «Вокруг сайта») или раздела (упрощённое боковое меню)
 function subTabs(page) {
-  const tab = (layout() === 'menu' ? MENU : TOP_TABS[layout()]).find((t) => t[3].includes(page));
+  const tab = (layout() === 'menu' ? (simple() ? MENU_SIMPLE : []) : TOP_TABS[layout()]).find((t) => t[3].includes(page));
   const ids = tab ? tab[3].filter((id) => id !== 'site') : [];
   if (ids.length < 2 || page === 'site') return null;
-  return h('nav', { class: 'subtabs', 'aria-label': tab[1] }, ids.map((id) => PAGES[id][0] ? h('a', { href: PAGES[id][0], class: id === page ? 'on' : null }, PAGES[id][1], NEW_PAGES.includes(id) ? h('span', { class: 'tag new', text: 'новое' }) : null) : soonItem(id)));
+  return h('nav', { class: 'subtabs', 'aria-label': tab[1] }, ids.map((id) => PAGES[id][0] ? h('a', { href: PAGES[id][0], class: id === page ? 'on' : null }, PAGES[id][1], NEW_PAGES.includes(id) && !simple() ? h('span', { class: 'tag new', text: 'новое' }) : null) : soonItem(id)));
 }
 
 function renderShell() {
@@ -404,10 +418,14 @@ function renderShell() {
       h('div', { class: 'top-in' },
         h('button', { class: 'btn ghost icon', id: 'burger', type: 'button', title: 'Меню', 'aria-label': 'Меню', onclick: () => openDrawer() }, icon('menu')),
         h('a', { class: 'brand', href: PAGES.about[0], title: 'nfqws2-ui — о программе' }, logo(26), h('span', {}, 'nfqws2-ui', h('small', { id: 'ui-ver' }))),
+        simple() ? null : h('a', { class: 'btn ghost small repo-link', id: 'repo-link', href: REPO, target: '_blank', rel: 'noopener', title: 'nfqws2-ui на GitHub', 'aria-label': 'nfqws2-ui на GitHub' }, icon('git')),
         h('nav', { class: 'tabs', 'aria-label': 'Разделы' }, TOP_TABS[layout()].map(link)),
+        simple() ? null : h('span', { id: 'https-slot' }),
         h('button', { class: 'btn ghost small', type: 'button', id: 'undo-btn', hidden: true, onclick: () => undoLast(true) }, icon('undo'), h('span', { class: 'undo-label', text: 'Отменить' })),
         h('button', { class: 'btn ghost small', type: 'button', id: 'focus-off', hidden: true, onclick: () => setFocus(false) }, 'Показать обзор'),
-        moreMenu(),
+        simple() ? moreMenu() : [
+          h('button', { class: 'btn ghost icon', id: 'refresh-top', type: 'button', title: 'Обновить', 'aria-label': 'Обновить', onclick: () => route(true) }, icon('refresh')),
+          S.authEnabled ? h('button', { class: 'btn ghost icon', type: 'button', title: 'Выйти', 'aria-label': 'Выйти', onclick: logout }, icon('logout')) : null],
         h('span', { class: 'grow' }),
         h('form', { class: 'quick', onsubmit: (e) => { e.preventDefault(); const v = quick.value.trim(); if (!v) return; quick.value = ''; quick.blur(); checkHost(v); } },
           quick, h('button', { class: 'btn primary icon', type: 'submit', title: 'Проверить: открывается ли сайт и каким профилем nfqws2 он пойдёт', 'aria-label': 'Проверить' }, icon('arrow'))),
@@ -424,7 +442,7 @@ function renderShell() {
     h('div', { id: 'drawer', class: 'drawer', hidden: true, onclick: (e) => { if (e.target.id === 'drawer' || e.target.closest('a')) openDrawer(false); } }, h('div', { class: 'drawer-in' })));
 }
 
-// Редкое из верхней панели — под «⋯»: обновить данные, HTTPS, GitHub, выход
+// Упрощённый вид: редкое из верхней панели — под «⋯»: обновить данные, HTTPS, GitHub, выход
 function moreMenu() {
   const pop = h('div', { class: 'more-pop', hidden: true, role: 'menu', onclick: (e) => { if (e.target.closest('a, button')) pop.hidden = true; } },
     h('button', { type: 'button', role: 'menuitem', onclick: () => route(true) }, icon('refresh'), 'Обновить данные'),
@@ -453,11 +471,12 @@ function updateChrome() {
   const page = pageOf();
   document.querySelectorAll('[data-pages]').forEach((a) => a.classList.toggle('on', a.dataset.pages.split(' ').includes(page)));
   if (!st) return;
-  // Ссылка на HTTPS — только если он включён (nfqws-ui-setup https on)
+  // Ссылка на HTTPS — только если он включён (nfqws-ui-setup https on); в упрощённом виде — пунктом меню «⋯»
   const hp = st.ui?.https_port;
-  document.getElementById('https-slot')?.replaceChildren(location.protocol === 'http:' && hp
-    ? h('a', { href: `https://${location.hostname}:${hp}/${location.hash}`, role: 'menuitem', title: 'Пароль и данные идут в зашифрованном виде' }, h('span', { class: 'mi', text: '🔒' }), 'Открыть по HTTPS')
-    : []);
+  const httpsUrl = location.protocol === 'http:' && hp ? `https://${location.hostname}:${hp}/${location.hash}` : null;
+  document.getElementById('https-slot')?.replaceChildren(httpsUrl && !simple()
+    ? h('a', { class: 'btn ghost small https-link', href: httpsUrl, title: 'Открыть по HTTPS: пароль и данные идут в зашифрованном виде', 'aria-label': 'Открыть по HTTPS' }, '🔒', h('span', { text: ' Открыть по HTTPS' }))
+    : simple() && httpsUrl ? h('a', { href: httpsUrl, role: 'menuitem', title: 'Пароль и данные идут в зашифрованном виде' }, h('span', { class: 'mi', text: '🔒' }), 'Открыть по HTTPS') : []);
   const svc = document.getElementById('svc');
   svc.className = 'pill ' + (st.running ? 'ok' : 'bad');
   svc.replaceChildren(h('span', { class: 'dot' }), st.running ? 'работает' : 'остановлен');
@@ -972,7 +991,7 @@ const OVERVIEWS = [['brief', 'Кратко'], ['groups', 'Группы'], ['tile
 async function viewOverview(main, r) {
   sideBlocks();
   const look = getLook();
-  const view = OVERVIEWS.some(([v]) => v === look.overview) ? look.overview : 'brief';
+  const view = OVERVIEWS.some(([v]) => v === look.overview) ? look.overview : simple() ? 'brief' : 'groups';
   const B = { svc: SIDE.service, check: S.check.el, prob: SIDE.problems, mon: SIDE.monitor, backup: SIDE.backup, traffic: SIDE.traffic, ...overviewExtra() };
   const grp = (title, ...blocks) => h('div', { class: 'ogrp' }, h('h3', { text: title }), ...blocks);
   const body = {
@@ -3126,6 +3145,9 @@ async function paneLook(content) {
   const lay = (v, title, text) => h('label', { class: 'look' }, h('input', { type: 'radio', name: 'layout', value: v, checked: look.layout === v, onchange: () => setLayout(v) }),
     svgEl('0 0 120 68', LAYOUT_THUMB[v], 'lthumb'), h('b', { text: title }), h('span', { class: 'sm muted', text }));
   content.append(h('div', { class: 'vh' }, h('h1', { text: 'Оформление' })),
+    panel(null, null,
+      h('label', { class: 'row', style: 'align-items:flex-start' }, h('input', { type: 'checkbox', checked: !!look.simple, style: 'margin-top:3px', onchange: (e) => { setLook({ simple: e.target.checked }); renderShell(); route(); } }),
+        h('span', {}, h('b', { text: 'Упрощённый вид' }), h('br'), h('span', { class: 'sm muted', text: 'Боковое меню — шесть разделов, страницы раздела — вкладками над страницей; «Обзор» по умолчанию «Кратко»; обновить, HTTPS, GitHub и выход — под кнопкой «⋯». Для тех, кому полный вид кажется перегруженным. Функции те же.' })))),
     panel(null, null,
       h('fieldset', { class: 'looks' }, h('legend', { class: 'sm muted', text: 'Компоновка — как разложены разделы' }),
         lay('menu', 'Боковое меню', 'Все разделы списком слева, любой — в один клик.'),
