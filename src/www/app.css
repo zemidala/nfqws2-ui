@@ -859,3 +859,46 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
 /* вкладки — подчёркивание синим */
 :root[data-variant="k"] .subtabs a { font-size: 15px; }
 :root[data-variant="k"] .seg button.on { color: var(--accent); }
+/* размеры — как у Keenetic (замер по скриншотам KeeneticOS 5.1): текст 16px, меню 16px с шагом 40px, заголовок 32px, меню 280px */
+@media (min-width: 1100px) { :root[data-variant="k"][data-layout="menu"] { --side-w: 280px; } }
+:root[data-variant="k"] { --top-h: 60px; }
+:root[data-variant="k"] body { font-size: 16px; }
+:root[data-variant="k"] .sm { font-size: 14px; }
+:root[data-variant="k"] .mnav .nav-h { font-size: 14px; padding: 16px 20px 6px; }
+:root[data-variant="k"] .mnav a { font-size: 16px; min-height: 40px; padding: 8px 20px 8px 56px; }
+:root[data-variant="k"] .vh h1 { font-size: 32px; }
+:root[data-variant="k"] .panel-h h2 { font-size: 24px; }
+:root[data-variant="k"] .blk-h h2 { font-size: 15px; }
+:root[data-variant="k"] .lbl { font-size: 15px; }
+:root[data-variant="k"] .input, :root[data-variant="k"] .select, :root[data-variant="k"] .textarea { min-height: 44px; font-size: 16px; padding: 8px 12px; }
+:root[data-variant="k"] .input.mono { font-size: 14.5px; }
+:root[data-variant="k"] .btn:not(.ghost) { min-height: 40px; font-size: 16px; padding: 6px 20px; }
+:root[data-variant="k"] .btn.small:not(.ghost) { min-height: 34px; font-size: 14.5px; padding: 4px 14px; }
+:root[data-variant="k"] .tbl { font-size: 15px; }
+:root[data-variant="k"] .tbl th { font-size: 15px; padding: 12px 14px; }
+:root[data-variant="k"] .tbl td { padding: 12px 14px; }
+/* верхняя панель: белая, значки — синие, как поиск и шестерёнка у Keenetic */
+:root[data-variant="k"] .top .btn.ghost { color: var(--accent); }
+:root[data-variant="k"] .top .btn.ghost:hover { background: var(--accent-soft); }
+:root[data-variant="k"] .top svg { width: 20px; height: 20px; }
+/* галочка Keenetic: квадрат 20px, отмеченная — синяя заливка с белой птичкой */
+:root[data-variant="k"] input[type="checkbox"] { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; margin: 0; flex: none; border: 1.5px solid #8a8a8a; border-radius: 2px; background: var(--surface); display: inline-grid; place-content: center; cursor: pointer; vertical-align: middle; }
+:root[data-variant="k"] input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+:root[data-variant="k"] input[type="checkbox"]:checked::after { content: ""; width: 5px; height: 10px; border: solid #fff; border-width: 0 2px 2px 0; transform: translateY(-1px) rotate(45deg); }
+:root[data-variant="k"] input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
+/* переключатель вида — рамки-кнопки, как «Clients | Categories | Applications» */
+:root[data-variant="k"] .seg { border: 0; padding: 0; background: none; gap: 0; }
+:root[data-variant="k"] .seg button { border: 1px solid var(--line); border-radius: 0; margin-left: -1px; min-height: 36px; padding: 6px 16px; font-size: 15px; font-weight: 400; color: var(--muted); background: var(--surface); }
+:root[data-variant="k"] .seg button:first-child { border-radius: 3px 0 0 3px; margin-left: 0; }
+:root[data-variant="k"] .seg button:last-child { border-radius: 0 3px 3px 0; }
+:root[data-variant="k"] .seg button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); box-shadow: none; position: relative; z-index: 1; }
+/* вкладки страницы — как сегменты Keenetic: крупный текст, выбранная — чёрная с синей чертой */
+:root[data-variant="k"] .subtabs a { font-size: 17px; font-weight: 400; padding: 10px 16px; border-bottom-width: 3px; }
+:root[data-variant="k"] .subtabs a.on { font-weight: 400; }
+@media (max-width: 759px) {
+  :root[data-variant="k"] .vh h1 { font-size: 26px; }
+  :root[data-variant="k"] .subtabs a { font-size: 15.5px; padding: 9px 12px; }
+}
+:root[data-variant="k"] .top .btn.ghost.danger { color: var(--bad); }
+/* у Keenetic в меню нет меток «новое» — и без них названия не обрезаются */
+:root[data-variant="k"] .mnav .tag.new { display: none; }

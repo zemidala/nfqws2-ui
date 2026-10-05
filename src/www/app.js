@@ -998,7 +998,7 @@ const OVERVIEWS = [['brief', 'Кратко'], ['groups', 'Группы'], ['tile
 async function viewOverview(main, r) {
   sideBlocks();
   const look = getLook();
-  const view = OVERVIEWS.some(([v]) => v === look.overview) ? look.overview : simple() ? 'brief' : 'groups';
+  const view = OVERVIEWS.some(([v]) => v === look.overview) ? look.overview : simple() ? 'brief' : look.variant === 'k' ? 'masonry' : 'groups';   // в стиле K — отдельные карточки, как «Системный монитор»
   const B = { svc: SIDE.service, check: S.check.el, prob: SIDE.problems, mon: SIDE.monitor, backup: SIDE.backup, traffic: SIDE.traffic, ...overviewExtra() };
   const grp = (title, ...blocks) => h('div', { class: 'ogrp' }, h('h3', { text: title }), ...blocks);
   const body = {
