@@ -32,7 +32,9 @@ elif [ -x /opt/bin/opkg ]; then
 	R=/opt
 	PATH=/opt/sbin:/opt/bin:/opt/usr/sbin:/opt/usr/bin:/usr/sbin:/usr/bin:/sbin:/bin
 	export PATH
-	say "Система: Keenetic / Entware ($(uname -m))"
+	# uname на mipsel отвечает «mips» — архитектуру пакетов знает opkg (строка с наибольшим приоритетом)
+	ARCH=$(opkg print-architecture 2>/dev/null | awk '$1 == "arch" && $2 != "all" && $2 != "noarch" && $3 + 0 >= p { p = $3 + 0; a = $2 } END { print a }')
+	say "Система: Keenetic / Entware (${ARCH:-$(uname -m)})"
 else
 	die "нужен OpenWrt или Keenetic с Entware (не найдены /etc/openwrt_release и /opt/bin/opkg)"
 fi

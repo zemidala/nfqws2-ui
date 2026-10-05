@@ -576,6 +576,20 @@ function runningArgs(int $pid): array
   return $argv;
 }
 
+// Архитектура пакетов: uname на mipsel отвечает «mips», поэтому спрашиваем opkg (строка с наибольшим приоритетом)
+function sysArch(): string
+{
+  exec((ROOT ? '/opt/bin/' : '') . 'opkg print-architecture 2>/dev/null', $out);
+  $best = '';
+  $prio = -1;
+  foreach ($out as $l) {
+    if (preg_match('/^arch\s+(\S+)\s+(\d+)/', $l, $m) && !in_array($m[1], ['all', 'noarch'], true) && (int)$m[2] >= $prio) {
+      [$best, $prio] = [$m[1], (int)$m[2]];
+    }
+  }
+  return $best !== '' ? $best : php_uname('m');
+}
+
 // Версия установленного пакета: opkg (OpenWrt до 24.10, Entware) или apk (OpenWrt 25+)
 function packageVersion(string $pkg): ?string
 {
@@ -4242,7 +4256,7 @@ function reportText(array $sites, bool $hide, string $build): string
   }
   $L = ['Отчёт nfqws2-ui · ' . ldate('Y-m-d H:i'), '', '== Версии ==',
     'nfqws2: ' . ($st['version'] ?: 'не определена'), 'nfqws2-ui: ' . UI_VERSION . ($build !== '' ? " (сборка $build)" : ''),
-    'система: ' . $os . ' · ' . php_uname('m') . ' · ядро ' . php_uname('r'), 'провайдер: ' . ($s['provider'] !== '' ? $s['provider'] : 'не указан'), '', '== Сервис =='];
+    'система: ' . $os . ' · ' . sysArch() . ' · ядро ' . php_uname('r'), 'провайдер: ' . ($s['provider'] !== '' ? $s['provider'] : 'не указан'), '', '== Сервис =='];
   if ($st['running']) {
     $L[] = 'работает' . (!empty($st['process']['started']) ? ', запущен ' . ldate('Y-m-d H:i', (int)$st['process']['started']) : '')
       . ($st['restart_needed'] || !$st['in_sync'] ? ' · конфиг изменён после запуска — нужен перезапуск' : '');
