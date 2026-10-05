@@ -768,7 +768,8 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
 .more-pop svg, .more-pop .mi { width: 17px; color: var(--muted); text-align: center; }
 #https-slot:empty { display: none; }
 #https-slot { display: grid; }
-@media (max-width: 759px) { .more-pop { left: auto; right: -60px; } }
+/* на узком экране кнопка «⋯» у левого края — меню прижимаем к краю экрана, чтобы оно не уходило за него */
+@media (max-width: 759px) { .more-pop { position: fixed; top: calc(var(--top-h) + 4px); left: 8px; right: auto; max-width: calc(100vw - 16px); } }
 
 .ov-brief { display: grid; gap: 14px; max-width: 980px; }
 .ov-state { display: flex; align-items: baseline; gap: 6px 16px; flex-wrap: wrap; padding: 16px 18px; }

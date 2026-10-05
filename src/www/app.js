@@ -457,7 +457,7 @@ function updateChrome() {
   const hp = st.ui?.https_port;
   document.getElementById('https-slot')?.replaceChildren(location.protocol === 'http:' && hp
     ? h('a', { href: `https://${location.hostname}:${hp}/${location.hash}`, role: 'menuitem', title: 'Пароль и данные идут в зашифрованном виде' }, h('span', { class: 'mi', text: '🔒' }), 'Открыть по HTTPS')
-    : null);
+    : []);
   const svc = document.getElementById('svc');
   svc.className = 'pill ' + (st.running ? 'ok' : 'bad');
   svc.replaceChildren(h('span', { class: 'dot' }), st.running ? 'работает' : 'остановлен');
@@ -1020,6 +1020,8 @@ function overviewBrief(B) {
     const d = h('details', { class: 'ofold', open: force || open.includes(id) }, h('summary', {}, h('b', { text: label }), h('span', { class: 'sm faint ellipsis' }, summary),
       HREF[id] ? h('a', { class: 'sm', href: HREF[id], text: 'открыть', onclick: (e) => e.stopPropagation() }) : null), block);
     d.addEventListener('toggle', () => {
+      // раскрытое самим интерфейсом (остановка, замечания, упавший сайт) не запоминаем — иначе останется раскрытым навсегда
+      if (force && d.open) return;
       open = d.open ? [...new Set([...open, id])] : open.filter((x) => x !== id);
       try { localStorage.setItem(KEY, JSON.stringify(open)); } catch { /* нет хранилища */ }
     });
