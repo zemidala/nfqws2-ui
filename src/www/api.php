@@ -916,13 +916,44 @@ function readListLines(string $path): array
   return $out;
 }
 
-function listKind(string $name): string
+// Вид списка по подключению: --ipset → ip, --hostlist → host. Профили передаёт listsInventory, иначе читаем сами
+function listUse(?array $profiles = null): array
 {
+  static $use = null;
+  if ($profiles !== null || $use === null) {
+    $use = [];
+    foreach ($profiles ?? currentProfiles() as $p) {
+      foreach (['ipsets' => 'ip', 'ipset_excludes' => 'ip', 'hostlists' => 'host', 'hostlist_excludes' => 'host'] as $key => $kind) {
+        foreach ($p[$key] as $path) {
+          $use[$path] ??= $kind;
+        }
+      }
+      if ($p['autolist']) {
+        $use[$p['autolist']] ??= 'host';
+      }
+    }
+  }
+  return $use;
+}
+
+// Вид списка: как его подключают профили; неподключённый — по содержимому (больше половины строк —
+// адреса и подсети); пустой — по имени. $lines — записи, если они уже прочитаны или ещё не сохранены
+function listKind(string $name, ?array $lines = null): string
+{
+  $use = listUse();
+  if (isset($use[LISTS_DIR . "/$name"])) {
+    return $use[LISTS_DIR . "/$name"];
+  }
+  $lines = array_slice($lines ?? readListLines(LISTS_DIR . "/$name"), 0, 200);
+  if ($lines) {
+    return count(array_filter($lines, 'validCidr')) * 2 > count($lines) ? 'ip' : 'host';
+  }
   return str_starts_with($name, 'ipset') ? 'ip' : 'host';
 }
 
 function listsInventory(array $profiles): array
 {
+  listUse($profiles);
   $usage = [];
   $roles = ['hostlists' => 'include', 'hostlist_excludes' => 'exclude', 'ipsets' => 'include', 'ipset_excludes' => 'exclude'];
   foreach ($profiles as $p) {
@@ -951,7 +982,7 @@ function listsInventory(array $profiles): array
     $res[] = [
       'name' => $name,
       'path' => $path,
-      'kind' => listKind($name),
+      'kind' => listUse()[$path] ?? listKind($name),
       'exists' => $real !== null,
       'editable' => $real === $path && dirname($path) === LISTS_DIR,
       'removable' => !in_array($name, PROTECTED_LISTS, true) && empty($usage[$path]),
@@ -2001,7 +2032,7 @@ function validCidr(string $s): bool
 // Замечания по строкам списка: line — номер строки с 0; fix — чем заменить (строка) или null — удалить
 function lintList(string $name, string $content): array
 {
-  $isIp = listKind($name) === 'ip';
+  $isIp = listKind($name, readListLinesFromText($content)) === 'ip';
   $lines = explode("\n", $content);
   $issues = [];
   $seen = [];
@@ -2064,7 +2095,8 @@ function listProblems(string $path): array
   if (!is_file($path) || filesize($path) > 1048576) {
     return ['error' => 0, 'warning' => 0, 'info' => 0];
   }
-  return cached('listlint-' . basename($path), [$path], function () use ($path) {
+  // вид списка зависит и от того, как его подключает конфиг
+  return cached('listlint-' . basename($path), [$path, CONF_FILE], function () use ($path) {
     $c = ['error' => 0, 'warning' => 0, 'info' => 0];
     foreach (lintList(basename($path), file_get_contents($path)) as $x) {
       $c[$x['level']]++;
@@ -4595,7 +4627,8 @@ switch ($cmd) {
       fail('Файл не найден', 404);
     }
     $items = is_array($in['items'] ?? null) ? $in['items'] : [];
-    $isIpList = listKind(basename($path)) === 'ip';
+    // пустой неподключённый список получает вид по тому, что в него добавляют
+    $isIpList = listKind(basename($path), readListLines($path) ?: array_map('trim', array_filter($items, 'is_string'))) === 'ip';
     $clean = [];
     foreach ($items as $it) {
       if (!is_string($it)) {

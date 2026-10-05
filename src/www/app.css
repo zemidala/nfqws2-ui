@@ -637,10 +637,32 @@ a.over-row:hover { background: var(--soft); }
 /* ширина содержимого в «Боковом меню»: строки не растягиваются на весь широкий экран; конфигу целиком ширина нужна */
 @media (min-width: 1100px) { :root[data-layout="menu"] main { max-width: 1320px; } :root[data-layout="menu"] main:has(.cfg) { max-width: none; } }
 
-/* меню списков: имя файла и пояснение в две строки, действия закреплены внизу */
-.lrow .nm { display: grid; white-space: normal; }
-.lrow b { font-weight: 600; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.lrow.on .muted { color: inherit; opacity: .8; }
+/* меню списков: разделы «сайты» и «IP», строка в одну линию (полоска — обход или исключение, номера профилей, число записей),
+   действия закреплены внизу */
+.nav a.lrow { min-height: 30px; padding: 4px 8px 4px 4px; gap: 7px; font-size: 13px; }
+.lrow .bar { width: 3px; height: 16px; border-radius: 2px; flex: none; }
+.lrow .bar.inc { background: var(--accent); } .lrow .bar.exc { background: var(--warn); }
+/* при нехватке места сначала сжимается имя файла, потом название */
+.lrow .nm { display: flex; align-items: baseline; }
+.lrow .nm .t, .lrow .nm i { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lrow .nm .t { flex: 0 1 auto; }
+.lrow .nm i { flex: 0 100 auto; font-style: normal; font-size: 11.5px; color: var(--faint); margin-left: 6px; }
+.lrow .nm .t.mono { font-size: 12.5px; }
+@media (min-width: 1200px) { .split.lists { grid-template-columns: 300px minmax(0, 1fr); } }
+.nav a.lrow.off:not(.on) { color: var(--muted); }
+.lrow .tail { gap: 3px; }
+.pchip { font: 600 10.5px/16px var(--mono); color: var(--muted); background: var(--soft); border-radius: 4px; padding: 0 4px; }
+.pchip.exc { color: var(--warn); background: var(--warn-soft); }
+.lrow .tail .errdot, .lrow .tail .warndot { margin-left: 3px; }
+.lsec-h, .lsub { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: 0; color: var(--fg); font: inherit; text-align: left; cursor: pointer; border-radius: calc(var(--radius) * .7 + 2px); }
+.lsec-h { padding: 9px 6px 5px; font-size: 13px; }
+.lsec-h:hover, .lsub:hover { background: var(--soft); }
+.lsec-h b { white-space: nowrap; }
+.lsec-h .cnt { margin-left: auto; color: var(--faint); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.lsub { padding: 5px 8px 3px 6px; font-size: 11.5px; color: var(--faint); }
+.lsec-h .ar, .lsub .ar { color: var(--faint); width: 12px; display: inline-block; transition: transform .15s; }
+.lsec.closed .lsec-h .ar, .lsub[aria-expanded="false"] .ar { transform: rotate(-90deg); }
+.lsec.closed .lsec-b { display: none; }
 .sq { width: 22px; height: 22px; border-radius: 5px; background: var(--soft); display: inline-grid; place-items: center; font-size: 12px; font-weight: 700; flex: none; color: var(--muted); }
 .lnav-acts { position: sticky; bottom: -6px; display: grid; gap: 1px; margin-top: 6px; padding: 4px 0 6px; background: var(--surface); border-top: 1px solid var(--line); }
 .ltitle { font-size: 15px; font-weight: 700; }

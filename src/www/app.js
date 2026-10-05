@@ -50,7 +50,7 @@ const LIST_NAMES = {
   'ipset_htz.list': 'IP Hetzner', 'ipset_ovh.list': 'IP OVH', 'ipset-games.list': 'IP игровых серверов',
   'ipset_gamefilter.list': 'IP игровых серверов (gamefilter)', 'youtube.list': 'YouTube', 'google.list': 'Google',
   'discord.list': 'Discord', 'telegram.list': 'Telegram', 'instagram.list': 'Instagram', 'twitch.list': 'Twitch',
-  'whatsapp.list': 'WhatsApp', 'blizzard.list': 'Blizzard', 'ea.list': 'EA', 'aws_game.list': 'Игры на AWS',
+  'whatsapp.list': 'WhatsApp', 'blizzard.list': 'Blizzard', 'ea.list': 'EA', 'aws_game.list': 'Игры на AWS', 'ipset_meta.list': 'IP Meta',
   'exclude_special.list': 'Особые исключения',
 };
 
@@ -1543,7 +1543,7 @@ async function viewSites(main, r) {
   if (r.arg === '~dups') {
     const nav = h('nav', { class: 'nav lnav', 'aria-label': 'Списки' });
     const content = h('div', { class: 'stack', style: 'gap:14px' });
-    main.append(h('div', { class: 'vh' }, h('h1', { text: 'Списки' })), h('div', { class: 'split' }, nav, content));
+    main.append(h('div', { class: 'vh' }, h('h1', { text: 'Списки' })), h('div', { class: 'split lists' }, nav, content));
     drawListNav(nav, '~dups');
     return viewDups(content, r);
   }
@@ -1551,33 +1551,66 @@ async function viewSites(main, r) {
   const name = r.arg || (lists.find((l) => l.name === 'user.list') ? 'user.list' : lists[0]?.name);
   const nav = h('nav', { class: 'nav lnav', 'aria-label': 'Списки' });
   const content = h('div', { class: 'stack', style: 'gap:14px' });
-  main.append(h('div', { class: 'vh' }, h('h1', { text: 'Списки' })), h('div', { class: 'split' }, nav, content));
+  main.append(h('div', { class: 'vh' }, h('h1', { text: 'Списки' })), h('div', { class: 'split lists' }, nav, content));
   drawListNav(nav, name);
   if (name) await drawList(content, name);
 }
 
+// Колонка списков: два раздела — сайты и IP; в каждом сначала подключённые, неподключённые свёрнуты.
+// Что свёрнуто — запоминается в браузере (nfqws-ui-lnav)
 function drawListNav(nav, current) {
-  const lists = S.state.lists;
-  const used = lists.filter((l) => l.used.length);
-  const unused = lists.filter((l) => !l.used.length);
+  const KEY = 'nfqws-ui-lnav';
+  let fold = {};
+  try { fold = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { /* нет хранилища */ }
+  const setFold = (k, v) => { fold[k] = v; try { localStorage.setItem(KEY, JSON.stringify(fold)); } catch { /* нет хранилища */ } };
   const row = (l) => {
     const pr = l.problems || {};
-    const friendly = LIST_NAMES[l.name] || (l.kind === 'ip' ? 'адреса' : 'сайты');
-    return h('a', { href: '#/sites/' + encodeURIComponent(l.name), class: 'lrow' + (l.name === current ? ' on' : ''), title: l.name },
-      h('span', { class: 'nm' }, h('b', { class: 'mono', text: l.name }), h('span', { class: 'sm muted ellipsis', text: friendly })),
-      h('span', { class: 'tail num' }, pr.error ? h('span', { class: 'errdot' }) : pr.warning ? h('span', { class: 'warndot' }) : null, fmtNum(l.entries)));
+    const nice = LIST_NAMES[l.name];
+    const file = l.name.replace(/\.list$/, '');
+    const role = !l.used.length ? '' : l.used.every((u) => u.role === 'exclude') ? ' exc' : ' inc';
+    const tip = l.name + (l.used.length ? '\n' + l.used.map((u) => `${u.role === 'exclude' ? 'исключает из' : 'читает'} профиль #${u.profile}`).join('\n') : '\nне подключён ни к одному профилю');
+    return h('a', { href: '#/sites/' + encodeURIComponent(l.name), class: 'lrow' + (l.used.length ? '' : ' off') + (l.name === current ? ' on' : ''), title: tip },
+      h('span', { class: 'bar' + role }),
+      h('span', { class: 'nm' }, nice ? [h('span', { class: 't', text: nice }), h('i', { class: 'mono', text: file })] : h('span', { class: 't mono', text: file })),
+      h('span', { class: 'tail num' },
+        l.used.map((u) => h('span', { class: 'pchip' + (u.role === 'exclude' ? ' exc' : ''), text: '#' + u.profile })),
+        pr.error ? h('span', { class: 'errdot' }) : pr.warning ? h('span', { class: 'warndot' }) : null, fmtNum(l.entries)));
+  };
+  const section = (kind, title) => {
+    const all = S.state.lists.filter((l) => l.kind === kind);
+    if (!all.length) return null;
+    const used = all.filter((l) => l.used.length);
+    const off = all.filter((l) => !l.used.length);
+    const total = all.reduce((a, l) => a + (l.entries || 0), 0);
+    // неподключённые раскрыты, если открыт один из них или подключённых в разделе нет
+    const offOpen = !used.length || off.some((l) => l.name === current) || fold['off-' + kind] === true;
+    const closed = fold[kind] === true && !all.some((l) => l.name === current);
+    const box = h('div', { class: 'lsec' + (closed ? ' closed' : '') });
+    const offBox = h('div', { class: 'lsec-off', hidden: !offOpen }, off.map(row));
+    const offBtn = off.length && used.length ? h('button', { type: 'button', class: 'lsub', 'aria-expanded': String(offOpen), onclick: () => {
+      offBox.hidden = !offBox.hidden;
+      offBtn.setAttribute('aria-expanded', String(!offBox.hidden));
+      setFold('off-' + kind, !offBox.hidden);
+    } }, h('span', { class: 'ar', text: '▾' }), `не подключены — ${off.length}`) : null;
+    box.append(
+      h('button', { type: 'button', class: 'lsec-h', 'aria-expanded': String(!closed), onclick: (e) => {
+        const c = box.classList.toggle('closed');
+        e.currentTarget.setAttribute('aria-expanded', String(!c));
+        setFold(kind, c);
+      } }, h('span', { class: 'ar', text: '▾' }), h('b', { text: title }), h('span', { class: 'cnt num', text: `${plural(all.length, 'список', 'списка', 'списков')} · ${fmtNum(total)}` })),
+      h('div', { class: 'lsec-b' }, used.map(row), offBtn, offBox));
+    return box;
   };
   const act = (ic, label, onclick) => h('button', { class: 'ni', type: 'button', onclick }, h('span', { class: 'sq', text: ic }), h('span', { class: 'nm muted', text: label }));
   const file = h('input', { type: 'file', accept: '.list,.txt,text/plain', hidden: true, onchange: (e) => importListFile(e.target.files[0]) });
   nav.replaceChildren(
-    h('div', { class: 'nav-h', text: 'Используются' }), used.map(row),
-    unused.length ? h('div', { class: 'nav-h', text: 'Не используются' }) : null, unused.map(row),
+    section('host', 'Списки сайтов'), section('ip', 'IP-списки'),
     h('div', { class: 'lnav-acts' },
       act('+', 'Новый список', () => createList()),
       act('⇩', 'Загрузить по ссылке', importListUrl),
       act('⇧', 'Импорт из файла', () => file.click()), file,
       h('a', { href: '#/sites/~dups', class: current === '~dups' ? 'on' : null }, h('span', { class: 'sq', text: '≡' }), h('span', { class: 'nm', text: 'Дубликаты и конфликты' })),
-      h('span', { class: 'soon', title: SOON_HINT, 'aria-disabled': 'true' }, h('span', { class: 'sq', text: '#' }), h('span', { class: 'nm', text: 'Собрать по ASN' }), h('span', { class: 'tag', text: 'скоро' }))));
+      h('a', { href: PAGES.asn[0] }, h('span', { class: 'sq', text: '#' }), h('span', { class: 'nm', text: 'Собрать по ASN' }))));
 }
 
 async function createList(initial = '') {
