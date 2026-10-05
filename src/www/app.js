@@ -3186,6 +3186,20 @@ async function viewNotify(main) {
       h('div', { class: 'chips' }, r.chats.map((c) => h('button', { type: 'button', class: 'chip add', title: 'Подставить этот ID', onclick: () => { tgChat.value = c.id; found.hidden = true; toast(`ID чата: ${c.id}. Нажмите «Отправить проверочное».`); } },
         `${c.name || (c.username ? '@' + c.username : 'без имени')} · ${TG_TYPE[c.type] || c.type} · `, h('b', { class: 'mono', text: c.id })))));
   };
+  // Какой бот подключён и куда он пишет: по точкам вместо токена и числу ID этого не понять
+  const who = h('div', { class: 'frow', hidden: true });
+  const drawWho = async () => {
+    const r = await api('tg_info').catch((e) => ({ error: e.message }));
+    if (!main.contains(who)) return;
+    who.hidden = !r.bot && !r.error;
+    if (who.hidden) return;
+    const chatName = (c) => c.name || (c.username ? '@' + c.username : 'без имени');
+    who.replaceChildren(h('span', { class: 'lbl', text: 'Подключён' }), r.error
+      ? h('span', { class: 'sm', style: 'color:var(--bad)', text: r.error })
+      : h('span', { class: 'sm' }, 'бот ', h('b', { text: r.bot.username ? '@' + r.bot.username : r.bot.name }), r.bot.username && r.bot.name ? ` «${r.bot.name}»` : '',
+        r.chat ? [' → пишет в ', h('b', { text: chatName(r.chat) }), ` (${TG_TYPE[r.chat.type] || r.chat.type})`]
+          : r.chat_error ? [' → ', h('span', { style: 'color:var(--bad)', text: r.chat_error })] : ' → ID чата не указан'));
+  };
   main.append(h('div', { class: 'vh' }, h('h1', { text: 'Уведомления' })),
     panel('Уведомления в Telegram', null,
       h('p', { class: 'sm muted', text: 'Сообщение приходит, когда сайт из мониторинга перестаёт или снова начинает открываться. Создайте бота у @BotFather, укажите его токен, напишите боту любое сообщение и нажмите «Найти» у поля «ID чата» — роутер сам покажет ваш чат. Токен хранится только на роутере.' }),
@@ -3197,12 +3211,16 @@ async function viewNotify(main) {
         h('div', { class: 'stack', style: 'gap:8px' },
           h('div', { class: 'row' }, tgChat, btn('Найти', findChats, '', 'search', { title: 'Показать чаты, из которых боту недавно писали' })),
           found)),
-      h('div', { class: 'row' }, btn('Сохранить', async () => { if (await save()) toast('Сохранено'); }, 'primary'),
+      who,
+      h('div', { class: 'row' }, btn('Сохранить', async () => { if (await save()) { toast('Сохранено'); drawWho(); } }, 'primary'),
         btn('Отправить проверочное', async () => {
           if (!await save()) return;
+          drawWho();
           const r = await guarded(() => api('notify_test'));
           if (r) toast('Сообщение отправлено ' + r.via);
         }))));
+  // не ждём Telegram, чтобы страница открылась сразу
+  if (m.tg.token_set) drawWho();
 }
 
 // bare — без заголовка: страница встроена в карточку сайта

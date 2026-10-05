@@ -2610,6 +2610,38 @@ function tgChats(): array
   return ['chats' => array_reverse(array_values($chats))];
 }
 
+// Какой бот подключён и в какой чат он пишет — чтобы по токену из точек и числу ID было видно, что это.
+// getMe и getChat сообщений не забирают и другой программе, которая опрашивает бота, не мешают
+function tgInfo(): array
+{
+  $t = uiSettings()['notify'];
+  if (empty($t['tg_token'])) {
+    return ['bot' => null, 'chat' => null];
+  }
+  $cut = fn($s) => preg_match('/^.{0,60}/us', trim((string)$s), $m) ? $m[0] : '';
+  $r = tgCall($t, 'getMe', []);
+  if (!$r['ok']) {
+    return ['bot' => null, 'chat' => null, 'error' => $r['code'] === 401 || $r['code'] === 404
+      ? 'Telegram не принял токен — бот удалён или токен заменён. Возьмите новый токен у @BotFather.'
+      : 'Telegram: ' . $r['error']];
+  }
+  $out = ['bot' => ['name' => $cut($r['result']['first_name'] ?? ''), 'username' => (string)($r['result']['username'] ?? '')], 'chat' => null];
+  if ($t['tg_chat'] === '') {
+    return $out;
+  }
+  $c = tgCall($t, 'getChat', ['chat_id' => $t['tg_chat']]);
+  if (!$c['ok']) {
+    // 400 «chat not found» — боту в этот чат не писали или ID с ошибкой; 403 — бота оттуда убрали или заблокировали
+    $out['chat_error'] = $c['code'] === 400 ? 'бот не видит этот чат — проверьте ID или напишите боту любое сообщение'
+      : ($c['code'] === 403 ? 'бота убрали из этого чата или заблокировали' : $c['error']);
+    return $out;
+  }
+  $c = $c['result'];
+  $out['chat'] = ['name' => $cut($c['title'] ?? trim(($c['first_name'] ?? '') . ' ' . ($c['last_name'] ?? ''))),
+    'type' => (string)($c['type'] ?? ''), 'username' => (string)($c['username'] ?? '')];
+  return $out;
+}
+
 // Местный DNS может отдавать для api.telegram.org адрес, который через туннель не работает: FakeIP podkop
 // (198.18.0.0/15) или заглушку. Тогда настоящий адрес спрашиваем у защищённого DNS; запасной — постоянный адрес Telegram
 function telegramRealIp(): ?string
@@ -5502,6 +5534,9 @@ switch ($cmd) {
       fail($r['error']);
     }
     respond($r);
+
+  case 'tg_info':
+    respond(tgInfo());
 
   case 'notify_test':
     $err = notifyTelegram('Проверка уведомлений nfqws2: всё работает.');
