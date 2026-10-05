@@ -3149,7 +3149,7 @@ async function viewMonitor(main) {
 async function viewNotify(main) {
   const m = await api('monitor_get', { ifaces: true });
   const tgToken = h('input', { class: 'input mono', id: 'tg-token', type: 'password', placeholder: m.tg.token_set ? 'задан — оставьте пустым, чтобы не менять' : '123456:ABC…', autocomplete: 'off', 'aria-label': 'Токен бота' });
-  const tgChat = h('input', { class: 'input mono', id: 'tg-chat', value: m.tg.chat, placeholder: 'ID чата, например 123456789', 'aria-label': 'ID чата' });
+  const tgChat = h('input', { class: 'input mono grow', id: 'tg-chat', value: m.tg.chat, placeholder: 'ID чата, например 123456789', 'aria-label': 'ID чата' });
   // Каким путём слать: api.telegram.org у многих закрыт, тогда нужен туннель или прокси
   const KIND = { tunnel: 'туннель', ppp: 'PPP', ethernet: '' };
   const ifaces = m.ifaces || [];
@@ -3169,14 +3169,34 @@ async function viewNotify(main) {
   const drawVia = () => { viaIface.hidden = via.value !== 'iface'; viaProxy.hidden = via.value !== 'proxy'; };
   drawVia();
   const save = () => guarded(() => api('monitor_set', { tg_token: tgToken.value || '••••', tg_chat: tgChat.value, tg_iface: iface.value, tg_proxy: proxy.value, tg_via: via.value }));
+  // «Найти»: роутер сам спрашивает у Telegram, кто недавно писал боту, — ID чата не нужно узнавать на стороне
+  const TG_TYPE = { private: 'личный чат', group: 'группа', supergroup: 'группа', channel: 'канал' };
+  const found = h('div', { class: 'stack', style: 'gap:6px', hidden: true });
+  const findChats = async () => {
+    if (!await save()) return;
+    found.hidden = false;
+    found.replaceChildren(spinner('Спрашиваю у Telegram…'));
+    const r = await api('tg_chats').catch((e) => ({ error: e.message }));
+    if (r.error) { found.replaceChildren(notice('bad', 'Не получилось', r.error)); return; }
+    if (!r.chats.length) {
+      found.replaceChildren(notice('info', 'Боту пока никто не писал', 'Откройте своего бота в Telegram, отправьте ему любое сообщение (в группе — команду /start) и нажмите «Найти» ещё раз. Telegram хранит сообщения сутки.'));
+      return;
+    }
+    found.replaceChildren(h('span', { class: 'sm muted', text: 'Кто писал боту за последние сутки — нажмите нужный чат:' }),
+      h('div', { class: 'chips' }, r.chats.map((c) => h('button', { type: 'button', class: 'chip add', title: 'Подставить этот ID', onclick: () => { tgChat.value = c.id; found.hidden = true; toast(`ID чата: ${c.id}. Нажмите «Отправить проверочное».`); } },
+        `${c.name || (c.username ? '@' + c.username : 'без имени')} · ${TG_TYPE[c.type] || c.type} · `, h('b', { class: 'mono', text: c.id })))));
+  };
   main.append(h('div', { class: 'vh' }, h('h1', { text: 'Уведомления' })),
     panel('Уведомления в Telegram', null,
-      h('p', { class: 'sm muted', text: 'Сообщение приходит, когда сайт из мониторинга перестаёт или снова начинает открываться. Создайте бота у @BotFather, напишите ему любое сообщение и укажите токен и ID своего чата (его показывает @userinfobot). Токен хранится только на роутере.' }),
+      h('p', { class: 'sm muted', text: 'Сообщение приходит, когда сайт из мониторинга перестаёт или снова начинает открываться. Создайте бота у @BotFather, укажите его токен, напишите боту любое сообщение и нажмите «Найти» у поля «ID чата» — роутер сам покажет ваш чат. Токен хранится только на роутере.' }),
       h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 'tg-token', text: 'Токен бота' }), tgToken),
-      h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 'tg-chat', text: 'ID чата' }), tgChat),
       h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 'tg-via', text: 'Отправлять' }), via,
         h('p', { class: 'hint', text: 'Если Telegram у провайдера закрыт и проверочное сообщение не уходит, отправляйте через туннель или прокси.' })),
       viaIface, viaProxy,
+      h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 'tg-chat', text: 'ID чата' }),
+        h('div', { class: 'stack', style: 'gap:8px' },
+          h('div', { class: 'row' }, tgChat, btn('Найти', findChats, '', 'search', { title: 'Показать чаты, из которых боту недавно писали' })),
+          found)),
       h('div', { class: 'row' }, btn('Сохранить', async () => { if (await save()) toast('Сохранено'); }, 'primary'),
         btn('Отправить проверочное', async () => {
           if (!await save()) return;

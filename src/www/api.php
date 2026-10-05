@@ -2534,9 +2534,17 @@ function notifyTelegram(string $text): ?string
   if (empty($t['tg_token']) || empty($t['tg_chat'])) {
     return 'не настроено';
   }
-  $opts = [CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query(['chat_id' => $t['tg_chat'], 'text' => $text]),
+  $r = tgCall($t, 'sendMessage', ['chat_id' => $t['tg_chat'], 'text' => $text]);
+  return $r['ok'] ? null : $r['error'];
+}
+
+// Запрос к Bot API тем путём, что выбран в настройках. ok, result — ответ Telegram; иначе error словами
+// и code — код ошибки Telegram (null, если до него не дошли)
+function tgCall(array $t, string $method, array $params): array
+{
+  $opts = [CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query($params),
     CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10, CURLOPT_CONNECTTIMEOUT => 6];
-  // api.telegram.org у многих закрыт по IP — тогда отправляем через выбранный туннель или прокси
+  // api.telegram.org у многих закрыт по IP — тогда идём через выбранный туннель или прокси
   if ($t['via'] === 'iface' && $t['iface'] !== '') {
     $opts[CURLOPT_INTERFACE] = $t['iface'];
     if ($ip = telegramRealIp()) {
@@ -2545,7 +2553,7 @@ function notifyTelegram(string $text): ?string
   } elseif ($t['via'] === 'proxy' && $t['proxy'] !== '') {
     $opts[CURLOPT_PROXY] = $t['proxy'];
   }
-  $ch = curl_init('https://api.telegram.org/bot' . $t['tg_token'] . '/sendMessage');
+  $ch = curl_init('https://api.telegram.org/bot' . $t['tg_token'] . '/' . $method);
   curl_setopt_array($ch, $opts);
   $res = curl_exec($ch);
   $errno = curl_errno($ch);
@@ -2553,16 +2561,53 @@ function notifyTelegram(string $text): ?string
   curl_close($ch);
   $j = json_decode((string)$res, true);
   if (!empty($j['ok'])) {
-    return null;
+    return ['ok' => true, 'result' => $j['result'] ?? null];
   }
   if (isset($j['description'])) {
     // Telegram ответил — значит, путь работает, дело в токене или ID чата
-    return $j['description'];
+    return ['ok' => false, 'error' => (string)$j['description'], 'code' => (int)($j['error_code'] ?? 0)];
   }
   $why = [6 => 'имя api.telegram.org не находится', 5 => 'имя прокси не находится', 7 => 'нет соединения', 28 => 'нет ответа за 10 секунд',
     35 => 'соединение оборвано при установке TLS', 45 => 'интерфейс не найден, выключен или без адреса', 56 => 'соединение оборвано', 97 => 'прокси отказал'][$errno]
     ?? preg_replace('#//[^@/\s]+@#', '//••••@', $err ?: 'ошибка отправки');
-  return notifyVia($t) . ': ' . $why;
+  return ['ok' => false, 'error' => notifyVia($t) . ': ' . $why, 'code' => null];
+}
+
+// Чаты, из которых боту недавно писали, — чтобы не узнавать ID чата вручную. Telegram хранит сообщения сутки.
+// offset не передаём: сообщения не отмечаются прочитанными и остаются тому, кто ещё опрашивает этого бота
+function tgChats(): array
+{
+  $t = uiSettings()['notify'];
+  if (empty($t['tg_token'])) {
+    return ['error' => 'Сначала укажите токен бота.'];
+  }
+  $r = tgCall($t, 'getUpdates', ['limit' => 100, 'timeout' => 0]);
+  if (!$r['ok']) {
+    if ($r['code'] === 401 || $r['code'] === 404) {
+      return ['error' => 'Telegram не принял токен — проверьте, что он скопирован у @BotFather целиком.'];
+    }
+    if ($r['code'] === 409) {
+      return ['error' => stripos($r['error'], 'webhook') !== false
+        ? 'У этого бота включён webhook — им пользуется другая программа, и сообщения отсюда не прочитать. Создайте для уведомлений отдельного бота у @BotFather.'
+        : 'Этого бота прямо сейчас опрашивает другая программа. Создайте для уведомлений отдельного бота у @BotFather или укажите ID чата вручную.'];
+    }
+    return ['error' => 'Telegram: ' . $r['error']];
+  }
+  $chats = [];
+  foreach (is_array($r['result']) ? $r['result'] : [] as $u) {
+    foreach (['message', 'edited_message', 'channel_post', 'edited_channel_post', 'my_chat_member', 'chat_member', 'chat_join_request'] as $k) {
+      $c = $u[$k]['chat'] ?? null;
+      if (!is_array($c) || !isset($c['id'])) {
+        continue;
+      }
+      $name = trim((string)($c['title'] ?? trim(($c['first_name'] ?? '') . ' ' . ($c['last_name'] ?? ''))));
+      // более позднее сообщение из того же чата заменяет раннее и уходит в конец
+      unset($chats[(string)$c['id']]);
+      $chats[(string)$c['id']] = ['id' => (string)$c['id'], 'type' => (string)($c['type'] ?? ''),
+        'name' => preg_match('/^.{0,60}/us', $name, $m) ? $m[0] : '', 'username' => (string)($c['username'] ?? '')];
+    }
+  }
+  return ['chats' => array_reverse(array_values($chats))];
 }
 
 // Местный DNS может отдавать для api.telegram.org адрес, который через туннель не работает: FakeIP podkop
@@ -5450,6 +5495,13 @@ switch ($cmd) {
     $s['asn'] = array_values($s['asn']);
     saveUiSettings($s);
     respond(['items' => $s['asn']]);
+
+  case 'tg_chats':
+    $r = tgChats();
+    if (isset($r['error'])) {
+      fail($r['error']);
+    }
+    respond($r);
 
   case 'notify_test':
     $err = notifyTelegram('Проверка уведомлений nfqws2: всё работает.');
