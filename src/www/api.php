@@ -1119,6 +1119,8 @@ function matchRoute(array $profiles, string $host, array $ips, string $proto, in
       $s['why'] = "IP {$ex['ip']} в исключениях" . ($ex['list'] ? " ({$ex['list']})" : '');
     } elseif ($p['has_host_filter'] && !($p['autolist'] && !$isIp) && ($isIp || !($hh = hostIn($host, array_merge($p['hostlists'], $p['autolist'] ? [$p['autolist']] : []), $p['hostlist_domains'], $cache)))) {
       $s['why'] = $isIp ? 'профиль работает по именам сайтов' : 'сайта нет в списках профиля';
+      // единственное, чего не хватило профилю, — записи в его списке сайтов (подбор предлагает её добавить)
+      $s['miss'] = $isIp ? null : 'hostlist';
     } elseif (!$isIp && ($ex = hostIn($host, $p['hostlist_excludes'], $p['hostlist_exclude_domains'], $cache))) {
       $s['why'] = "сайт в исключениях ({$ex['entry']}" . ($ex['list'] ? " в {$ex['list']}" : '') . ')';
       $s['excluded_by'] = $ex['list'];

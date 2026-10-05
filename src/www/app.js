@@ -3239,7 +3239,7 @@ async function viewTests(main, r, bare = false) {
         h('td', { class: 'sm muted' }, x.from, x.hist ? h('div', { class: 'nowrap' }, chip('работала ' + fmtDate(x.hist), 'ok')) : null),
         h('td', { class: 'sm', text: full ? `открылся ${x.ok} из ${x.ok}` : x.ok ? `${x.ok} из ${x.tries}` : x.reason || 'не открылся' }),
         h('td', { class: 'num', text: x.ms ? x.ms + ' мс' : '—' }),
-        h('td', {}, x.ok ? applyMenu(x.steps, s) : null));
+        h('td', {}, x.ok ? applyMenu(x, s) : null));
     });
     return h('div', { class: 'stack', style: 'gap:14px' },
       flow(s, running, res, best),
@@ -3249,7 +3249,7 @@ async function viewTests(main, r, bare = false) {
       !running && best ? h('div', { class: 'notice ok' }, icon('ok'), h('div', { class: 'grow' },
         h('b', { text: `Работают ${good.length} из ${res.length}. Быстрее всех — ${best.name}, ${best.ms} мс.` }),
         h('div', { class: 't', text: best.from }), h('code', { class: 'sm', style: 'word-break:break-all', text: best.steps.join(' ') })),
-        h('div', { class: 'notice-actions' }, applyMenu(best.steps, s, 'primary'), btn('Скопировать', () => copyText(best.steps.join('\n')), 'small', 'copy'))) : null,
+        h('div', { class: 'notice-actions' }, applyMenu(best, s, 'primary'), btn('Скопировать', () => copyText(best.steps.join('\n')), 'small', 'copy'))) : null,
       !running && !best && res.length ? notice('bad', 'Ни одна стратегия не помогла', isFreeze(baseline?.reason) ? FREEZE_HINT : 'Попробуйте больше повторов, протокол HTTP или другой сайт. Если без обхода соединение не устанавливается вовсе — возможно, заблокирован IP, тогда nfqws2 не поможет.') : null,
       refinePanel(s, rep),
       panel(`Результаты для ${s.host}`, h('span', { class: 'sm muted num', text: `${res.length} стратегий · ${rep} повт.` + (s.finished ? ` · ${Math.round((s.finished - s.started))} с` : '') }),
@@ -3323,15 +3323,24 @@ async function viewTests(main, r, bare = false) {
   }
 
   // Куда можно применить стратегию и что это затронет. Для неопытного главный вариант — «только для этого сайта».
-  function applyTargets(steps, s) {
+  function applyTargets(x, s) {
+    const steps = x.steps;
     const port = s.proto === 'http' ? 80 : 443;
     const rp = routeProfile(s);
     const covers = (p) => (p.ports.tcp || '').split(',').some((x) => { const [a, b] = x.split('-').map(Number); return port >= a && port <= (b || a); });
+    const lt = listTarget(x, s);
     const opts = [{
-      title: `Только для ${s.host}`, recommended: true,
+      title: `Только для ${s.host}`, recommended: !lt,
       desc: `Создаётся отдельный профиль в начале списка. Стратегия будет работать только для ${s.host} и его поддоменов — остальные сайты не затронет.`,
       run: () => addSiteProfile(steps, s),
     }];
+    if (lt) {
+      opts.unshift({
+        title: `Добавить ${s.host} в ${listName(lt.list.name)}`, recommended: true,
+        desc: `Эта стратегия уже стоит в профиле #${lt.profile}${confProf(lt.profile) ? ' ' + profName(confProf(lt.profile)) : ''}, сайта просто нет в его списке ${lt.list.name}. Новый профиль не нужен, перезапуск тоже — nfqws2 перечитает список сам.`,
+        run: () => addToProfileList(lt, x, s),
+      });
+    }
     for (const p of S.state.conf_profiles.filter((x) => x.source && covers(x))) {
       const shared = p.source.source !== 'NFQWS_ARGS_CUSTOM' ? S.state.conf_profiles.filter((q) => q !== p && q.source?.source === p.source.source) : [];
       const reach = portsText(p.remaining) || 'до профиля ничего не доходит';
@@ -3347,16 +3356,50 @@ async function viewTests(main, r, bare = false) {
     return opts;
   }
 
-  function applyMenu(steps, st, cls = '', label = 'Применить…') {
+  function applyMenu(x, st, cls = '', label = 'Применить…') {
     const wrap = h('span', { class: 'menu' });
     const list = h('div', { class: 'menu-list wide', hidden: true, role: 'menu', style: 'right:0;left:auto' },
       h('div', { class: 'nav-h', text: 'Куда применить эту стратегию' }),
-      applyTargets(steps, st).map((o) => h('button', { type: 'button', role: 'menuitem', class: 'opt' + (o.dim ? ' dim' : ''), onclick: () => { list.hidden = true; o.run(); } },
+      applyTargets(x, st).map((o) => h('button', { type: 'button', role: 'menuitem', class: 'opt' + (o.dim ? ' dim' : ''), onclick: () => { list.hidden = true; o.run(); } },
         h('span', { class: 'row', style: 'gap:6px' }, h('b', { text: o.title }), o.recommended ? chip('рекомендуется', 'ok') : null),
         h('span', { class: 'sm muted', text: o.desc }))));
     const b = btn(label, () => { list.hidden = !list.hidden; }, 'small ' + cls, null, { 'aria-haspopup': 'menu' });
     wrap.append(b, list);
     return wrap;
+  }
+
+  // Сработала стратегия, взятая из профиля #N, а сайт до него не дошёл только потому, что его нет в списке профиля.
+  // Тогда достаточно записи в списке. Профили с circular не предлагаем: какая из стратегий включится, там не угадать.
+  function listTarget(x, s) {
+    if (!routeInfo || routeInfo.host !== s.host) return null;
+    const route = routeInfo.routes[s.proto === 'http' ? 'http' : 'https'].steps;
+    for (const m of (x.from || '').matchAll(/#(\d+)(?=,|$)/g)) {
+      const n = +m[1];
+      if (route.find((r) => r.profile === n)?.miss !== 'hostlist') continue;
+      const lists = S.state.lists.filter((l) => l.kind === 'host' && l.editable && l.exists && l.used.some((u) => u.profile === n && u.role === 'include'));
+      const list = lists.find((l) => l.name === 'user.list') || lists[0];
+      if (list) return { profile: n, list };
+    }
+    return null;
+  }
+
+  // Запись в список профиля: без перезапуска; потом смотрим, через какой профиль сайт пошёл на самом деле
+  async function addToProfileList(lt, x, s) {
+    if (!confirm(`Добавить ${s.host} в ${lt.list.name}?
+
+Профиль #${lt.profile} уже использует стратегию, которая сработала в тесте. Новый профиль не создаётся, nfqws2 перечитает список сам — перезапуск не нужен.`)) return;
+    if (!await guarded(() => api('list_add', { name: lt.list.name, items: [s.host] }))) return;
+    api('pick_applied', { host: s.host, steps: x.steps, target: `список ${lt.list.name} профиля #${lt.profile}` }).catch(() => {});
+    await loadState().catch(() => {});
+    routeInfo = await api('check', { host: s.host }).catch(() => routeInfo);
+    const now = routeProfile(s);
+    const undo = { undo: () => undoLast(false) };
+    if (now === lt.profile) toast(`${s.host} добавлен в ${lt.list.name} и теперь идёт через профиль #${lt.profile}`, undo);
+    else {
+      const st = routeInfo.routes[s.proto === 'http' ? 'http' : 'https'].steps.find((r) => r.profile === lt.profile);
+      toast(`${s.host} добавлен в ${lt.list.name}, но через профиль #${lt.profile} не пошёл: ` + (now ? `его перехватывает профиль #${now}` : st?.why || 'причина не определена'), { err: true, ...undo });
+    }
+    if (out.isConnected) drawStatus(lastStatus);
   }
 
   // Отдельный профиль «только для этого сайта» в начале своих профилей, затем перезапуск с проверкой
@@ -3389,12 +3432,21 @@ async function viewTests(main, r, bare = false) {
     if (currentWorks) {
       return notice('ok', 'Менять ничего не нужно', `Сейчас ${s.host} идёт через профиль #${rp} ${p ? profName(p) : ''}, и его стратегия в тесте сработала. Если у вас сайт всё равно не открывается, причина скорее в браузере (HTTP/3 — QUIC), DNS или в том, что сайт идёт через podkop.`);
     }
+    // стратегия уже есть в одном из профилей — проще добавить сайт в его список, чем заводить профиль
+    for (const x of good) {
+      const lt = listTarget(x, s);
+      if (!lt) continue;
+      return h('div', { class: 'notice warn' }, icon('alert'),
+        h('div', { class: 'grow' }, h('b', { text: `Рекомендация: добавить ${s.host} в ${listName(lt.list.name)}` }),
+          h('div', { class: 't', text: `В тесте сработала стратегия профиля #${lt.profile}${confProf(lt.profile) ? ' ' + profName(confProf(lt.profile)) : ''}, но ${s.host} нет в его списке ${lt.list.name}, поэтому ${rp ? `сайт идёт через профиль #${rp}` : 'nfqws2 этот сайт не обрабатывает'}. Достаточно записи в списке: новый профиль не нужен, перезапуск тоже.` })),
+        h('div', { class: 'notice-actions' }, btn(`Добавить в ${lt.list.name}`, () => addToProfileList(lt, x, s), 'small primary', 'plus'), applyMenu(x, s, '', 'Другие варианты…')));
+    }
     if (!best) return null;
     const why = rp ? `Сейчас ${s.host} идёт через профиль #${rp} ${p ? profName(p) : ''}, но его стратегия в тесте не помогла.` : `Сейчас nfqws2 этот сайт не обрабатывает.`;
     return h('div', { class: 'notice warn' }, icon('alert'),
       h('div', { class: 'grow' }, h('b', { text: 'Рекомендация: применить лучшую стратегию только для этого сайта' }),
         h('div', { class: 't', text: `${why} Отдельный профиль для ${s.host} ничего не сломает у других сайтов. После применения nfqws2 перезапустится с проверкой и сам откатит изменения, если что-то пойдёт не так.` })),
-      h('div', { class: 'notice-actions' }, btn(`Применить только для ${s.host}`, () => addSiteProfile(best.steps, s), 'small primary', 'ok'), applyMenu(best.steps, s, '', 'Другие варианты…')));
+      h('div', { class: 'notice-actions' }, btn(`Применить только для ${s.host}`, () => addSiteProfile(best.steps, s), 'small primary', 'ok'), applyMenu(best, s, '', 'Другие варианты…')));
   }
 
   const hist = await api('tests_history').catch(() => ({ items: [] }));
