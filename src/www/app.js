@@ -29,6 +29,7 @@ const ICONS = {
   edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
   wand: '<path d="m15 4 5 5L9 20l-5-5z"/><path d="M13 6l5 5"/>',
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
+  more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
   pulse: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
   layers: '<path d="m12 3 9 5-9 5-9-5z"/><path d="m3 13 9 5 9-5"/>',
   download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
@@ -305,12 +306,13 @@ const PAGES = {
   // ещё не сделаны: в меню видны, но заблокированы и помечены «скоро»
   diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], auto: ['#/tests/auto', 'Автоподбор'], asn: ['#/asn', 'Список по ASN'], report: ['#/settings/report', 'Отчёт для помощи'],
 };
-const NEW_PAGES = ['diag', 'phist', 'auto', 'asn', 'report'];   // только что появились — помечаются в меню
+const NEW_PAGES = [];   // только что появились — помечаются во вкладках («новое»)
 const SOON_HINT = 'Ещё в разработке — появится в одной из следующих версий';
 const SYS_PAGES = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 const SYS_NAV = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
-// Компоновка «Боковое меню»: группы и их страницы
-const MENU = [[null, ['over']], ['Проверка сайта', ['diag', 'pick', 'trace', 'phist']], ['Наблюдение', ['mon', 'auto', 'tg']], ['Обход', ['prof', 'lists', 'asn']], ['Система', SYS_NAV]];
+// Компоновка «Боковое меню»: шесть разделов, страницы раздела — вкладками над страницей (как в TOP_TABS)
+const MENU = [['over', 'Обзор', 'home', ['over']], ['pick', 'Проверка сайта', 'tests', ['diag', 'pick', 'trace', 'phist', 'site']], ['mon', 'Наблюдение', 'pulse', ['mon', 'auto', 'tg']],
+  ['prof', 'Профили', 'layers', ['prof']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]];
 // Верхние вкладки компоновок: страница по клику, подпись, значок, страницы вкладки, «только на узком экране»
 const TOP_TABS = {
   menu: [],
@@ -366,14 +368,12 @@ function pageTail(id) {
   return tail ? h('span', { class: 'tail' }, tail) : null;
 }
 
+// У раздела — отметка первой из его страниц, у которой она есть (упавшие сайты, ошибки, обновление); число снимков — только во вкладке
 function menuNav() {
   const cur = pageOf();
-  return h('nav', { class: 'nav mnav', 'aria-label': 'Разделы' }, MENU.map(([head, ids]) => [
-    head ? h('div', { class: 'nav-h', text: head }) : null,
-    ids.map((id) => PAGES[id][0]
-      ? h('a', { href: PAGES[id][0], 'data-pages': id === 'pick' ? 'pick site' : id, class: id === cur || (id === 'pick' && cur === 'site') ? 'on' : null },
-        h('span', { class: 'nm', text: PAGES[id][1] }), NEW_PAGES.includes(id) ? h('span', { class: 'tag new', text: 'новое' }) : pageTail(id))
-      : soonItem(id))]));
+  return h('nav', { class: 'nav mnav', 'aria-label': 'Разделы' }, MENU.map(([id, label, ic, pages]) =>
+    h('a', { href: PAGES[id][0], 'data-pages': pages.join(' '), class: pages.includes(cur) ? 'on' : null },
+      icon(ic), h('span', { class: 'nm', text: label }), pages.filter((x) => x !== 'backup').map(pageTail).find(Boolean) || null)));
 }
 
 // Пункт для ещё не сделанной страницы: виден, но не нажимается
@@ -388,9 +388,9 @@ function openDrawer(on = true) {
   if (on) d.firstChild.replaceChildren(menuNav());
 }
 
-// Второй ряд вкладок — страницы текущей верхней вкладки (компоновки «Вкладки» и «Вокруг сайта»)
+// Ряд вкладок над страницей — страницы текущего раздела
 function subTabs(page) {
-  const tab = TOP_TABS[layout()].find((t) => t[3].includes(page));
+  const tab = (layout() === 'menu' ? MENU : TOP_TABS[layout()]).find((t) => t[3].includes(page));
   const ids = tab ? tab[3].filter((id) => id !== 'site') : [];
   if (ids.length < 2 || page === 'site') return null;
   return h('nav', { class: 'subtabs', 'aria-label': tab[1] }, ids.map((id) => PAGES[id][0] ? h('a', { href: PAGES[id][0], class: id === page ? 'on' : null }, PAGES[id][1], NEW_PAGES.includes(id) ? h('span', { class: 'tag new', text: 'новое' }) : null) : soonItem(id)));
@@ -404,13 +404,10 @@ function renderShell() {
       h('div', { class: 'top-in' },
         h('button', { class: 'btn ghost icon', id: 'burger', type: 'button', title: 'Меню', 'aria-label': 'Меню', onclick: () => openDrawer() }, icon('menu')),
         h('a', { class: 'brand', href: PAGES.about[0], title: 'nfqws2-ui — о программе' }, logo(26), h('span', {}, 'nfqws2-ui', h('small', { id: 'ui-ver' }))),
-        h('a', { class: 'btn ghost small repo-link', id: 'repo-link', href: REPO, target: '_blank', rel: 'noopener', title: 'nfqws2-ui на GitHub', 'aria-label': 'nfqws2-ui на GitHub' }, icon('git')),
         h('nav', { class: 'tabs', 'aria-label': 'Разделы' }, TOP_TABS[layout()].map(link)),
-        h('span', { id: 'https-slot' }),
         h('button', { class: 'btn ghost small', type: 'button', id: 'undo-btn', hidden: true, onclick: () => undoLast(true) }, icon('undo'), h('span', { class: 'undo-label', text: 'Отменить' })),
         h('button', { class: 'btn ghost small', type: 'button', id: 'focus-off', hidden: true, onclick: () => setFocus(false) }, 'Показать обзор'),
-        h('button', { class: 'btn ghost icon', id: 'refresh-top', type: 'button', title: 'Обновить', 'aria-label': 'Обновить', onclick: () => route(true) }, icon('refresh')),
-        S.authEnabled ? h('button', { class: 'btn ghost icon', type: 'button', title: 'Выйти', 'aria-label': 'Выйти', onclick: logout }, icon('logout')) : null,
+        moreMenu(),
         h('span', { class: 'grow' }),
         h('form', { class: 'quick', onsubmit: (e) => { e.preventDefault(); const v = quick.value.trim(); if (!v) return; quick.value = ''; quick.blur(); checkHost(v); } },
           quick, h('button', { class: 'btn primary icon', type: 'submit', title: 'Проверить: открывается ли сайт и каким профилем nfqws2 он пойдёт', 'aria-label': 'Проверить' }, icon('arrow'))),
@@ -427,6 +424,24 @@ function renderShell() {
     h('div', { id: 'drawer', class: 'drawer', hidden: true, onclick: (e) => { if (e.target.id === 'drawer' || e.target.closest('a')) openDrawer(false); } }, h('div', { class: 'drawer-in' })));
 }
 
+// Редкое из верхней панели — под «⋯»: обновить данные, HTTPS, GitHub, выход
+function moreMenu() {
+  const pop = h('div', { class: 'more-pop', hidden: true, role: 'menu', onclick: (e) => { if (e.target.closest('a, button')) pop.hidden = true; } },
+    h('button', { type: 'button', role: 'menuitem', onclick: () => route(true) }, icon('refresh'), 'Обновить данные'),
+    h('span', { id: 'https-slot' }),
+    h('a', { href: REPO, target: '_blank', rel: 'noopener', role: 'menuitem', id: 'repo-link' }, icon('git'), 'nfqws2-ui на GitHub'),
+    h('a', { href: PAGES.about[0], role: 'menuitem' }, icon('info'), 'О программе'),
+    S.authEnabled ? h('button', { type: 'button', role: 'menuitem', onclick: logout }, icon('logout'), 'Выйти') : null);
+  const b = h('button', { class: 'btn ghost icon', type: 'button', id: 'more-btn', title: 'Ещё: обновить данные, HTTPS, GitHub, выход', 'aria-label': 'Ещё', 'aria-haspopup': 'menu',
+    onclick: (e) => { e.stopPropagation(); pop.hidden = !pop.hidden; } }, icon('more'));
+  if (!moreMenu.bound) {
+    moreMenu.bound = true;
+    document.addEventListener('click', (e) => { const p = document.querySelector('.more-pop'); if (p && !p.hidden && !p.contains(e.target)) p.hidden = true; });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') document.querySelector('.more-pop')?.setAttribute('hidden', ''); });
+  }
+  return h('span', { class: 'more-wrap' }, b, pop);
+}
+
 function setFocus(on) {
   document.documentElement.dataset.focus = on ? '1' : '0';
   const b = document.getElementById('focus-off');
@@ -441,7 +456,7 @@ function updateChrome() {
   // Ссылка на HTTPS — только если он включён (nfqws-ui-setup https on)
   const hp = st.ui?.https_port;
   document.getElementById('https-slot')?.replaceChildren(location.protocol === 'http:' && hp
-    ? h('a', { class: 'btn ghost small https-link', href: `https://${location.hostname}:${hp}/${location.hash}`, title: 'Открыть по HTTPS: пароль и данные идут в зашифрованном виде', 'aria-label': 'Открыть по HTTPS' }, '🔒', h('span', { text: ' Открыть по HTTPS' }))
+    ? h('a', { href: `https://${location.hostname}:${hp}/${location.hash}`, role: 'menuitem', title: 'Пароль и данные идут в зашифрованном виде' }, h('span', { class: 'mi', text: '🔒' }), 'Открыть по HTTPS')
     : null);
   const svc = document.getElementById('svc');
   svc.className = 'pill ' + (st.running ? 'ok' : 'bad');
@@ -952,15 +967,17 @@ function actionsBlock(res) {
 }
 
 // Виды страницы «Обзор»: одни и те же блоки, разложенные по-разному. Выбор хранится вместе с оформлением.
-const OVERVIEWS = [['groups', 'Группы'], ['tiles', 'Плитки'], ['masonry', 'Кладка'], ['panel', 'Панель']];
+const OVERVIEWS = [['brief', 'Кратко'], ['groups', 'Группы'], ['tiles', 'Плитки'], ['masonry', 'Кладка'], ['panel', 'Панель']];
 
 async function viewOverview(main, r) {
   sideBlocks();
   const look = getLook();
-  const view = OVERVIEWS.some(([v]) => v === look.overview) ? look.overview : 'groups';
+  const view = OVERVIEWS.some(([v]) => v === look.overview) ? look.overview : 'brief';
   const B = { svc: SIDE.service, check: S.check.el, prob: SIDE.problems, mon: SIDE.monitor, backup: SIDE.backup, traffic: SIDE.traffic, ...overviewExtra() };
   const grp = (title, ...blocks) => h('div', { class: 'ogrp' }, h('h3', { text: title }), ...blocks);
   const body = {
+    // главное сверху (всё ли работает, «сайт не открывается?»), остальное — свёрнутыми строками с итогом
+    brief: () => overviewBrief(B),
     // три колонки по смыслу, внутри группы блоки соприкасаются
     groups: () => h('div', { class: 'ov ov-groups' }, grp('Сейчас', B.svc, B.check, B.prob, B.mon, B.traffic), grp('Настроено', B.profs, B.lists, B.backup), grp('Недавно', B.picks, B.changes, B.ver)),
     // ряд плиток с главными цифрами, ниже слева главное, справа недавнее
@@ -978,6 +995,55 @@ async function viewOverview(main, r) {
     body);
   updateSide();
   if (r.q.get('q')) S.check.run(r.q.get('q'));
+}
+
+// «Кратко»: строка «всё ли работает», поле проверки сайта и свёрнутые подробности.
+// Что раскрыто, запоминается в браузере; при остановке или замечаниях нужный блок раскрыт сам.
+function overviewBrief(B) {
+  const st = S.state;
+  const KEY = 'nfqws-ui-ov-open';
+  let open = [];
+  try { open = JSON.parse(localStorage.getItem(KEY)) || []; } catch { /* нет хранилища */ }
+  const m = st.monitor?.sites || [];
+  const okN = m.filter((x) => x.last && x.last[1]).length;
+  const problems = problemItems().filter((x) => x.level !== 'info');
+  const profs = st.conf_profiles;
+  const bad = profs.filter((p) => worst(profIssues(p)) === 'error' || ['dead', 'excludes-only'].includes(p.state)).length;
+  const used = st.lists.filter((l) => l.used.length);
+  const [lvl, title] = !st.running ? ['bad', 'nfqws2 остановлен'] : problems.length ? ['warn', 'Есть замечания']
+    : m.length && okN < m.length ? ['warn', 'Не все сайты открываются'] : ['ok', 'Всё работает'];
+  const facts = [st.running && st.process?.started ? 'nfqws2 запущен ' + fmtAgo(st.now - st.process.started) : null,
+    m.length ? `${okN} из ${m.length} сайтов открываются` : null,
+    problems.length ? plural(problems.length, 'замечание', 'замечания', 'замечаний') + ' к конфигу и спискам' : 'замечаний к конфигу нет'].filter(Boolean);
+  const HREF = { svc: null, prob: null, mon: PAGES.mon[0], profs: PAGES.prof[0], lists: PAGES.lists[0], picks: PAGES.phist[0], changes: PAGES.hist[0], backup: PAGES.backup[0], more: PAGES.about[0] };
+  const fold = (id, label, summary, block, force) => {
+    const d = h('details', { class: 'ofold', open: force || open.includes(id) }, h('summary', {}, h('b', { text: label }), h('span', { class: 'sm faint ellipsis' }, summary),
+      HREF[id] ? h('a', { class: 'sm', href: HREF[id], text: 'открыть', onclick: (e) => e.stopPropagation() }) : null), block);
+    d.addEventListener('toggle', () => {
+      open = d.open ? [...new Set([...open, id])] : open.filter((x) => x !== id);
+      try { localStorage.setItem(KEY, JSON.stringify(open)); } catch { /* нет хранилища */ }
+    });
+    return d;
+  };
+  const picksSum = h('span', {});
+  const changesSum = h('span', {});
+  B.picksReq?.then((r) => { const x = r.items?.[0]; picksSum.textContent = x ? `${x.host} · ${fmtDate(x.ts)}` : 'ещё не запускался'; }).catch(() => {});
+  B.changesReq?.then((r) => { const x = r.items?.[0]; changesSum.textContent = x ? `${x.note || x.file} · ${fmtDate(x.ts)}` : 'не было'; }).catch(() => {});
+  const folds = [
+    problems.length ? fold('prob', 'Замечания', plural(problems.length, 'замечание', 'замечания', 'замечаний'), B.prob, true) : null,
+    fold('svc', 'Сервис', [st.version && 'nfqws2 v' + st.version, st.running ? 'работает' : 'остановлен'].filter(Boolean).join(' · '), B.svc, !st.running),
+    m.length ? fold('mon', 'Мониторинг', `${okN} из ${m.length}` + (st.monitor.last ? ' · ' + fmtAgo(st.now - st.monitor.last) : ''), B.mon, okN < m.length) : null,
+    fold('profs', 'Профили', `${profs.length} · ` + (bad ? `${bad} с проблемами` : 'все в порядке'), B.profs),
+    fold('lists', 'Списки', `${used.length} из ${st.lists.length} используются · ${fmtNum(used.reduce((a, l) => a + l.entries, 0))} записей`, B.lists),
+    fold('picks', 'Последние подборы', picksSum, B.picks),
+    fold('changes', 'Последние изменения', changesSum, B.changes),
+    fold('backup', 'Резервные копии', st.snap?.count ? `${st.snap.count} · последняя ` + fmtAgo(st.now - st.snap.last) : 'снимков нет', B.backup),
+    fold('more', 'Трафик и версии', `nfqws2-ui v${st.ui?.version || '?'}` + (st.ui?.update?.available ? ` · есть ${st.ui.update.latest}` : ''), h('div', {}, B.traffic, B.ver)),
+  ].filter(Boolean);
+  return h('div', { class: 'ov ov-brief' },
+    h('section', { class: 'blk ov-state ' + lvl }, h('span', { class: 'big' }, h('span', { class: 'dot' }), title), h('span', { class: 'sm muted', text: facts.join(' · ') })),
+    h('section', { class: 'blk ov-ask' }, h('h2', { text: 'Сайт не открывается?' }), B.check),
+    h('div', { class: 'blk ov-folds' }, folds));
 }
 
 // Плитки с главными цифрами — состояние читается с одного взгляда
@@ -1030,14 +1096,16 @@ function overviewExtra() {
       kv('Конфиг', h('a', { class: 'mono', href: PAGES.raw[0], text: st.ui?.conf_file || 'nfqws2.conf' })),
       kv('Изменён', st.conf_mtime ? fmtAgo(st.now - st.conf_mtime) : '—'),
       h('p', { class: 'sm' }, h('a', { href: '#/settings/readme', text: 'Справка' }), ' · ', h('a', { href: '#/settings/changelog', text: 'изменения по версиям' })));
-  api('tests_history').then((r) => {
+  out.picksReq = api('tests_history');
+  out.changesReq = api('history_log', { limit: 6 });
+  out.picksReq.then((r) => {
     const items = (r.items || []).slice(0, 5);
     picks.replaceChildren(items.length ? items.map((x) => h('a', { class: 'over-row', href: pickHistHref(x.host) },
       levelIcon(x.baseline?.ok ? 'info' : x.best ? 'ok' : 'error'), h('span', { class: 'ellipsis mono', text: x.host }),
       h('span', { class: 'sm faint ellipsis', text: x.baseline?.ok ? 'открывается и так' : x.best || 'ничего не помогло' })))
       : h('span', { class: 'sm muted', text: 'Подбор стратегии ещё не запускался.' }));
   }).catch(() => picks.replaceChildren());
-  api('history_log', { limit: 6 }).then((r) => {
+  out.changesReq.then((r) => {
     changes.replaceChildren(r.items.length ? r.items.map((e) => h('div', { class: 'over-row' },
       h('span', { class: 'sm faint num nowrap', text: fmtDate(e.ts) }),
       h('span', { class: 'ellipsis', title: e.note || '', text: e.file === '*' ? e.note : [e.file === 'nfqws2.conf' ? 'Конфиг' : listName(e.file), e.note].filter(Boolean).join(': ') })))
