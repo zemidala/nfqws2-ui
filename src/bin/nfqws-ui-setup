@@ -396,6 +396,8 @@ update() {
 		want=$(latest_version)
 		[ -n "$want" ] || die "не удалось узнать последнюю версию: нет доступа к api.github.com или у репозитория нет публичных релизов"
 		say "Последняя:   $want"
+		# интерфейс хранит свой ответ GitHub — помечаем его устаревшим, чтобы он перепроверил и показал то же, что консоль
+		[ -f "$CONF_DIR/update.json" ] && sed -i 's/"checked":[0-9]*/"checked":0/' "$CONF_DIR/update.json" 2>/dev/null
 		if ! ver_gt "$want" "$VERSION" && [ -z "$force" ]; then
 			say "Обновление не нужно."
 			return 0

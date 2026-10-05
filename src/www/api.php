@@ -4074,7 +4074,9 @@ function updateInfo(): array
 function updateCheck(bool $force): array
 {
   $u = updateInfo();
-  if (!$force && time() - $u['checked'] < 12 * 3600) {
+  // удачный ответ помним 12 часов, неудачу (GitHub недоступен, 404) — 10 минут: иначе после короткого сбоя
+  // интерфейс полдня не видел бы новую версию
+  if (!$force && time() - $u['checked'] < ($u['error'] ? 600 : 12 * 3600)) {
     return $u;
   }
   $ch = curl_init('https://api.github.com/repos/zemidala/nfqws2-ui/releases/latest');
