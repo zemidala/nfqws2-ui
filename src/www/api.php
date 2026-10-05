@@ -43,6 +43,9 @@ const GLOBAL_OPTS = ['user', 'uid', 'qnum', 'fastpath-workaround', 'lua-init', '
   'bind-fix4', 'bind-fix6', 'daemon', 'pidfile', 'ctrack-timeouts', 'ctrack-disable', 'ipcache-lifetime',
   'ipcache-hostname', 'reasm-disable', 'writeable', 'dry-run', 'intercept', 'wsize', 'wssize'];
 
+// Блобы, которые nfqws2 объявляет сам (zapret2 nfq2/nfqws.c, ApplyDefaultBlobs)
+const BUILTIN_BLOBS = ['fake_default_tls', 'fake_default_http', 'fake_default_quic'];
+
 // Переменные конфига, которые можно править формой
 const CONF_VARS = ['ISP_INTERFACE', 'NFQWS_BASE_ARGS', 'NFQWS_ARGS_CUSTOM', 'NFQWS_ARGS', 'NFQWS_ARGS_QUIC',
   'NFQWS_ARGS_UDP', 'NFQWS_ARGS_IPSET', 'NFQWS_EXTRA_ARGS', 'TCP_PORTS', 'UDP_PORTS', 'IPV6_ENABLED', 'LOG_LEVEL',
@@ -1921,7 +1924,7 @@ function lintDesync(string $var, int $i, string $val, array $funcs, array $lua, 
       }
     }
     if (in_array($k, ['blob', 'seqovl_pattern', 'pattern'], true) && $v !== null && !str_starts_with($v, '0x')
-      && !isset($blobs[$v]) && !in_array($v, $lua['globals'], true)) {
+      && !isset($blobs[$v]) && !in_array($v, BUILTIN_BLOBS, true) && !in_array($v, $lua['globals'], true)) {
       $add($var, $i, 'error', "Блоб «{$v}» не объявлен — добавьте --blob={$v}:@файл в параметры запуска", ($bf = blobFiles()) ? ['op' => 'declare_blob', 'name' => $v, 'choices' => $bf, 'label' => 'Объявить блоб из файла'] : null);
     }
     if ($k === 'payload' && $v !== null) {
@@ -1937,7 +1940,7 @@ function lintDesync(string $var, int $i, string $val, array $funcs, array $lua, 
   }
   foreach ($f['required'] as $r) {
     if (!array_key_exists($r, $keys)) {
-      $add($var, $i, 'error', "Функции {$fn} нужен параметр «{$r}» — без него она завершится ошибкой на каждом пакете", ['op' => 'add_param', 'key' => $r, 'choices' => $r === 'blob' ? array_values(array_unique(array_merge(array_keys($blobs), array_values(array_filter($lua['globals'], fn($g) => preg_match('/^fake_default_/', $g)))))) : [], 'label' => "Добавить $r"]);
+      $add($var, $i, 'error', "Функции {$fn} нужен параметр «{$r}» — без него она завершится ошибкой на каждом пакете", ['op' => 'add_param', 'key' => $r, 'choices' => $r === 'blob' ? array_values(array_unique(array_merge(array_keys($blobs), BUILTIN_BLOBS, array_values(array_filter($lua['globals'], fn($g) => preg_match('/^fake_default_/', $g)))))) : [], 'label' => "Добавить $r"]);
     }
   }
 }
@@ -2217,7 +2220,9 @@ function lastUndoable(): ?array
   if (!$batch) {
     return null;
   }
-  $events = array_values(array_filter($log, fn($e) => ($e['batch'] ?? '') === $batch && !empty($e['path'])));
+  // в том же запросе historyScan('auto') записывает правки, сделанные мимо интерфейса, —
+  // их не отменяем (иначе список, созданный по ssh, удалился бы целиком)
+  $events = array_values(array_filter($log, fn($e) => ($e['batch'] ?? '') === $batch && !empty($e['path']) && ($e['source'] ?? '') === 'интерфейс'));
   return ['batch' => $batch, 'ts' => end($events)['ts'], 'events' => $events,
     'files' => array_values(array_unique(array_map(fn($e) => $e['file'], $events))),
     'note' => implode('; ', array_unique(array_filter(array_map(fn($e) => $e['note'], $events))))];
@@ -4633,6 +4638,33 @@ switch ($cmd) {
       fail('Не удалось записать файл', 500);
     }
     respond(['changed' => $changed]);
+
+  case 'list_remove_lines':
+    // Удаление строк по номерам: из повторов уходит только отмеченный.
+    // Текст строки сверяется — если файл успели изменить, ничего не удаляем.
+    $path = editablePath($str('name'));
+    if (!is_file($path)) {
+      fail('Файл не найден', 404);
+    }
+    $text = rtrim(file_get_contents($path), "\n");
+    $lines = $text === '' ? [] : explode("\n", $text);
+    $drop = [];
+    foreach (is_array($in['lines'] ?? null) ? $in['lines'] : [] as $x) {
+      $n = $x['n'] ?? null;
+      if (!is_int($n) || !isset($lines[$n]) || !is_string($x['t'] ?? null) || trim($lines[$n]) !== trim($x['t'])) {
+        fail('Список изменился — обновите страницу и повторите', 409);
+      }
+      $drop[$n] = trim($lines[$n]);
+    }
+    if (!$drop) {
+      respond(['changed' => 0]);
+    }
+    $what = array_values($drop);
+    $note = 'удалено: ' . implode(', ', array_slice($what, 0, 5)) . (count($what) > 5 ? ' и ещё ' . (count($what) - 5) : '');
+    if (!writeWithBackup($path, implode("\n", array_diff_key($lines, $drop)), $note)) {
+      fail('Не удалось записать файл', 500);
+    }
+    respond(['changed' => count($drop)]);
 
   case 'list_save':
     $path = editablePath($str('name'));

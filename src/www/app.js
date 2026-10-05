@@ -1821,17 +1821,21 @@ async function drawList(content, name) {
     const drawBulk = () => {
       bulk.hidden = selected.size === 0;
       if (!selected.size) return;
-      const items = [...selected];
-      bulk.replaceChildren(h('b', { text: 'Выбрано: ' + items.length }),
+      // выбор — по номерам строк, чтобы из повторов отмечался и удалялся только один
+      const picked = [...selected].sort((a, b) => a - b);
+      const items = [...new Set(picked.map((i) => all[i].trim()))];
+      bulk.replaceChildren(h('b', { text: 'Выбрано: ' + picked.length }),
         targetMenu('Переместить в…', (to) => moveTo(items, to, false)),
         targetMenu('Копировать в…', (to) => moveTo(items, to, true)),
-        btn('Удалить', async () => {
-          if (!await guarded(() => api('list_remove', { name, items }))) return;
-          selected.clear();
-          toast(`Удалено: ${items.length}`, { undo: async () => { await guarded(() => api('list_add', { name, items })); reload(); } });
-          reload();
-        }, 'small danger', 'trash'),
+        btn('Удалить', () => removeLines(picked), 'small danger', 'trash'),
         h('span', { class: 'grow' }), btn('Снять выделение', () => { selected.clear(); drawEntries(); drawBulk(); }, 'small ghost'));
+    };
+    const removeLines = async (idx) => {
+      const r = await guarded(() => api('list_remove_lines', { name, lines: idx.map((i) => ({ n: i, t: all[i] })) }));
+      if (!r) return;
+      selected.clear();
+      toast(idx.length === 1 ? `Удалено: ${all[idx[0]].trim()}` : `Удалено: ${idx.length}`, { undo: () => undoLast(false) });
+      reload();
     };
     const moveTo = async (items, to, copy) => {
       if (!to) return;
@@ -1855,7 +1859,7 @@ async function drawList(content, name) {
           const isComment = t.startsWith('#');
           const iss = byLine[i];
           const lvl = worst(iss);
-          const row = h('div', { class: 'ent' + (isComment ? ' cm' : '') + (selected.has(t) ? ' sel-on' : ''), draggable: canDrag ? 'true' : null });
+          const row = h('div', { class: 'ent' + (isComment ? ' cm' : '') + (selected.has(i) ? ' sel-on' : ''), draggable: canDrag ? 'true' : null });
           if (canDrag) {
             row.addEventListener('dragstart', (e) => { dragFrom = i; row.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; });
             row.addEventListener('dragend', () => row.classList.remove('dragging'));
@@ -1864,18 +1868,14 @@ async function drawList(content, name) {
             row.addEventListener('drop', (e) => { e.preventDefault(); row.classList.remove('drop'); reorder(dragFrom, i); });
           }
           row.append(
-            isComment ? h('span') : h('input', { type: 'checkbox', checked: selected.has(t), 'aria-label': 'Выбрать ' + t, onchange: (e) => { e.target.checked ? selected.add(t) : selected.delete(t); row.classList.toggle('sel-on', e.target.checked); drawBulk(); } }),
+            isComment ? h('span') : h('input', { type: 'checkbox', checked: selected.has(i), 'aria-label': 'Выбрать ' + t, onchange: (e) => { e.target.checked ? selected.add(i) : selected.delete(i); row.classList.toggle('sel-on', e.target.checked); drawBulk(); } }),
             canDrag ? h('span', { class: 'grip', title: 'Перетащите, чтобы изменить порядок', text: '⋮⋮' }) : h('span'),
             isComment || isIp ? h('span', { class: 't', text: t }) : h('button', { type: 'button', class: 't' + (lvl === 'error' ? ' error' : ''), text: t, title: 'Проверить сайт', onclick: () => checkHost(t.replace(/^\^/, '').replace(/^\*\./, '')) }));
           if (!isComment) {
             const host = t.replace(/^\^/, '').replace(/^\*\./, '');
             row.append(h('span', { class: 'note ' + (lvl || 'faint'), text: iss ? iss[0].msg : isIp ? '' : t.startsWith('^') ? 'без поддоменов' : 'и поддомены', title: iss ? iss.map((x) => x.msg).join('\n') : null }),
               isIp ? h('span') : btn('Проверить', () => checkHost(host), 'small ghost chk', null, { title: 'Открывается ли сайт и каким профилем он пойдёт' }),
-              h('button', { class: 'btn ghost small icon', type: 'button', title: 'Удалить', 'aria-label': 'Удалить ' + t, onclick: async () => {
-                if (!await guarded(() => api('list_remove', { name, items: [t] }))) return;
-                toast(`Удалено: ${t}`, { undo: async () => { await guarded(() => api('list_add', { name, items: [t] })); reload(); } });
-                reload();
-              } }, icon('x')));
+              h('button', { class: 'btn ghost small icon', type: 'button', title: 'Удалить', 'aria-label': 'Удалить ' + t, onclick: () => removeLines([i]) }, icon('x')));
           }
           return row;
         }),
