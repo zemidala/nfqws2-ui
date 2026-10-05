@@ -825,11 +825,11 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
 :root[data-variant="k"] #side:has(.mnav) { background: var(--k-side); }
 :root[data-variant="k"] .mnav .nav-h { margin: 6px 0 2px; padding: 14px 20px 6px; border-top: 0; color: var(--accent); font-size: 13px; font-weight: 700; letter-spacing: .03em; gap: 12px; }
 :root[data-variant="k"] .mnav .nav-h::before { display: none; }
-:root[data-variant="k"] .nav-h > svg { display: inline-block; width: 20px; height: 20px; }
+:root[data-variant="k"] .nav-h > svg { display: inline-block; width: 24px; height: 24px; stroke-width: 2.2; }
 :root[data-variant="k"] .mnav a { border-radius: 0; padding: 8px 20px 8px 52px; min-height: 38px; font-size: 15px; }
 :root[data-variant="k"] .mnav > a:first-child { padding-left: 20px; gap: 12px; }
 :root[data-variant="k"] .mnav .k-ic { display: inline-flex; color: var(--accent); }
-:root[data-variant="k"] .mnav .k-ic svg { width: 20px; height: 20px; }
+:root[data-variant="k"] .mnav .k-ic svg { width: 24px; height: 24px; }
 :root[data-variant="k"] .mnav a:hover { background: var(--k-active); }
 :root[data-variant="k"] .mnav a.on { background: var(--k-active); color: var(--fg); font-weight: 400; }
 /* заголовок страницы — крупный и жирный */

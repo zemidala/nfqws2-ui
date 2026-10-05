@@ -29,7 +29,8 @@ const ICONS = {
   edit: '<path d="M4 20h4L19 9l-4-4L4 16z"/>',
   wand: '<path d="m15 4 5 5L9 20l-5-5z"/><path d="M13 6l5 5"/>',
   menu: '<path d="M4 6h16M4 12h16M4 18h16"/>',
-  dash: '<rect x="3" y="3" width="8" height="8" rx="1"/><rect x="13" y="3" width="8" height="5" rx="1"/><rect x="13" y="10" width="8" height="11" rx="1"/><rect x="3" y="13" width="8" height="8" rx="1"/>',
+  dash: '<g fill="currentColor" stroke="none"><rect x="3" y="3" width="8.25" height="10.5"/><rect x="3" y="15" width="8.25" height="6"/><rect x="12.75" y="3" width="8.25" height="6"/><rect x="12.75" y="10.5" width="8.25" height="10.5"/></g>',
+  gear: '<path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"/><circle cx="12" cy="12" r="3"/>',
   shield: '<path d="M12 3 4.5 6v5.5c0 4.6 3.2 8.2 7.5 9.5 4.3-1.3 7.5-4.9 7.5-9.5V6z"/>',
   more: '<circle cx="5" cy="12" r="1.3"/><circle cx="12" cy="12" r="1.3"/><circle cx="19" cy="12" r="1.3"/>',
   pulse: '<path d="M3 12h4l3-8 4 16 3-8h4"/>',
@@ -374,7 +375,7 @@ function pageTail(id) {
 }
 
 // Значки групп меню: показываются в стиле K («как в Keenetic»)
-const NAV_ICON = { 'Проверка сайта': 'search', 'Наблюдение': 'pulse', 'Обход': 'shield', 'Система': 'settings' };
+const NAV_ICON = { 'Проверка сайта': 'search', 'Наблюдение': 'pulse', 'Обход': 'shield', 'Система': 'gear' };
 
 // Упрощённый вид — по выбору в «Оформлении»; по умолчанию интерфейс полный
 const simple = () => document.documentElement.hasAttribute('data-simple');
