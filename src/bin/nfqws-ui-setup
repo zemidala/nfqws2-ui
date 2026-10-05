@@ -7,7 +7,7 @@
 # (lighttpd -tt); если проверка не прошла, прежний файл возвращается на место.
 # На Keenetic (Entware) всё то же лежит под /opt.
 
-VERSION=1.5.5
+VERSION=1.6.0
 
 # Система: OpenWrt — корень «/», Keenetic (Entware) — «/opt»
 if [ ! -f /etc/openwrt_release ] && [ -x /opt/bin/opkg ]; then
