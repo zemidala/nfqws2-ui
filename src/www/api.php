@@ -1692,8 +1692,9 @@ function lintConf(array $raw, string $text): array
   foreach (tokens($exp['NFQWS_BASE_ARGS']) as $t) {
     if (preg_match('/^--lua-init=@(.+)$/', $t, $m)) {
       $loadedLua[basename($m[1])] = true;
-    } elseif (preg_match('/^--blob=([^:]+):/', $t, $m)) {
-      $blobs[$m[1]] = true;
+    } elseif (preg_match('/^--blob=([^:]+):(.*)$/', $t, $m)) {
+      // значение — откуда блоб берётся (@файл или 0xHEX): по нему видно, TLS ли это
+      $blobs[$m[1]] = $m[2];
     }
   }
 
@@ -1988,11 +1989,43 @@ function lintDesync(string $var, int $i, string $val, array $funcs, array $lua, 
       $add($var, $i, 'error', 'strategy должен быть числом');
     }
   }
+  // tls_mod правит поля TLS ClientHello. Если блоб — не ClientHello (частый случай: blob=0x00000000), nfqws2
+  // пишет в журнал «cannot apply tls mod» на каждое соединение и шлёт блоб как есть: параметр не действует
+  if (isset($keys['tls_mod'], $keys['blob']) && blobIsTls($keys['blob'], $blobs) === false) {
+    $add($var, $i, 'warning', "tls_mod не подействует: блоб «{$keys['blob']}» — не TLS ClientHello. nfqws2 отправит его как есть и на каждое соединение запишет в журнал «cannot apply tls mod»",
+      ['op' => 'remove_param', 'key' => 'tls_mod', 'label' => 'Убрать tls_mod']);
+  }
   foreach ($f['required'] as $r) {
     if (!array_key_exists($r, $keys)) {
       $add($var, $i, 'error', "Функции {$fn} нужен параметр «{$r}» — без него она завершится ошибкой на каждом пакете", ['op' => 'add_param', 'key' => $r, 'choices' => $r === 'blob' ? array_values(array_unique(array_merge(array_keys($blobs), BUILTIN_BLOBS, array_values(array_filter($lua['globals'], fn($g) => preg_match('/^fake_default_/', $g)))))) : [], 'label' => "Добавить $r"]);
     }
   }
+}
+
+// Похож ли блоб на TLS ClientHello: запись handshake (0x16), версия 3.x, сообщение ClientHello (0x01).
+// $ref — значение blob=…: 0xHEX, имя объявленного (--blob=имя:@файл|0xHEX) или встроенного блоба.
+// null — узнать нельзя (блоб из lua, файла нет): тогда не предупреждаем
+function blobIsTls(string $ref, array $blobs): ?bool
+{
+  if (in_array($ref, BUILTIN_BLOBS, true)) {
+    return $ref === 'fake_default_tls';
+  }
+  $src = str_starts_with($ref, '0x') ? $ref : ($blobs[$ref] ?? null);
+  if (!is_string($src)) {
+    return null;
+  }
+  if (str_starts_with($src, '0x')) {
+    $hex = substr($src, 2);
+    $head = strlen($hex) % 2 === 0 && preg_match('/^[0-9a-fA-F]*$/', $hex) ? (string)hex2bin(substr($hex, 0, 12)) : null;
+  } elseif (str_starts_with($src, '@') && is_file(substr($src, 1))) {
+    $head = (string)file_get_contents(substr($src, 1), false, null, 0, 6);
+  } else {
+    return null;
+  }
+  if ($head === null) {
+    return null;
+  }
+  return strlen($head) >= 6 && $head[0] === "\x16" && $head[1] === "\x03" && $head[5] === "\x01";
 }
 
 // Запускает nfqws2 --dry-run с теми же аргументами, что собрал бы init-скрипт
