@@ -3142,17 +3142,42 @@ async function viewMonitor(main) {
 
 // Уведомления в Telegram о сайтах из мониторинга
 async function viewNotify(main) {
-  const m = await api('monitor_get');
+  const m = await api('monitor_get', { ifaces: true });
   const tgToken = h('input', { class: 'input mono', id: 'tg-token', type: 'password', placeholder: m.tg.token_set ? 'задан — оставьте пустым, чтобы не менять' : '123456:ABC…', autocomplete: 'off', 'aria-label': 'Токен бота' });
   const tgChat = h('input', { class: 'input mono', id: 'tg-chat', value: m.tg.chat, placeholder: 'ID чата, например 123456789', 'aria-label': 'ID чата' });
-  const save = () => guarded(() => api('monitor_set', { tg_token: tgToken.value || '••••', tg_chat: tgChat.value }));
+  // Каким путём слать: api.telegram.org у многих закрыт, тогда нужен туннель или прокси
+  const KIND = { tunnel: 'туннель', ppp: 'PPP', ethernet: '' };
+  const ifaces = m.ifaces || [];
+  // сохранённого интерфейса сейчас может не быть (туннель выключен) — показываем его, чтобы выбор не потерялся молча
+  if (m.tg.iface && !ifaces.some((x) => x.name === m.tg.iface)) ifaces.push({ name: m.tg.iface, kind: '', ips: [], gone: true });
+  const via = h('select', { class: 'select', id: 'tg-via', onchange: () => drawVia() },
+    [['', 'как обычно'], ['iface', 'через интерфейс (туннель)'], ['proxy', 'через прокси']].map(([v, t]) => h('option', { value: v, text: t, selected: v === m.tg.via })));
+  const iface = h('select', { class: 'select mono', id: 'tg-iface', 'aria-label': 'Интерфейс' },
+    ifaces.length ? null : h('option', { value: '', text: 'нет интерфейсов с адресом' }),
+    ifaces.map((x) => h('option', { value: x.name, selected: x.name === m.tg.iface,
+      text: x.name + (x.gone ? ' — сейчас не найден' : [KIND[x.kind], x.logical?.filter((n) => n !== x.name).join(', '), x.default?.length ? 'основной выход в интернет' : ''].filter(Boolean).map((t) => ' · ' + t).join('')) })));
+  const proxy = h('input', { class: 'input mono', id: 'tg-proxy', value: m.tg.proxy, placeholder: 'socks5://192.168.1.10:1080 или http://адрес:порт', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Адрес прокси' });
+  const viaIface = h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 'tg-iface', text: 'Интерфейс' }), iface,
+    h('p', { class: 'hint', text: 'Запрос уйдёт через этот интерфейс, если через него есть маршрут до Telegram. Выберите туннель (WireGuard, AmneziaWG, OpenVPN), который ведёт туда, где Telegram открыт.' }));
+  const viaProxy = h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 'tg-proxy', text: 'Прокси' }), proxy,
+    h('p', { class: 'hint', text: 'SOCKS5 или HTTP-прокси. С логином: socks5://логин:пароль@адрес:порт — пароль хранится на роутере и в интерфейсе не показывается.' }));
+  const drawVia = () => { viaIface.hidden = via.value !== 'iface'; viaProxy.hidden = via.value !== 'proxy'; };
+  drawVia();
+  const save = () => guarded(() => api('monitor_set', { tg_token: tgToken.value || '••••', tg_chat: tgChat.value, tg_iface: iface.value, tg_proxy: proxy.value, tg_via: via.value }));
   main.append(h('div', { class: 'vh' }, h('h1', { text: 'Уведомления' })),
     panel('Уведомления в Telegram', null,
       h('p', { class: 'sm muted', text: 'Сообщение приходит, когда сайт из мониторинга перестаёт или снова начинает открываться. Создайте бота у @BotFather, напишите ему любое сообщение и укажите токен и ID своего чата (его показывает @userinfobot). Токен хранится только на роутере.' }),
       h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 'tg-token', text: 'Токен бота' }), tgToken),
       h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 'tg-chat', text: 'ID чата' }), tgChat),
+      h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 'tg-via', text: 'Отправлять' }), via,
+        h('p', { class: 'hint', text: 'Если Telegram у провайдера закрыт и проверочное сообщение не уходит, отправляйте через туннель или прокси.' })),
+      viaIface, viaProxy,
       h('div', { class: 'row' }, btn('Сохранить', async () => { if (await save()) toast('Сохранено'); }, 'primary'),
-        btn('Отправить проверочное', async () => { if (await save()) await guarded(() => api('notify_test'), 'Сообщение отправлено'); }))));
+        btn('Отправить проверочное', async () => {
+          if (!await save()) return;
+          const r = await guarded(() => api('notify_test'));
+          if (r) toast('Сообщение отправлено ' + r.via);
+        }))));
 }
 
 // bare — без заголовка: страница встроена в карточку сайта

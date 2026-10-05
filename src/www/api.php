@@ -161,7 +161,8 @@ function uiSettings(): array
   $defaults = [
     'snapshots' => ['max_count' => 50, 'max_days' => 30],
     'monitor' => ['enabled' => true, 'interval' => 30, 'sites' => ['rutracker.org', 'youtube.com', 'discord.com', 'x.com']],
-    'notify' => ['tg_token' => '', 'tg_chat' => ''],
+    // via — каким путём слать в Telegram: '' — как обычно, iface — через интерфейс (туннель), proxy — через прокси
+    'notify' => ['tg_token' => '', 'tg_chat' => '', 'via' => '', 'iface' => '', 'proxy' => ''],
     'auto' => ['enabled' => false, 'apply' => false, 'fails' => 2, 'pause' => 12],
     'provider' => '',
     'asn' => [],
@@ -2498,14 +2499,66 @@ function notifyTelegram(string $text): ?string
   if (empty($t['tg_token']) || empty($t['tg_chat'])) {
     return 'не настроено';
   }
+  $opts = [CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query(['chat_id' => $t['tg_chat'], 'text' => $text]),
+    CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10, CURLOPT_CONNECTTIMEOUT => 6];
+  // api.telegram.org у многих закрыт по IP — тогда отправляем через выбранный туннель или прокси
+  if ($t['via'] === 'iface' && $t['iface'] !== '') {
+    $opts[CURLOPT_INTERFACE] = $t['iface'];
+    if ($ip = telegramRealIp()) {
+      $opts[CURLOPT_RESOLVE] = ["api.telegram.org:443:$ip"];
+    }
+  } elseif ($t['via'] === 'proxy' && $t['proxy'] !== '') {
+    $opts[CURLOPT_PROXY] = $t['proxy'];
+  }
   $ch = curl_init('https://api.telegram.org/bot' . $t['tg_token'] . '/sendMessage');
-  curl_setopt_array($ch, [CURLOPT_POST => true, CURLOPT_POSTFIELDS => http_build_query(['chat_id' => $t['tg_chat'], 'text' => $text]),
-    CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 10, CURLOPT_CONNECTTIMEOUT => 6]);
+  curl_setopt_array($ch, $opts);
   $res = curl_exec($ch);
+  $errno = curl_errno($ch);
   $err = curl_error($ch);
   curl_close($ch);
   $j = json_decode((string)$res, true);
-  return !empty($j['ok']) ? null : ($j['description'] ?? $err ?: 'ошибка отправки');
+  if (!empty($j['ok'])) {
+    return null;
+  }
+  if (isset($j['description'])) {
+    // Telegram ответил — значит, путь работает, дело в токене или ID чата
+    return $j['description'];
+  }
+  $why = [6 => 'имя api.telegram.org не находится', 5 => 'имя прокси не находится', 7 => 'нет соединения', 28 => 'нет ответа за 10 секунд',
+    35 => 'соединение оборвано при установке TLS', 45 => 'интерфейс не найден, выключен или без адреса', 56 => 'соединение оборвано', 97 => 'прокси отказал'][$errno]
+    ?? preg_replace('#//[^@/\s]+@#', '//••••@', $err ?: 'ошибка отправки');
+  return notifyVia($t) . ': ' . $why;
+}
+
+// Местный DNS может отдавать для api.telegram.org адрес, который через туннель не работает: FakeIP podkop
+// (198.18.0.0/15) или заглушку. Тогда настоящий адрес спрашиваем у защищённого DNS; запасной — постоянный адрес Telegram
+function telegramRealIp(): ?string
+{
+  $sys = array_values(array_filter(gethostbynamel('api.telegram.org') ?: [], 'isIp4'));
+  if ($sys && !array_filter($sys, fn($ip) => ipInEntry(inet_pton($ip), '198.18.0.0/15') || ipInEntry(inet_pton($ip), '127.0.0.0/8') || ipInEntry(inet_pton($ip), '0.0.0.0/8'))) {
+    return null;
+  }
+  foreach (DIAG_DOH as [, $server, $ip]) {
+    $r = dohResolve($server, $ip, 'api.telegram.org');
+    if ($r['ok'] && ($real = array_values(array_filter($r['ips'], 'isIp4')))) {
+      return $real[0];
+    }
+  }
+  return '149.154.167.220';
+}
+
+// Каким путём уходят уведомления — словами, без пароля прокси
+function notifyVia(array $t): string
+{
+  if ($t['via'] === 'iface' && $t['iface'] !== '') {
+    return "через интерфейс {$t['iface']}";
+  }
+  return $t['via'] === 'proxy' && $t['proxy'] !== '' ? 'через прокси ' . preg_replace('#^.*@#', '', preg_replace('#^\w+://#', '', $t['proxy'])) : 'напрямую';
+}
+
+function maskProxy(string $p): string
+{
+  return preg_replace('#://[^@/]+@#', '://••••@', $p);
 }
 
 // ================= подписки на списки =================
@@ -5091,11 +5144,15 @@ switch ($cmd) {
   case 'settings_get':
     $s = uiSettings();
     $s['notify']['tg_token'] = $s['notify']['tg_token'] ? '••••' : '';
+    $s['notify']['proxy'] = maskProxy($s['notify']['proxy']);
     respond($s);
 
   case 'monitor_get':
     $s = uiSettings();
-    respond(['settings' => $s['monitor'], 'data' => monitorData(), 'tg' => ['token_set' => $s['notify']['tg_token'] !== '', 'chat' => $s['notify']['tg_chat']]]);
+    respond(['settings' => $s['monitor'], 'data' => monitorData(), 'tg' => ['token_set' => $s['notify']['tg_token'] !== '', 'chat' => $s['notify']['tg_chat'],
+      'via' => $s['notify']['via'], 'iface' => $s['notify']['iface'], 'proxy' => maskProxy($s['notify']['proxy'])]]
+      // список интерфейсов нужен только странице «Уведомления»
+      + (empty($in['ifaces']) ? [] : ['ifaces' => array_values(array_filter(netIfaces(), fn($x) => $x['ips'] && $x['kind'] !== 'bridge' && $x['kind'] !== 'wifi'))]));
 
   case 'monitor_set':
     $s = uiSettings();
@@ -5120,6 +5177,30 @@ switch ($cmd) {
     }
     if (is_string($in['tg_token'] ?? null) && $in['tg_token'] !== '••••') {
       $s['notify']['tg_token'] = preg_replace('/[^0-9A-Za-z:_-]/', '', $in['tg_token']);
+    }
+    if (is_string($in['tg_iface'] ?? null)) {
+      $s['notify']['iface'] = preg_match('/^[A-Za-z0-9_.-]{1,15}$/', $in['tg_iface']) ? $in['tg_iface'] : '';
+    }
+    if (is_string($in['tg_proxy'] ?? null) && !str_contains($in['tg_proxy'], '••••')) {
+      $px = trim($in['tg_proxy']);
+      if ($px !== '') {
+        // без схемы считаем SOCKS5; имя api.telegram.org пусть находит сам прокси — местный DNS может отдавать закрытый адрес
+        $px = preg_match('#^[a-z0-9]+://#i', $px) ? $px : "socks5h://$px";
+        $px = preg_replace('#^socks5://#i', 'socks5h://', $px);
+        if (!preg_match('#^(socks5h|socks4a?|https?)://([^\s/@]+@)?(\[[0-9a-fA-F:]+\]|[A-Za-z0-9.-]+):\d{1,5}/?$#i', $px)) {
+          fail('Прокси: нужен адрес вида socks5://адрес:порт или http://адрес:порт (логин и пароль — socks5://логин:пароль@адрес:порт)');
+        }
+      }
+      $s['notify']['proxy'] = $px;
+    }
+    if (is_string($in['tg_via'] ?? null)) {
+      $s['notify']['via'] = in_array($in['tg_via'], ['iface', 'proxy'], true) ? $in['tg_via'] : '';
+      if ($s['notify']['via'] === 'iface' && $s['notify']['iface'] === '') {
+        fail('Выберите интерфейс, через который отправлять уведомления');
+      }
+      if ($s['notify']['via'] === 'proxy' && $s['notify']['proxy'] === '') {
+        fail('Укажите адрес прокси');
+      }
     }
     saveUiSettings($s);
     respond(['ok' => true]);
@@ -5250,7 +5331,7 @@ switch ($cmd) {
     if ($err) {
       fail('Telegram: ' . $err);
     }
-    respond(['ok' => true]);
+    respond(['ok' => true, 'via' => notifyVia(uiSettings()['notify'])]);
 
   case 'sub_set':
     $s = uiSettings();
