@@ -775,7 +775,7 @@ function problemItems() {
   }
   if (!st.running && st.stop) items.push({ level: 'error', title: 'nfqws2 остановлен', text: st.stop.text, href: st.stop.kind === 'conf' ? PAGES.raw[0] : '#/' });
   for (const o of st.auto?.offers || []) {
-    items.push({ level: 'warning', title: o.host, text: `перестал открываться — автоподбор нашёл рабочую стратегию: ${o.name}`, href: PAGES.auto[0], fix: btn('Применить', () => autoApply(o.host), 'small', 'ok', { title: 'Отдельный профиль только для этого сайта; с проверкой и откатом' }) });
+    items.push({ level: 'warning', title: o.host, text: `перестал открываться — автоподбор нашёл рабочую стратегию: ${o.name}`, href: PAGES.auto[0], fix: btn('Применить', () => autoApply(o), 'small', 'ok', { title: o.list ? `Добавить сайт в ${o.list.name} — стратегия уже стоит в профиле #${o.list.profile}; с проверкой и откатом` : 'Отдельный профиль только для этого сайта; с проверкой и откатом' }) });
   }
   for (const p of st.profiles) {
     if (p.state === 'dead' || p.state === 'excludes-only') items.push({ level: 'warning', title: `Профиль #${p.index}`, text: p.state === 'dead' ? 'никогда не срабатывает — его порты забирают профили выше' : 'получает только исключения профилей выше', href: `#/settings/p${p.index}` });
@@ -3410,9 +3410,7 @@ async function viewTests(main, r, bare = false) {
 
   // Запись в список профиля: без перезапуска; потом смотрим, через какой профиль сайт пошёл на самом деле
   async function addToProfileList(lt, x, s) {
-    if (!confirm(`Добавить ${s.host} в ${lt.list.name}?
-
-Профиль #${lt.profile} уже использует стратегию, которая сработала в тесте. Новый профиль не создаётся, nfqws2 перечитает список сам — перезапуск не нужен.`)) return;
+    if (!confirm(`Добавить ${s.host} в ${lt.list.name}?\n\nПрофиль #${lt.profile} уже использует стратегию, которая сработала в тесте. Новый профиль не создаётся, nfqws2 перечитает список сам — перезапуск не нужен.`)) return;
     if (!await guarded(() => api('list_add', { name: lt.list.name, items: [s.host] }))) return;
     api('pick_applied', { host: s.host, steps: x.steps, target: `список ${lt.list.name} профиля #${lt.profile}` }).catch(() => {});
     await loadState().catch(() => {});
@@ -3602,9 +3600,14 @@ async function viewPickHistSite(main, host, bare) {
 // ============ Автоподбор при поломке ============
 
 // Применить найденное автоподбором: отдельный профиль только для сайта, роутер сам проверяет и откатывает
-async function autoApply(host) {
-  if (!confirm(`Применить найденную стратегию только для ${host}?\n\nБудет создан отдельный профиль (или заменена стратегия уже созданного). nfqws2 перезапустится — на несколько секунд обход прервётся. Роутер сам проверит ${host} и сайты мониторинга и вернёт конфиг, если что-то пойдёт не так. Это займёт до минуты.`)) return;
-  toast('Применяю и проверяю — до минуты…');
+async function autoApply(o) {
+  const host = o.host;
+  // сработала стратегия существующего профиля — достаточно записи в его списке, перезапуск не нужен
+  const ask = o.list
+    ? `Добавить ${host} в ${o.list.name}?\n\nНайденная стратегия уже стоит в профиле #${o.list.profile}, сайта просто нет в его списке. Новый профиль не создаётся, nfqws2 не перезапускается. Роутер сам проверит ${host}: если сайт не откроется, запись уберётся обратно.`
+    : `Применить найденную стратегию только для ${host}?\n\nБудет создан отдельный профиль (или заменена стратегия уже созданного). nfqws2 перезапустится — на несколько секунд обход прервётся. Роутер сам проверит ${host} и сайты мониторинга и вернёт конфиг, если что-то пойдёт не так. Это займёт до минуты.`;
+  if (!confirm(ask)) return;
+  toast(o.list ? 'Добавляю в список и проверяю…' : 'Применяю и проверяю — до минуты…');
   const r = await guarded(() => api('auto_apply', { host }));
   S.conf = null;
   await loadState().catch(() => {});
@@ -3633,8 +3636,9 @@ async function viewAuto(main) {
     a.offers.length ? panel('Найдено — ждёт вашего решения', null, a.offers.map((o) => h('div', { class: 'stack', style: 'gap:8px' },
       h('div', { class: 'item-main' }, h('span', { class: 'row', style: 'gap:8px' }, levelIcon('ok'), h('b', { class: 'mono', text: o.host })),
         h('span', { class: 'sm muted', text: `${fmtDate(o.ts)} · ${o.name} · ${o.from}` }),
-        h('code', { class: 'sm muted', style: 'word-break:break-all', text: o.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') })),
-      h('div', { class: 'row' }, btn('Применить', () => autoApply(o.host), 'small primary', 'ok'),
+        h('code', { class: 'sm muted', style: 'word-break:break-all', text: o.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') }),
+        o.list ? h('span', { class: 'sm', text: `Эта стратегия уже стоит в профиле #${o.list.profile} — достаточно добавить сайт в ${o.list.name}: без нового профиля и без перезапуска.` }) : null),
+      h('div', { class: 'row' }, btn(o.list ? `Добавить в ${o.list.name}` : 'Применить', () => autoApply(o), 'small primary', o.list ? 'plus' : 'ok'),
         h('a', { class: 'btn small', href: pickHistHref(o.host) }, 'История'),
         btn('Отклонить', async () => { if (await guarded(() => api('auto_dismiss', { host: o.host }))) { await loadState().catch(() => {}); route(true); } }, 'small ghost'))))) : null,
     panel(null, null,
@@ -3642,7 +3646,7 @@ async function viewAuto(main) {
         h('label', { class: 'row', style: 'flex-wrap:nowrap;align-items:flex-start' }, enabled, 'подбирать стратегию, когда сайт из мониторинга перестаёт открываться'),
         h('span', { class: 'sm muted', text: `Следит за сайтами мониторинга (сейчас ${a.monitor.sites}). Упавший сайт перепроверяется через 10 минут; если он не открывается и снова — запускается подбор. Первым пробуется то, что для этого сайта уже работало.` }))),
       h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Что делать с найденным' }), h('div', { class: 'stack', style: 'gap:2px' },
-        h('label', { class: 'row', style: 'flex-wrap:nowrap;align-items:flex-start' }, apply, 'применять самому — отдельным профилем только для этого сайта'),
+        h('label', { class: 'row', style: 'flex-wrap:nowrap;align-items:flex-start' }, apply, 'применять самому — записью в список профиля, если его стратегия подошла, иначе отдельным профилем только для этого сайта'),
         h('span', { class: 'sm muted', text: 'Без галочки найденное только предлагается: здесь, в «Проблемах» и в Telegram. С галочкой роутер сам создаёт профиль для сайта, перезапускает nfqws2 и проверяет: если сайт не открылся или сломался другой сайт мониторинга — возвращает конфиг как был.' }))),
       h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Считать поломкой' }), h('div', { class: 'row' }, fails, h('span', { class: 'sm muted', text: 'неудачных, после того как сайт открывался' }))),
       h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Повторять не чаще' }), h('div', { class: 'row' }, h('span', { class: 'sm muted', text: 'раз в' }), pause, h('span', { class: 'sm muted', text: 'для одного сайта' }))),

@@ -3281,13 +3281,26 @@ function autoFinish(): void
     $msg = "🔎 $h: рабочая стратегия не нашлась.";
   } else {
     $best = $full[0];
-    $d['offers'][$h] = ['ts' => time(), 'name' => $best['name'], 'steps' => $best['steps'], 'from' => $best['from']];
-    autoLog($d, $h, 'found', 'Найдена рабочая стратегия: ' . $best['name'] . '.');
+    // если сработала стратегия уже существующего профиля, а сайта просто нет в его списке — хватит записи в списке
+    $list = null;
+    foreach ($full as $r) {
+      if ($list = autoListTarget($h, (string)($r['from'] ?? ''))) {
+        $best = $r;
+        break;
+      }
+    }
+    $d['offers'][$h] = ['ts' => time(), 'name' => $best['name'], 'steps' => $best['steps'], 'from' => $best['from']] + ($list ? ['list' => $list] : []);
+    autoLog($d, $h, 'found', 'Найдена рабочая стратегия: ' . $best['name'] . ($list ? " — она уже стоит в профиле #{$list['profile']}, достаточно добавить сайт в {$list['name']}." : '.'));
     autoSave($d);
     if (uiSettings()['auto']['apply']) {
-      $r = autoApply($h, $best['steps'], 'автоподбор');
+      $r = $list ? autoApplyList($h, $best['steps'], $list, 'автоподбор') : ['ok' => false];
+      $viaList = $r['ok'];
+      if (!$r['ok']) {
+        // запись в списке не помогла или не подходит — отдельный профиль
+        $r = autoApply($h, $best['steps'], 'автоподбор');
+      }
       $d = autoData();
-      $msg = $r['ok'] ? "🔧 $h: найдена и применена стратегия «{$best['name']}» — отдельный профиль только для этого сайта."
+      $msg = $r['ok'] ? "🔧 $h: найдена и применена стратегия «{$best['name']}» — " . ($viaList ? "сайт добавлен в {$list['name']} (профиль #{$list['profile']})." : 'отдельный профиль только для этого сайта.')
         : "🔎 $h: найдена стратегия «{$best['name']}», но применить не удалось — {$r['text']}";
     } else {
       $msg = "🔎 $h: найдена рабочая стратегия «{$best['name']}». Применить можно в интерфейсе: «Автоподбор».";
@@ -3297,6 +3310,81 @@ function autoFinish(): void
   if ($msg !== null) {
     notifyTelegram("nfqws2 на роутере:\n" . $msg);
   }
+}
+
+// Стратегия взята из профиля #N («профиль #9, #11»; «#N стратегия K» — circular, не годится), а до него сайт
+// не доходит только потому, что его нет в списке сайтов профиля. Возвращает профиль и список, куда добавить сайт
+function autoListTarget(string $host, string $from): ?array
+{
+  if (!preg_match_all('/#(\d+)(?=,|$)/', $from, $m)) {
+    return null;
+  }
+  $profiles = currentProfiles();
+  $route = matchRoute($profiles, $host, gethostbynamel($host) ?: [], 'tcp', 443, 'tls', new ListCache());
+  foreach ($m[1] as $n) {
+    $n = (int)$n;
+    $step = current(array_filter($route['steps'], fn($x) => $x['profile'] === $n));
+    $p = current(array_filter($profiles, fn($x) => $x['index'] === $n));
+    if (!$step || !$p || ($step['miss'] ?? null) !== 'hostlist') {
+      continue;
+    }
+    $lists = array_values(array_filter($p['hostlists'], fn($f) => dirname($f) === LISTS_DIR && is_file($f) && is_writable($f)));
+    $pick = in_array(LISTS_DIR . '/user.list', $lists, true) ? LISTS_DIR . '/user.list' : ($lists[0] ?? null);
+    if ($pick !== null) {
+      return ['profile' => $n, 'name' => basename($pick)];
+    }
+  }
+  return null;
+}
+
+// Запись сайта в список профиля: без перезапуска (nfqws2 перечитывает списки сам). Сайт должен открыться —
+// иначе запись убирается, а предложение остаётся уже как «отдельный профиль»
+function autoApplyList(string $host, array $steps, array $list, string $who): array
+{
+  $d = autoData();
+  $done = function (bool $ok, string $kind, string $text) use (&$d, $host): array {
+    autoLog($d, $host, $kind, $text);
+    if ($ok) {
+      unset($d['offers'][$host]);
+    } else {
+      unset($d['offers'][$host]['list']);
+    }
+    autoSave($d);
+    return ['ok' => $ok, 'text' => $text];
+  };
+  $path = LISTS_DIR . '/' . basename((string)($list['name'] ?? ''));
+  $n = (int)($list['profile'] ?? 0);
+  // с момента подбора конфиг и списки могли измениться — условие проверяем заново
+  $now = autoListTarget($host, "#$n");
+  if (!$now || $now['name'] !== basename($path)) {
+    return $done(false, 'fail', "В список не добавлено: профилю #$n уже мало записи в {$list['name']} — конфиг или списки изменились. Можно применить отдельным профилем.");
+  }
+  $old = (string)file_get_contents($path);
+  set_time_limit(120);
+  if (!writeWithBackup($path, ltrim(rtrim($old, "\n") . "\n$host", "\n"), "$who: $host в список профиля #$n")) {
+    return $done(false, 'fail', 'В список не добавлено: не удалось записать файл.');
+  }
+  // nfqws2 замечает новый список при следующем соединении; первая попытка может уйти ещё по-старому
+  sleep(2);
+  $ok = false;
+  for ($i = 0; $i < 3 && !($ok = probe($host)['ok']); $i++) {
+    sleep(2);
+  }
+  if (!$ok) {
+    writeWithBackup($path, $old, "откат ($who, $host): сайт не открылся");
+    return $done(false, 'rolled', "Добавлен в {$list['name']} и убран обратно: $host так и не открылся. Можно применить отдельным профилем.");
+  }
+  $items = picksLoad();
+  foreach ($items as &$e) {
+    if ($e['host'] === $host) {
+      $e['applied'] = ['ts' => time(), 'name' => strategyName($steps), 'steps' => $steps, 'target' => "список {$list['name']} профиля #$n ($who)"];
+      picksSave($items);
+      break;
+    }
+  }
+  unset($e);
+  monitorRun(true, [$host]);
+  return $done(true, 'applied', "Сайт добавлен в {$list['name']}: теперь идёт через профиль #$n со стратегией " . strategyName($steps) . '. Сайт открывается, перезапуск не понадобился.');
 }
 
 // Отдельный профиль «только для этого сайта» в начале своих профилей (если такой уже есть — меняем его стратегию),
@@ -4136,7 +4224,7 @@ function state(): array
       $d = autoData();
       $offers = [];
       foreach ($d['offers'] as $h => $o) {
-        $offers[] = ['host' => (string)$h, 'ts' => $o['ts'], 'name' => $o['name']];
+        $offers[] = ['host' => (string)$h, 'ts' => $o['ts'], 'name' => $o['name'], 'list' => $o['list'] ?? null];
       }
       return ['enabled' => uiSettings()['auto']['enabled'], 'offers' => $offers, 'queue' => $d['queue']];
     })(),
@@ -5244,7 +5332,7 @@ switch ($cmd) {
       fail('Для этого сайта нет найденной стратегии');
     }
     session_write_close();
-    $r = autoApply($host, $o['steps'], 'по кнопке');
+    $r = !empty($o['list']) ? autoApplyList($host, $o['steps'], $o['list'], 'по кнопке') : autoApply($host, $o['steps'], 'по кнопке');
     if (!$r['ok']) {
       fail($r['text']);
     }
