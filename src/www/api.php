@@ -4523,9 +4523,20 @@ function updateStart(string $version): void
   file_put_contents(UPDATE_LOG, '');
   // procd (OpenWrt) держит lighttpd и всё, что он запустил, в cgroup /services/lighttpd и при перезапуске
   // может убить её целиком — посреди opkg install. Поэтому сначала уходим в корневую cgroup.
-  $cmd = 'echo $$ > /sys/fs/cgroup/cgroup.procs 2>/dev/null; '
+  // Первая строка журнала — знак, что запуск состоялся: интерфейс отличит «не запустилось» от «идёт».
+  $cmd = 'echo "Запуск: ' . SETUP_BIN . ' update v' . $version . '" >>' . UPDATE_LOG . '; '
+    . '[ -w /sys/fs/cgroup/cgroup.procs ] && echo $$ > /sys/fs/cgroup/cgroup.procs 2>/dev/null; '
     . SETUP_BIN . ' update v' . $version . ' >>' . UPDATE_LOG . ' 2>&1; echo "[exit $?]" >>' . UPDATE_LOG;
-  exec('(setsid env -i PATH=' . JOB_PATH . ' sh -c ' . escapeshellarg($cmd) . ' >/dev/null 2>&1 &)');
+  // setsid отвязывает установку от веб-сервера, но на Keenetic он есть только с busybox из Entware —
+  // без него запускаем как есть (там веб-сервер перезапускается killall-ом и установку не задевает)
+  $setsid = '';
+  foreach (explode(':', JOB_PATH) as $d) {
+    if (is_executable("$d/setsid")) {
+      $setsid = "$d/setsid ";
+      break;
+    }
+  }
+  exec('(' . $setsid . 'env -i PATH=' . JOB_PATH . ' sh -c ' . escapeshellarg($cmd) . ' >/dev/null 2>&1 &)');
 }
 
 // ================= состояние =================

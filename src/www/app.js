@@ -4282,9 +4282,17 @@ function openUpdate(u, run = false) {
   const go = btn('Обновить до ' + u.latest, () => start(), 'primary', 'download', { disabled: !u.can_update || u.running });
   const dlg = modal('nfqws2-ui ' + (u.latest || ''), body, u.available ? go : []);
   let timer = null;
+  let started = 0;
   const poll = async () => {
     const r = await api('update_status').catch(() => null);   // пока lighttpd перезапускается, ответа нет — ждём
     if (!dlg.isConnected) return;
+    // журнал пуст и установка не идёт — запуск не состоялся (раньше окно ждало бесконечно)
+    if (r && !r.log.trim() && !r.running && started && Date.now() - started > 20000) {
+      status.replaceChildren(notice('bad', 'Обновление не запустилось', 'Интерфейс не смог запустить установку на роутере. Обновите из консоли роутера командой ниже и напишите нам, на каком роутере это случилось.',
+        h('div', { class: 'row' }, h('code', { text: 'nfqws-ui update' }), btn('Копировать', () => copyText('nfqws-ui update'), 'small ghost', 'copy'))));
+      go.disabled = false;
+      return;
+    }
     if (r) {
       log.hidden = false;
       drawLog(log, r.log.trim().split('\n').filter(Boolean));
@@ -4308,6 +4316,7 @@ function openUpdate(u, run = false) {
     const r = await guarded(() => api('update_run', { version: u.latest }));
     if (!r) { go.disabled = false; return; }
     status.replaceChildren(h('div', { class: 'row sm' }, h('span', { class: 'spin' }), 'Обновляю… не закрывайте окно'));
+    started = Date.now();
     clearTimeout(timer);
     poll();
   }
