@@ -226,6 +226,8 @@ function applyLook(look = getLook()) {
   document.documentElement.dataset.mode = look.mode;
   document.documentElement.dataset.layout = ['menu', 'tabs', 'site'].includes(look.layout) ? look.layout : 'menu';
   document.documentElement.toggleAttribute('data-simple', !!look.simple);
+  document.documentElement.toggleAttribute('data-navmini', !!look.navmini);
+  document.documentElement.toggleAttribute('data-nooutline', !!look.nooutline);
 }
 function setLook(patch) {
   try { localStorage.setItem('nfqws-ui-look', JSON.stringify({ ...lookStored(), ...patch })); } catch { /* нет хранилища */ }
@@ -393,13 +395,19 @@ function menuNav() {
       h('a', { href: PAGES[id][0], 'data-pages': pages.join(' '), class: pages.includes(cur) ? 'on' : null },
         icon(ic), h('span', { class: 'nm', text: label }), pages.filter((x) => x !== 'backup').map(pageTail).find(Boolean) || null)));
   }
-  return h('nav', { class: 'nav mnav', 'aria-label': 'Разделы' }, MENU.map(([head, ids]) => [
-    head ? h('div', { class: 'nav-h' }, icon(NAV_ICON[head] || 'settings'), head) : null,
-    ids.map((id) => PAGES[id][0]
-      ? h('a', { href: PAGES[id][0], 'data-pages': id === 'pick' ? 'pick site' : id, class: id === cur || (id === 'pick' && cur === 'site') ? 'on' : null },
-        id === 'over' ? h('span', { class: 'k-ic' }, icon('dash')) : null,
-        h('span', { class: 'nm', text: PAGES[id][1] }), NEW_PAGES.includes(id) ? h('span', { class: 'tag new', text: 'новое' }) : pageTail(id))
-      : soonItem(id))]));
+  // группа — заголовок и её страницы; в свёрнутом меню (полоска значков) страницы группы всплывают рядом со значком
+  const mini = document.documentElement.hasAttribute('data-navmini');
+  return h('nav', { class: 'nav mnav', 'aria-label': 'Разделы' }, MENU.map(([head, ids]) => h('div', { class: 'mgrp' + (ids.some((id) => id === cur || (id === 'pick' && cur === 'site')) ? ' here' : '') },
+    head ? h('div', { class: 'nav-h', tabindex: mini ? 0 : null, title: mini ? head : null }, icon(NAV_ICON[head] || 'settings'), h('span', { class: 'nh-t', text: head })) : null,
+    h('div', { class: head ? 'mlinks' : 'mtop' }, head && mini ? h('div', { class: 'mfly-h', text: head }) : null,
+      ids.map((id) => PAGES[id][0]
+        ? h('a', { href: PAGES[id][0], 'data-pages': id === 'pick' ? 'pick site' : id, class: id === cur || (id === 'pick' && cur === 'site') ? 'on' : null, title: mini && !head ? PAGES[id][1] : null },
+          id === 'over' ? h('span', { class: 'k-ic' }, icon('dash')) : null,
+          h('span', { class: 'nm', text: PAGES[id][1] }), NEW_PAGES.includes(id) ? h('span', { class: 'tag new', text: 'новое' }) : pageTail(id))
+        : soonItem(id))))),
+  // свернуть меню в полоску значков — как «Скрыть меню» у Keenetic; только на широком экране
+  h('button', { type: 'button', class: 'nav-mini', title: mini ? 'Развернуть меню' : 'Свернуть меню в полоску значков — больше места под страницу', 'aria-label': mini ? 'Развернуть меню' : 'Свернуть меню',
+    onclick: () => { setLook({ navmini: !mini }); placeSide(); } }, icon(mini ? 'menu' : 'back'), h('span', { class: 'nh-t', text: 'Свернуть меню' })));
 }
 
 // Пункт для ещё не сделанной страницы: виден, но не нажимается
@@ -2969,7 +2977,9 @@ async function paneRaw(content) {
       } else toast(e.message, { err: true });
     }
   };
-  const tools = h('div', { class: 'cfg-tools' }, find, findN, counts,
+  const outlineBtn = btn('Структура', () => { setLook({ nooutline: !getLook().nooutline }); outlineBtn.classList.toggle('on', !getLook().nooutline); }, 'small' + (getLook().nooutline ? '' : ' on'), 'layers',
+    { title: 'Показать или скрыть колонку «Структура» — без неё больше места под текст конфига' });
+  const tools = h('div', { class: 'cfg-tools' }, outlineBtn, find, findN, counts,
     btn('По аргументу на строку', () => {
       let text = ed.ta.value;
       for (const [name, rg] of Object.entries(confVarRanges(text)).filter(([n]) => ARG_VARS.includes(n)).sort((a, b) => b[1].start - a[1].start)) {

@@ -827,7 +827,7 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
 :root[data-variant="k"] .mnav .nav-h::before { display: none; }
 :root[data-variant="k"] .nav-h > svg { display: inline-block; width: 24px; height: 24px; stroke-width: 2.2; }
 :root[data-variant="k"] .mnav a { border-radius: 0; padding: 8px 20px 8px 52px; min-height: 38px; font-size: 15px; }
-:root[data-variant="k"] .mnav > a:first-child { padding-left: 20px; gap: 12px; }
+:root[data-variant="k"] .mnav .mtop > a { padding-left: 20px; gap: 12px; }
 :root[data-variant="k"] .mnav .k-ic { display: inline-flex; color: var(--accent); }
 :root[data-variant="k"] .mnav .k-ic svg { width: 24px; height: 24px; }
 :root[data-variant="k"] .mnav a:hover { background: var(--k-active); }
@@ -934,7 +934,7 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
 /* меню компактнее, чтобы всё помещалось без прокрутки на обычном экране (24 пункта) */
 :root[data-variant="k"] .mnav { padding: 6px 0 10px; }
 :root[data-variant="k"] .mnav a { min-height: 32px; padding: 5px 16px 5px 50px; font-size: 15px; }
-:root[data-variant="k"] .mnav > a:first-child { padding-left: 16px; }
+:root[data-variant="k"] .mnav .mtop > a { padding-left: 16px; }
 :root[data-variant="k"] .mnav .nav-h { margin: 4px 0 0; padding: 10px 16px 4px; font-size: 13px; }
 :root[data-variant="k"] .nav-h > svg, :root[data-variant="k"] .mnav .k-ic svg { width: 22px; height: 22px; }
 @media (min-width: 1100px) { :root[data-variant="k"][data-layout="menu"] { --side-w: 250px; } }
@@ -944,3 +944,31 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
 :root[data-variant="k"] .mnav .nav-h { padding: 8px 16px 3px; }
 /* в выезжающем меню на телефоне — строки под палец */
 @media (max-width: 759px) { :root[data-variant="k"] .mnav a { min-height: 40px; font-size: 15.5px; } :root[data-variant="k"] .mnav .nav-h { padding: 12px 16px 4px; } }
+
+/* ---------- меню, свёрнутое в полоску значков (как «Скрыть меню» у Keenetic) ---------- */
+.nav-mini, .mfly-h { display: none; }
+@media (min-width: 1100px) {
+  :root[data-layout="menu"]:not([data-simple]) .nav-mini { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 10px; padding: 10px 16px; border: 0; border-top: 1px solid var(--line); background: none; color: var(--accent); font: inherit; font-size: 14px; cursor: pointer; text-align: left; }
+  :root[data-layout="menu"]:not([data-simple]) .nav-mini:hover { background: var(--soft); }
+  :root[data-navmini][data-layout="menu"]:not([data-simple]) { --side-w: 64px !important; }
+  :root[data-navmini][data-layout="menu"]:not([data-simple]) #side { overflow: visible; }
+  :root[data-navmini]:not([data-simple]) .mnav { padding: 6px 0; }
+  :root[data-navmini]:not([data-simple]) .mnav .nh-t, :root[data-navmini]:not([data-simple]) .mtop .nm, :root[data-navmini]:not([data-simple]) .mtop .tail, :root[data-navmini]:not([data-simple]) .mtop .tag { display: none; }
+  :root[data-navmini]:not([data-simple]) .nav-h > svg, :root[data-navmini]:not([data-simple]) .mnav .k-ic { display: inline-flex; }
+  :root[data-navmini]:not([data-simple]) .mnav .nav-h, :root[data-navmini]:not([data-simple]) .mtop > a, :root[data-navmini]:not([data-simple]) .nav-mini {
+    justify-content: center; padding: 12px 0 !important; margin: 0 !important; border-top: 0; min-height: 48px; cursor: pointer; border-radius: 0; }
+  :root[data-navmini]:not([data-simple]) .mnav .nav-h::before { display: none; }
+  :root[data-navmini]:not([data-simple]) .nav-h > svg, :root[data-navmini]:not([data-simple]) .mnav .k-ic svg { width: 24px; height: 24px; }
+  :root[data-navmini]:not([data-simple]) .mgrp { position: relative; }
+  :root[data-navmini]:not([data-simple]) .mgrp.here > .nav-h, :root[data-navmini]:not([data-simple]) .mtop > a.on { background: var(--accent-soft); }
+  :root[data-navmini]:not([data-simple]) .mgrp:hover > .nav-h { background: var(--soft); }
+  /* страницы группы всплывают справа от значка */
+  :root[data-navmini]:not([data-simple]) .mlinks { display: none; position: absolute; left: 100%; top: 0; z-index: 60; min-width: 240px; padding: 6px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 0 4px 4px 0; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); }
+  :root[data-navmini]:not([data-simple]) .mgrp:hover > .mlinks, :root[data-navmini]:not([data-simple]) .mgrp:focus-within > .mlinks { display: block; }
+  :root[data-navmini]:not([data-simple]) .mlinks > a { padding: 7px 16px !important; min-height: 34px; }
+  :root[data-navmini]:not([data-simple]) .mfly-h { display: block; padding: 6px 16px 4px; font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent); }
+}
+/* «Структура» в редакторе спрятана — код на всю ширину */
+:root[data-nooutline] .cfg { grid-template-columns: minmax(0, 1fr); }
+:root[data-nooutline] .cfg > .outline { display: none; }
+.cfg-tools .btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
