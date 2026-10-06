@@ -841,6 +841,14 @@ function problemItems() {
   if (st.rivals?.length) {
     items.push({ level: 'warning', title: 'Работает другой обходчик', text: `${st.rivals.join(', ')} — он правит те же пакеты, что и nfqws2: стратегии мешают друг другу, результаты подбора ненадёжны. Оставьте что-то одно.`, href: PAGES.log[0] });
   }
+  for (const f of st.logs?.files || []) {
+    if (f.used < st.logs.warn) continue;
+    const low = st.logs.total && st.logs.free / st.logs.total < 0.15;
+    items.push({ level: f.used >= st.logs.bad || low ? 'error' : 'warning', title: 'Журнал nfqws2 занимает память',
+      text: `${f.name} — ${fmtBytes(f.used)} оперативной памяти роутера (${LOG_DIR_HINT})` + (low ? `, свободно всего ${fmtBytes(st.logs.free)}` : '') + '.'
+        + (st.logs.debug ? ' Отладка включена — журнал продолжит расти; больше 50 МБ программа сама подрезает его до последнего 1 МБ.' : ''),
+      href: PAGES.log[0], fix: logActions(f.name, st.logs.debug) });
+  }
   if (!st.running && st.stop) items.push({ level: 'error', title: 'nfqws2 остановлен', text: st.stop.text, href: st.stop.kind === 'conf' ? PAGES.raw[0] : '#/' });
   for (const o of st.auto?.offers || []) {
     items.push({ level: 'warning', title: o.host, text: `перестал открываться — автоподбор нашёл рабочую стратегию: ${o.name}`, href: PAGES.auto[0], fix: btn('Применить', () => autoApply(o), 'small', 'ok', { title: o.list ? `Добавить сайт в ${o.list.name} — стратегия уже стоит в профиле #${o.list.profile}; с проверкой и откатом` : 'Отдельный профиль только для этого сайта; с проверкой и откатом' }) });
@@ -864,6 +872,23 @@ function problemItems() {
     }
   }
   return items.sort((a, b) => LEVEL_RANK[b.level] - LEVEL_RANK[a.level]);
+}
+
+const LOG_DIR_HINT = '/var/log хранится в ОЗУ';
+async function clearLog(name) {
+  if (!confirm(`Очистить ${name}? Записи пропадут; nfqws2 продолжит писать в этот файл с начала, перезапуск не нужен.`)) return false;
+  const r = await guarded(() => api('log_clear', { name }), 'Журнал очищен');
+  if (r) { S.state.logs = r.logs; updateSide(); }
+  return !!r;
+}
+function logActions(name, debug) {
+  return h('span', { class: 'row', style: 'gap:6px' },
+    btn('Очистить', async () => { if (await clearLog(name)) route(); }, 'small', 'trash'),
+    debug ? btn('Выключить отладку', async () => {
+      if (!(await saveVars({ LOG_LEVEL: '0' }, 'выключен отладочный журнал'))) return;
+      toast('Отладка выключена в конфиге — перезапускаю nfqws2 с проверкой');
+      safeRestart();
+    }, 'small ghost', null, { title: 'LOG_LEVEL=0 и перезапуск nfqws2 с проверкой' }) : null);
 }
 
 function renderSideProblems(el) {
@@ -2728,8 +2753,18 @@ async function paneBasic(content) {
       h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 'f-mode', text: VAR_INFO.NFQWS_EXTRA_ARGS[0] }),
         h('select', { class: 'select', id: 'f-mode', onchange: (e) => { vals.NFQWS_EXTRA_ARGS = e.target.value; refresh(); } }, MODES.map(([val, t]) => h('option', { value: val, text: t, selected: vals.NFQWS_EXTRA_ARGS === val }))), hints('NFQWS_EXTRA_ARGS')),
       h('div', { class: 'frow' }, input('TCP_PORTS')), h('div', { class: 'frow' }, input('UDP_PORTS')),
-      h('div', { class: 'frow' }, toggle('IPV6_ENABLED')), h('div', { class: 'frow' }, toggle('LOG_LEVEL'))),
+      h('div', { class: 'frow' }, toggle('IPV6_ENABLED')), h('div', { class: 'frow' }, toggle('LOG_LEVEL'), logSizeHint())),
     bar);
+}
+
+// Сколько сейчас занимают журналы nfqws2 — подсказка у галочки «Отладочный журнал»
+function logSizeHint() {
+  const f = (S.state.logs?.files || []).filter((x) => x.used > 0);
+  if (!f.length) return null;
+  const big = f.some((x) => x.used >= S.state.logs.warn);
+  return h('span', { class: 'hint', style: big ? 'color:var(--warn)' : null },
+    'Сейчас: ' + f.map((x) => `${x.name} — ${fmtBytes(x.used)}`).join(', ') + ` (${LOG_DIR_HINT}). Больше 50 МБ — подрезается до 1 МБ автоматически. `,
+    h('a', { href: PAGES.log[0], text: 'Журнал' }));
 }
 
 // Что делают lua-скрипты из пакета zapret2
@@ -3976,7 +4011,9 @@ async function viewLog(main) {
     data.syslog
       ? panel('Системный журнал nfqws2', null, h('p', { class: 'sm muted', text: 'Последние 300 строк logread, новые сверху.' }), search, pre)
       : panel('Системный журнал nfqws2', null, h('p', { class: 'sm muted', text: 'На Keenetic системный журнал ведёт прошивка: откройте его в веб-интерфейсе роутера (раздел «Диагностика») и найдите строки nfqws2. Файлы журналов nfqws2 показаны ниже.' })),
-    (data.files || []).map((f) => panel(f.name, h('span', { class: 'sm muted', text: fmtBytes(f.size) }), (() => { const p = h('pre', { class: 'box' }); drawLog(p, (f.tail || '').split('\n').filter(Boolean), 'пусто'); return p; })())),
+    (data.files || []).map((f) => panel(f.name, h('span', { class: 'row', style: 'gap:8px' },
+      h('span', { class: 'sm muted', text: fmtBytes((data.logs?.files || []).find((x) => x.name === f.name)?.used ?? f.size) + ' в памяти' }),
+      btn('Очистить', async () => { if (await clearLog(f.name)) route(); }, 'small ghost', 'trash')), (() => { const p = h('pre', { class: 'box' }); drawLog(p, (f.tail || '').split('\n').filter(Boolean), 'пусто'); return p; })())),
     panel('Трафик в очередь nfqws2', null, h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
       h('thead', {}, h('tr', {}, h('th', { text: 'Направление' }), h('th', { text: 'Что' }), h('th', { class: 'num', text: 'Пакетов' }), h('th', { class: 'num', text: 'Объём' }))),
       h('tbody', {}, st.iptables.length ? st.iptables.map((x) => h('tr', {}, h('td', { text: x.dir === 'out' ? 'исходящие' : 'входящие' }), h('td', { text: x.proto + (x.what === 'data' ? ', первые пакеты' : ', ' + x.what) }),

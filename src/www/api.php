@@ -4539,6 +4539,59 @@ function updateStart(string $version): void
   exec('(' . $setsid . 'env -i PATH=' . JOB_PATH . ' sh -c ' . escapeshellarg($cmd) . ' >/dev/null 2>&1 &)');
 }
 
+// ---------- журналы nfqws2 в /var/log ----------
+// На OpenWrt /var/log — это /tmp, то есть оперативная память. Отладочный журнал (LOG_LEVEL=1) за несколько
+// часов вырастает до сотен мегабайт. Считаем занятое по блокам: после обрезки файл может стать «дырявым».
+const LOG_WARN = 20 << 20, LOG_BAD = 100 << 20, LOG_TRIM = 50 << 20, LOG_KEEP = 1 << 20;
+
+function nfqLogs(): array
+{
+  $files = [];
+  foreach (glob(LOG_DIR . '/nfqws2*.log') ?: [] as $f) {
+    $st = @stat($f);
+    if ($st) {
+      $files[] = ['name' => basename($f), 'size' => $st['size'], 'used' => isset($st['blocks']) && $st['blocks'] >= 0 ? $st['blocks'] * 512 : $st['size']];
+    }
+  }
+  $vars = confRawVars((string)@file_get_contents(CONF_FILE));
+  $total = @disk_total_space(LOG_DIR) ?: 0;
+  return ['files' => $files, 'debug' => trim((string)($vars['LOG_LEVEL'] ?? '0'), "\"' ") === '1',
+    'free' => @disk_free_space(LOG_DIR) ?: 0, 'total' => $total, 'warn' => LOG_WARN, 'bad' => LOG_BAD];
+}
+
+// Обнулить или подрезать журнал на месте: тот же файл, nfqws2 продолжает в него писать без перезапуска
+function nfqLogCut(string $name, int $keep = 0): void
+{
+  preg_match('/^nfqws2[A-Za-z0-9_.-]*\.log$/', $name) || fail('Нет такого журнала');
+  $f = LOG_DIR . '/' . $name;
+  is_file($f) || fail('Нет такого журнала', 404);
+  $tail = '';
+  if ($keep > 0 && ($h = @fopen($f, 'rb'))) {
+    fseek($h, -min($keep, filesize($f)), SEEK_END);
+    $tail = (string)stream_get_contents($h);
+    fclose($h);
+    $tail = substr($tail, (int)strpos($tail, "\n") + 1);   // первая строка обрезана посередине
+  }
+  $h = @fopen($f, 'r+');
+  $h || fail('Не удалось открыть ' . $name);
+  ftruncate($h, 0);
+  rewind($h);
+  if ($tail !== '') {
+    fwrite($h, "--- nfqws2-ui: журнал подрезан " . ldate('d.m H:i') . ", оставлен последний " . round($keep / 1048576) . " МБ ---\n" . $tail);
+  }
+  fclose($h);
+}
+
+// cron, раз в 10 минут: не дать забытой отладке съесть память роутера
+function nfqLogsTrim(): void
+{
+  foreach (nfqLogs()['files'] as $x) {
+    if ($x['used'] > LOG_TRIM) {
+      nfqLogCut($x['name'], LOG_KEEP);
+    }
+  }
+}
+
 // ================= состояние =================
 
 function iptablesCounters(): array
@@ -4601,6 +4654,7 @@ function state(): array
     'profiles' => $profiles,
     'lists' => listsInventory($profiles),
     'iptables' => iptablesCounters(),
+    'logs' => nfqLogs(),
     'lint' => lintCurrent(),
     'conf_tokens' => array_map('tokens', array_intersect_key(confRawVars(file_get_contents(CONF_FILE)), array_flip(ARG_VARS))),
     // Профили по конфигу (для редактора) — могут отличаться от запущенных до перезапуска
@@ -5022,6 +5076,7 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
     exit(0);
   }
   historyScan('auto');
+  nfqLogsTrim();
   monitorRun(false);
   autoTick();
   if ($cli === 'daily') {
@@ -6023,7 +6078,11 @@ switch ($cmd) {
       $lines = explode("\n", rtrim($tail, "\n"));
       $files[] = ['name' => basename($f), 'size' => $size, 'tail' => implode("\n", array_slice($lines, -200)) . "\n"];
     }
-    respond(['syslog' => $out, 'files' => $files]);
+    respond(['syslog' => $out, 'files' => $files, 'logs' => nfqLogs()]);
+
+  case 'log_clear':
+    nfqLogCut($str('name'));
+    respond(['logs' => nfqLogs()]);
 
   default:
     fail('unknown command', 404);
