@@ -212,8 +212,14 @@ async function guarded(fn, okText) {
 
 // ============ оформление ============
 
+// Оформление по умолчанию: стиль K («как в Keenetic»). В браузере хранится только то, что выбрано явно, —
+// поэтому смена умолчания доходит до тех, кто стиль сам не выбирал
+const LOOK_DEFAULT = { variant: 'k', mode: 'auto', layout: 'menu' };
+function lookStored() {
+  try { return JSON.parse(localStorage.getItem('nfqws-ui-look') || '{}') || {}; } catch { return {}; }
+}
 function getLook() {
-  try { return { variant: 'a', mode: 'auto', layout: 'menu', ...JSON.parse(localStorage.getItem('nfqws-ui-look') || '{}') }; } catch { return { variant: 'a', mode: 'auto', layout: 'menu' }; }
+  return { ...LOOK_DEFAULT, ...lookStored() };
 }
 function applyLook(look = getLook()) {
   document.documentElement.dataset.variant = look.variant;
@@ -222,9 +228,8 @@ function applyLook(look = getLook()) {
   document.documentElement.toggleAttribute('data-simple', !!look.simple);
 }
 function setLook(patch) {
-  const look = { ...getLook(), ...patch };
-  try { localStorage.setItem('nfqws-ui-look', JSON.stringify(look)); } catch { /* нет хранилища */ }
-  applyLook(look);
+  try { localStorage.setItem('nfqws-ui-look', JSON.stringify({ ...lookStored(), ...patch })); } catch { /* нет хранилища */ }
+  applyLook();
 }
 applyLook();
 
