@@ -5654,8 +5654,18 @@ switch ($cmd) {
       exec('logread -e nfqws2 2>/dev/null | tail -n 300', $out);
     }
     $files = [];
+    // только хвост: отладочный журнал nfqws2 растёт до сотен мегабайт, целиком он не влезает в память PHP
     foreach (glob(LOG_DIR . '/nfqws2*.log') ?: [] as $f) {
-      $files[] = ['name' => basename($f), 'size' => filesize($f), 'tail' => implode('', array_slice(@file($f) ?: [], -200))];
+      $size = filesize($f);
+      $tail = '';
+      if ($fh = @fopen($f, 'rb')) {
+        if ($size > 65536) fseek($fh, -65536, SEEK_END);
+        $tail = (string)stream_get_contents($fh);
+        fclose($fh);
+        if ($size > 65536) $tail = substr($tail, strpos($tail, "\n") + 1);   // первая строка обрезана посередине
+      }
+      $lines = explode("\n", rtrim($tail, "\n"));
+      $files[] = ['name' => basename($f), 'size' => $size, 'tail' => implode("\n", array_slice($lines, -200)) . "\n"];
     }
     respond(['syslog' => $out, 'files' => $files]);
 
