@@ -159,7 +159,8 @@ function validHost(string $h): bool
 function uiSettings(): array
 {
   $defaults = [
-    'snapshots' => ['max_count' => 50, 'max_days' => 30],
+    // remote — копии снимков на другом устройстве (NAS) по ssh; keep_local — сколько последних оставлять на роутере
+    'snapshots' => ['max_count' => 50, 'max_days' => 30, 'remote' => ['enabled' => false, 'host' => '', 'port' => 22, 'user' => '', 'dir' => '', 'keep_local' => 5]],
     'monitor' => ['enabled' => true, 'interval' => 30, 'sites' => ['rutracker.org', 'youtube.com', 'discord.com', 'x.com']],
     // via — каким путём слать в Telegram: '' — как обычно, iface — через интерфейс (туннель), proxy — через прокси
     'notify' => ['tg_token' => '', 'tg_chat' => '', 'via' => '', 'iface' => '', 'proxy' => ''],
@@ -234,8 +235,11 @@ function snapHashes(): array
 function snapPaths(): array
 {
   $p = ['etc/nfqws2/nfqws2.conf', 'etc/nfqws2/lists', 'etc/nfqws2/blobs'];
-  if (is_dir(UI_CONF_DIR)) {
-    $p[] = substr(UI_CONF_DIR, 1);
+  // настройки интерфейса — кроме ключа роутера для NAS: закрытый ключ не должен уходить ни на NAS, ни в скачанный архив
+  foreach (glob(UI_CONF_DIR . '/*') ?: [] as $f) {
+    if (is_file($f) && !preg_match('/^(remote_key(\.pub)?|known_hosts)$/', basename($f))) {
+      $p[] = substr($f, 1);
+    }
   }
   return array_values(array_filter($p, fn($x) => file_exists('/' . $x)));
 }
@@ -260,34 +264,323 @@ function snapshotCreate(string $reason, bool $ifChanged = true, string $note = '
     return null;
   }
   $entry = ['id' => $id, 'ts' => time(), 'reason' => $reason, 'note' => $note, 'size' => filesize($file), 'files' => $hashes];
+  $lock = snapLock();
+  $idx = snapIndex();   // перечитываем под замком: отправка на NAS могла поменять отметки
   $idx[] = $entry;
   snapPrune($idx);
   snapSaveIndex($idx);
+  fclose($lock);
+  remoteKick();
   return $entry;
 }
 
+// Замок на index.json: снимок создаёт запрос интерфейса или cron, а отметки «на NAS» ставит фоновая отправка
+function snapLock()
+{
+  @mkdir(SNAP_DIR, 0700, true);
+  $l = fopen(SNAP_DIR . '/.lock', 'c');
+  flock($l, LOCK_EX);
+  return $l;
+}
+
+// Без копий на NAS: хранить по сроку и числу, пять последних и закреплённые — всегда.
+// С копиями на NAS: на роутере — keep_local последних, закреплённые и ещё не отправленные; остальные
+// остаются в списке как «только на NAS» (там хранится всё — удалить или перезаписать их с роутера нельзя).
 function snapPrune(array &$idx): void
 {
   $cfg = uiSettings()['snapshots'];
+  $remote = remoteOn();
   $minTs = time() - 86400 * max(1, (int)$cfg['max_days']);
+  $local = array_values(array_filter($idx, fn($e) => ($e['local'] ?? true)));
+  $n = count($local);
+  $pos = array_flip(array_column($local, 'id'));
+  $keepN = $remote ? max(1, (int)$cfg['remote']['keep_local']) : 5;
   $keep = [];
-  $n = count($idx);
-  foreach ($idx as $i => $e) {
-    $newest5 = $i >= $n - 5;
-    $inCount = $i >= $n - max(5, (int)$cfg['max_count']);
-    if ($newest5 || ($inCount && $e['ts'] >= $minTs) || !empty($e['pinned'])) {
+  foreach ($idx as $e) {
+    if (!($e['local'] ?? true)) {
+      $keep[] = $e;
+      continue;
+    }
+    $i = $pos[$e['id']];
+    $newest = $i >= $n - $keepN;
+    if ($newest || !empty($e['pinned'])) {
+      $keep[] = $e;
+    } elseif ($remote) {
+      if (empty($e['remote'])) {
+        $keep[] = $e;   // ещё не дошёл до NAS
+        continue;
+      }
+      @unlink(SNAP_DIR . "/{$e['id']}.tar.gz");
+      $e['local'] = false;
+      unset($e['files']);   // хеши файлов нужны только для «отличается от текущего», а список на NAS растёт без конца
+      $keep[] = $e;
+    } elseif ($i >= $n - max(5, (int)$cfg['max_count']) && $e['ts'] >= $minTs) {
       $keep[] = $e;
     } else {
       @unlink(SNAP_DIR . "/{$e['id']}.tar.gz");
+      if (!empty($e['remote'])) {
+        $e['local'] = false;
+        unset($e['files']);
+        $keep[] = $e;
+      }
     }
   }
   $idx = $keep;
 }
 
+// ---------- копии снимков на NAS (или любом устройстве с ssh) ----------
+// Роутер сам отправляет каждый новый снимок по ssh своим ключом. На той стороне ключ ограничен строкой
+// в authorized_keys (command=…,restrict): им можно только положить новый снимок, прочитать и перечислить
+// снимки в одной папке — ни оболочки, ни удаления, ни перезаписи. Скрипт той стороны — remoteScript().
+
+define('REMOTE_KEY', UI_CONF_DIR . '/remote_key');
+define('REMOTE_STATE', UI_CONF_DIR . '/remote.json');
+
+function remoteCfg(): array
+{
+  return uiSettings()['snapshots']['remote'];
+}
+
+// dropbear (OpenWrt) или OpenSSH (Entware): у них разные ключи и параметры
+function remoteTool(): ?string
+{
+  foreach (['dbclient' => 'dropbear', 'ssh' => 'openssh'] as $bin => $kind) {
+    exec('command -v ' . $bin . ' 2>/dev/null', $o, $rc);
+    if ($rc === 0) {
+      // на OpenWrt ssh — это сам dropbear
+      return $kind === 'openssh' && is_link(trim($o[0] ?? '')) && strpos((string)readlink(trim($o[0])), 'dropbear') !== false ? 'dropbear' : $kind;
+    }
+    $o = [];
+  }
+  return null;
+}
+
+function remoteOn(): bool
+{
+  $c = remoteCfg();
+  return !empty($c['enabled']) && $c['host'] !== '' && $c['user'] !== '' && is_file(REMOTE_KEY);
+}
+
+function remotePubKey(): string
+{
+  if (!is_file(REMOTE_KEY)) {
+    return '';
+  }
+  $cmd = remoteTool() === 'openssh' ? 'cat ' . escapeshellarg(REMOTE_KEY . '.pub') : 'dropbearkey -y -f ' . escapeshellarg(REMOTE_KEY);
+  exec($cmd . ' 2>/dev/null', $o);
+  foreach ($o as $l) {
+    if (preg_match('/^ssh-\S+ \S+/', $l)) {
+      return preg_replace('/ \S+$/', '', trim($l)) . ' nfqws2-ui';
+    }
+  }
+  return '';
+}
+
+function remoteKeyCreate(): string
+{
+  @mkdir(UI_CONF_DIR, 0700, true);
+  if (!is_file(REMOTE_KEY)) {
+    $tool = remoteTool();
+    $tool || fail('На роутере нет ssh-клиента (dbclient или ssh)');
+    $cmd = $tool === 'openssh' ? 'ssh-keygen -q -t ed25519 -N "" -C nfqws2-ui -f ' . escapeshellarg(REMOTE_KEY) : 'dropbearkey -t ed25519 -f ' . escapeshellarg(REMOTE_KEY);
+    exec($cmd . ' 2>&1', $o, $rc);
+    ($rc === 0 && is_file(REMOTE_KEY)) || fail('Не удалось создать ключ: ' . implode(' ', $o));
+    @chmod(REMOTE_KEY, 0600);
+  }
+  return remotePubKey();
+}
+
+// Одна команда на той стороне: ping | list | put <имя> | get <имя>. $in — файл на вход, $out — куда писать вывод
+function remoteCall(string $op, string $name = '', ?string $in = null, ?string $out = null, int $timeout = 30): array
+{
+  $c = remoteCfg();
+  $tool = remoteTool();
+  if (!$tool) {
+    return [false, 'на роутере нет ssh-клиента'];
+  }
+  $target = escapeshellarg($c['user'] . '@' . $c['host']);
+  $key = escapeshellarg(REMOTE_KEY);
+  $port = (int)$c['port'];
+  $remote = escapeshellarg(trim("$op $name"));
+  // ключ хоста запоминается при первом подключении (в UI_CONF_DIR/.ssh) и дальше сверяется
+  $cmd = $tool === 'openssh'
+    ? "ssh -i $key -p $port -o BatchMode=yes -o StrictHostKeyChecking=accept-new -o UserKnownHostsFile=" . escapeshellarg(UI_CONF_DIR . '/known_hosts') . " -o ConnectTimeout=10 $target $remote"
+    : "dbclient -y -i $key -p $port $target $remote";
+  $p = proc_open('exec ' . $cmd, [0 => $in ? ['file', $in, 'r'] : ['file', '/dev/null', 'r'], 1 => $out ? ['file', $out, 'w'] : ['pipe', 'w'], 2 => ['pipe', 'w']], $pipes, null, ['HOME' => UI_CONF_DIR, 'PATH' => JOB_PATH]);
+  if (!is_resource($p)) {
+    return [false, 'не удалось запустить ssh'];
+  }
+  $text = '';
+  $err = '';
+  foreach ($pipes as $pp) {
+    stream_set_blocking($pp, false);
+  }
+  $deadline = time() + $timeout;
+  do {
+    $st = proc_get_status($p);
+    if (isset($pipes[1])) {
+      $text .= (string)stream_get_contents($pipes[1]);
+    }
+    $err .= (string)stream_get_contents($pipes[2]);
+    if (!$st['running']) {
+      break;
+    }
+    usleep(100000);
+  } while (time() < $deadline);
+  if ($st['running']) {
+    proc_terminate($p, 9);
+    proc_close($p);
+    return [false, 'нет ответа за ' . $timeout . ' с'];
+  }
+  if (isset($pipes[1])) {
+    $text .= (string)stream_get_contents($pipes[1]);
+  }
+  $err .= (string)stream_get_contents($pipes[2]);
+  foreach ($pipes as $pp) {
+    fclose($pp);
+  }
+  proc_close($p);
+  $rc = $st['exitcode'];
+  $err = trim(preg_replace('/^.*(Warning|Host .* is not in the trusted hosts file|Fingerprint|Do you want to continue|Permanently added).*$/mi', '', $err));
+  return [$rc === 0, $rc === 0 ? $text : ($err !== '' ? $err : "код $rc")];
+}
+
+function remoteState(array $patch = []): array
+{
+  $s = json_decode((string)@file_get_contents(REMOTE_STATE), true);
+  $s = is_array($s) ? $s : [];
+  if ($patch) {
+    $s = array_merge($s, $patch);
+    @file_put_contents(REMOTE_STATE, json_encode($s, JSON_UNESCAPED_UNICODE));
+  }
+  return $s;
+}
+
+// Отправить всё, что ещё не на NAS, и список снимков; после — убрать с роутера лишнее
+function remotePush(): array
+{
+  if (!remoteOn()) {
+    return ['sent' => 0, 'error' => 'отправка на NAS выключена'];
+  }
+  $l = fopen(SNAP_DIR . '/.push.lock', 'c');
+  if (!flock($l, LOCK_EX | LOCK_NB)) {
+    return ['sent' => 0, 'error' => null, 'busy' => true];   // уже идёт фоновая отправка
+  }
+  remoteState(['try' => time()]);
+  $sent = 0;
+  $error = null;
+  foreach (snapIndex() as $e) {
+    $f = SNAP_DIR . "/{$e['id']}.tar.gz";
+    if (!empty($e['remote']) || !($e['local'] ?? true) || !is_file($f)) {
+      continue;
+    }
+    [$ok, $msg] = remoteCall('put', "{$e['id']}.tar.gz", $f, null, 120);
+    if (!$ok && strpos($msg, 'уже есть') === false) {
+      $error = trim($msg);
+      break;
+    }
+    $sent++;
+    $lock = snapLock();
+    $idx = snapIndex();
+    foreach ($idx as &$x) {
+      if ($x['id'] === $e['id']) {
+        $x['remote'] = true;
+      }
+    }
+    unset($x);
+    snapSaveIndex($idx);
+    fclose($lock);
+  }
+  if (!$error) {
+    $lock = snapLock();
+    $idx = snapIndex();
+    snapPrune($idx);
+    snapSaveIndex($idx);
+    fclose($lock);
+    [$ok, $msg] = remoteCall('put', 'index.json', SNAP_DIR . '/index.json');
+    $error = $ok ? null : 'список снимков: ' . trim($msg);
+  }
+  remoteState($error ? ['error' => $error, 'error_ts' => time()] : ['ok' => time(), 'error' => null]);
+  flock($l, LOCK_UN);
+  fclose($l);
+  return ['sent' => $sent, 'error' => $error];
+}
+
+// Отправка в фоне — запрос интерфейса не ждёт ssh
+function remoteKick(): void
+{
+  if (remoteOn() && getenv('NFQWS_UI_CLI') !== 'push') {
+    exec('(env -i PATH=' . JOB_PATH . ' NFQWS_UI_CLI=push php-cgi -q -f ' . escapeshellarg(__FILE__) . ' >/dev/null 2>&1 &)');
+  }
+}
+
+// Архив снимка на роутере; если он только на NAS — скачать во временную папку
+function snapArchive(string $id): string
+{
+  $file = snapFileOf($id);
+  if (is_file($file)) {
+    return $file;
+  }
+  $known = array_filter(snapIndex(), fn($e) => $e['id'] === $id);
+  ($known && remoteOn()) || fail('Нет такого снимка', 404);
+  $tmp = "/tmp/nfqws-ui-snap-$id.tar.gz";
+  if (!is_file($tmp) || !filesize($tmp)) {
+    [$ok, $msg] = remoteCall('get', "$id.tar.gz", null, $tmp, 120);
+    exec('tar -tzf ' . escapeshellarg($tmp) . ' >/dev/null 2>&1', $o, $rc);
+    if (!$ok || $rc !== 0) {
+      @unlink($tmp);
+      fail('Не удалось взять снимок с NAS: ' . ($ok ? 'архив повреждён' : $msg), 502);
+    }
+  }
+  return $tmp;
+}
+
+// Скрипт той стороны: кладётся в домашнюю папку пользователя, вызывается только из authorized_keys
+function remoteScript(): string
+{
+  return <<<'SH'
+#!/bin/sh
+# nfqws2-ui: приём снимков с роутера. Вызывается только из ~/.ssh/authorized_keys (command=...),
+# поэтому ключом роутера нельзя ничего, кроме: положить НОВЫЙ снимок, прочитать и перечислить снимки в одной папке.
+dir=$1
+set -f
+set -- $SSH_ORIGINAL_COMMAND
+set +f
+op=$1 name=$2
+case "$op" in ping|list) ;; put|get)
+  case "$name" in
+    index.json|[0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9].tar.gz) ;;
+    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]-[0-9].tar.gz) ;;
+    [0-9][0-9][0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9][0-9][0-9][0-9][0-9]-[0-9][0-9].tar.gz) ;;
+    *) echo "имя не подходит: $name" >&2; exit 2 ;;
+  esac ;;
+  *) echo "неизвестная команда: $op" >&2; exit 2 ;;
+esac
+mkdir -p "$dir" || exit 1
+umask 077
+case "$op" in
+  ping) echo ok ;;
+  list) cd "$dir" && for f in [0-9]*.tar.gz; do [ -f "$f" ] && echo "$f $(wc -c < "$f")"; done; exit 0 ;;
+  get) cat "$dir/$name" ;;
+  put)
+    if [ "$name" != index.json ] && [ -e "$dir/$name" ]; then cat > /dev/null; echo "уже есть: $name" >&2; exit 3; fi
+    cat > "$dir/.$name.part" && mv -f "$dir/.$name.part" "$dir/$name" ;;
+esac
+SH;
+}
+
+// Одна команда для той стороны: положить скрипт и разрешить ключ роутера только для него
+function remoteSetupCmd(string $dir, string $pub): string
+{
+  $line = 'command="sh .nfqws-ui-store.sh ' . $dir . '",restrict ' . $pub;
+  return "umask 077 && mkdir -p ~/.ssh && cat > ~/.nfqws-ui-store.sh <<'NFQWSUI'\n" . remoteScript() . "\nNFQWSUI\n"
+    . "grep -qF " . escapeshellarg($pub) . " ~/.ssh/authorized_keys 2>/dev/null || echo " . escapeshellarg($line) . " >> ~/.ssh/authorized_keys";
+}
+
 // Содержимое одного файла из снимка
 function snapReadFile(string $id, string $rel): ?string
 {
-  $file = snapFileOf($id);
+  $file = snapArchive($id);
   if (!is_file($file) || !preg_match('#^etc/nfqws2/(nfqws2\.conf|lists/[A-Za-z0-9_.-]+|blobs/[A-Za-z0-9_.-]+)$#', $rel)) {
     return null;
   }
@@ -4344,8 +4637,11 @@ function state(): array
     })(),
     'snap' => (function () {
       $idx = snapIndex();
-      return ['count' => count($idx), 'last' => $idx ? end($idx)['ts'] : null,
-        'size' => array_sum(array_map(fn($e) => $e['size'], $idx))];
+      // count — все снимки, где бы ни лежали; local — на роутере; remote — на NAS
+      $loc = array_filter($idx, fn($e) => $e['local'] ?? true);
+      return ['count' => count($idx), 'last' => $idx ? end($idx)['ts'] : null, 'local' => count($loc),
+        'remote' => remoteOn() ? count(array_filter($idx, fn($e) => !empty($e['remote']))) : null,
+        'size' => array_sum(array_map(fn($e) => $e['size'], $loc))];
     })(),
   ];
 }
@@ -4710,11 +5006,16 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
     guardJob();
     exit(0);
   }
+  if ($cli === 'push') {
+    remotePush();
+    exit(0);
+  }
   historyScan('auto');
   monitorRun(false);
   autoTick();
   if ($cli === 'daily') {
     snapshotCreate('ежедневный', true);
+    remotePush();   // раз в сутки — дослать то, что не ушло (NAS был выключен)
     if (uiSettings()['subs']) {
       subsRun();
     }
@@ -4743,10 +5044,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && isset($_GET['download'])) {
     exec('tar -czf ' . escapeshellarg($file) . ' -C / ' . implode(' ', array_map('escapeshellarg', snapPaths())));
     $name = 'nfqws2-' . ldate('Y-m-d-His') . '.tar.gz';
   } else {
-    $file = snapFileOf($id);
-    if (!is_file($file)) {
-      fail('Нет такого снимка', 404);
-    }
+    $file = snapArchive($id);
     $name = "nfqws2-snapshot-$id.tar.gz";
   }
   header('Content-Type: application/gzip');
@@ -5294,7 +5592,13 @@ switch ($cmd) {
     $idx = array_reverse(snapIndex());
     $cur = snapHashes();
     foreach ($idx as &$e) {
-      // что отличается от текущего состояния
+      // что отличается от текущего состояния; у снимков только на NAS хешей нет — неизвестно
+      $e['local'] = $e['local'] ?? true;
+      $e['remote'] = !empty($e['remote']);
+      if (!isset($e['files'])) {
+        $e['differs'] = null;
+        continue;
+      }
       $diff = [];
       foreach (array_unique(array_merge(array_keys($e['files']), array_keys($cur))) as $f) {
         if (($e['files'][$f] ?? null) !== ($cur[$f] ?? null)) {
@@ -5305,8 +5609,52 @@ switch ($cmd) {
       unset($e['files']);
     }
     unset($e);
+    $loc = array_filter($idx, fn($e) => $e['local']);
+    $pub = remotePubKey();
+    $rc = remoteCfg();
     respond(['items' => $idx, 'settings' => uiSettings()['snapshots'], 'dir' => SNAP_DIR,
-      'total' => array_sum(array_map(fn($e) => $e['size'], $idx))]);
+      'total' => array_sum(array_map(fn($e) => $e['size'], $loc)), 'local' => count($loc),
+      'remote' => ['tool' => remoteTool(), 'pub' => $pub, 'on' => remoteOn(), 'state' => remoteState(),
+        'pending' => count(array_filter($loc, fn($e) => !$e['remote'])), 'stored' => count(array_filter($idx, fn($e) => $e['remote'])),
+        'setup' => $pub && $rc['dir'] !== '' ? remoteSetupCmd($rc['dir'], $pub) : '']]);
+
+  // Копии на NAS: настройки, ключ, проверка связи, отправка сейчас
+  case 'remote_set':
+    $s = uiSettings();
+    $r = $s['snapshots']['remote'];
+    $host = trim($str('host'));
+    $user = trim($str('user'));
+    $dir = rtrim(trim($str('dir')), '/');
+    ($host === '' || preg_match('/^[A-Za-z0-9.:-]{1,253}$/', $host)) || fail('Адрес — имя или IP без пробелов');
+    ($user === '' || preg_match('/^[A-Za-z0-9._-]{1,64}$/', $user)) || fail('Имя пользователя — латиница, цифры, точка, дефис');
+    ($dir === '' || (preg_match('#^/[A-Za-z0-9/_.-]+$#', $dir) && strpos($dir, '..') === false)) || fail('Папка — полный путь (/volume1/…), латиница, цифры, «/ _ . -»');
+    $r = array_merge($r, ['host' => $host, 'user' => $user, 'dir' => $dir, 'port' => max(1, min(65535, (int)($in['port'] ?? 22))),
+      'enabled' => !empty($in['enabled']), 'keep_local' => max(1, min(50, (int)($in['keep_local'] ?? $r['keep_local'])))]);
+    ($r['enabled'] && ($host === '' || $user === '')) && fail('Чтобы включить отправку, укажите адрес и пользователя');
+    $s['snapshots']['remote'] = $r;
+    saveUiSettings($s);
+    remoteKick();
+    respond(['ok' => true]);
+
+  case 'remote_key':
+    respond(['pub' => remoteKeyCreate()]);
+
+  case 'remote_test':
+    $c = remoteCfg();
+    ($c['host'] !== '' && $c['user'] !== '') || fail('Сначала укажите адрес и пользователя');
+    is_file(REMOTE_KEY) || fail('Сначала создайте ключ роутера');
+    [$ok, $msg] = remoteCall('ping', '', null, null, 20);
+    if (!$ok || trim($msg) !== 'ok') {
+      $hint = preg_match('/denied|authenticat/i', $msg) ? ' — ключ роутера не добавлен на NAS или добавлен не тому пользователю'
+        : (preg_match('/refused|timed out|нет ответа|No route|unreachable/i', $msg) ? ' — NAS не отвечает по ssh: адрес, порт, включён ли SSH' : '');
+      fail('Нет связи: ' . trim($msg) . $hint);
+    }
+    [$ok, $list] = remoteCall('list', '', null, null, 20);
+    respond(['ok' => true, 'count' => $ok ? count(array_filter(explode("
+", trim($list)))) : null]);
+
+  case 'remote_push':
+    respond(remotePush());
 
   case 'snapshot_create':
     historyScan('auto');
@@ -5325,10 +5673,7 @@ switch ($cmd) {
     respond(['content' => $c, 'current' => $cur === false ? null : $cur]);
 
   case 'snapshot_restore':
-    $file = snapFileOf($str('id'));
-    if (!is_file($file)) {
-      fail('Нет такого снимка', 404);
-    }
+    $file = snapArchive($str('id'));
     $changed = restoreArchive($file, 'из снимка ' . $str('id'));
     respond(['changed' => $changed, 'lint' => lintCurrent()]);
 

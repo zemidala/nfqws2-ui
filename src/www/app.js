@@ -886,7 +886,7 @@ function renderSideBackup(el) {
   const s = S.state.snap || {};
   el.replaceChildren(
     h('div', { class: 'blk-h' }, h('h2', { text: 'Резервные копии' }), h('a', { class: 'sm', href: '#/settings/backup', text: 'открыть' })),
-    s.count ? h('p', { class: 'sm' }, h('span', { class: 'status-ok', text: '✓ На роутере: ' }), `${plural(s.count, 'снимок', 'снимка', 'снимков')}, последний ${fmtAgo(S.state.now - s.last)}`) : h('p', { class: 'sm muted', text: 'Снимков пока нет' }),
+    s.count ? h('p', { class: 'sm' }, h('span', { class: 'status-ok', text: '✓ На роутере: ' }), `${plural(s.local ?? s.count, 'снимок', 'снимка', 'снимков')}` + (s.remote != null ? `, на NAS: ${s.remote}` : '') + `, последний ${fmtAgo(S.state.now - s.last)}`) : h('p', { class: 'sm muted', text: 'Снимков пока нет' }),
     h('p', { class: 'sm' }, h('a', { class: 'icon-link', href: 'api.php?download=current' }, icon('download'), 'Скачать архив сейчас')));
 }
 
@@ -3032,38 +3032,92 @@ async function paneBackup(content) {
   } });
   const maxCount = h('input', { class: 'input num', type: 'number', min: 5, max: 500, value: data.settings.max_count, style: 'width:90px', id: 'snap-count', 'aria-label': 'Не больше снимков' });
   const maxDays = h('input', { class: 'input num', type: 'number', min: 1, max: 3650, value: data.settings.max_days, style: 'width:90px', id: 'snap-days', 'aria-label': 'Хранить дней' });
+  const R = data.remote;
+  // где лежит снимок; у снимка только на NAS неизвестно, чем он отличается от текущего, — сравнение и восстановление доступны
+  const where = (e) => e.local && e.remote ? 'роутер и NAS' : e.local ? (R.on ? 'роутер, ждёт отправки' : 'роутер') : 'NAS';
   const rows = data.items.map((e) => h('tr', {},
     h('td', { class: 'num nowrap', text: fmtDate(e.ts) }),
     h('td', {}, reasonText[e.reason] || e.reason, e.note ? h('div', { class: 'sm muted ellipsis', style: 'max-width:40ch', text: e.note }) : null),
-    h('td', { class: 'sm' }, e.differs.length ? h('span', { class: 'muted', text: 'отличается: ' + e.differs.map(base).slice(0, 4).join(', ') + (e.differs.length > 4 ? ` и ещё ${e.differs.length - 4}` : '') }) : h('span', { class: 'status-ok', text: 'как сейчас' })),
+    h('td', { class: 'sm' }, e.differs === null ? h('span', { class: 'faint', text: 'неизвестно — снимок на NAS' }) : e.differs.length ? h('span', { class: 'muted', text: 'отличается: ' + e.differs.map(base).slice(0, 4).join(', ') + (e.differs.length > 4 ? ` и ещё ${e.differs.length - 4}` : '') }) : h('span', { class: 'status-ok', text: 'как сейчас' })),
+    h('td', { class: 'sm nowrap ' + (e.local ? '' : 'muted'), text: where(e) }),
     h('td', { class: 'num', text: fmtBytes(e.size) }),
     h('td', { class: 'row', style: 'flex-wrap:nowrap;gap:2px' },
-      btn('Сравнить', () => compareSnapshot(e), 'small ghost', null, { disabled: !e.differs.length }),
+      btn('Сравнить', () => compareSnapshot(e), 'small ghost', null, { disabled: e.differs !== null && !e.differs.length }),
       btn('Восстановить', async () => {
         if (!confirm(`Вернуть конфиг и списки к снимку от ${fmtDate(e.ts)}? Текущее состояние сохранится отдельным снимком.`)) return;
         const r = await guarded(() => api('snapshot_restore', { id: e.id }));
-        if (r) { toast(`Восстановлено файлов: ${r.changed.length}. Перезапустите nfqws2.`); route(true); }
-      }, 'small ghost', null, { disabled: !e.differs.length }),
+        if (r) { toast(r.changed.length ? `Восстановлено файлов: ${r.changed.length}. Перезапустите nfqws2.` : 'Снимок совпадает с текущим состоянием'); route(true); }
+      }, 'small ghost', null, { disabled: e.differs !== null && !e.differs.length }),
       h('a', { class: 'btn small ghost icon', href: 'api.php?download=' + e.id, title: 'Скачать', 'aria-label': 'Скачать снимок' }, icon('download')),
-      btn('', async () => { await guarded(() => api('snapshot_pin', { id: e.id, pinned: !e.pinned })); route(); }, 'small ghost icon' + (e.pinned ? ' primary' : ''), 'pin', { title: e.pinned ? 'Закреплён — не удаляется автоматически' : 'Закрепить', 'aria-label': 'Закрепить' }))));
+      btn('', async () => { await guarded(() => api('snapshot_pin', { id: e.id, pinned: !e.pinned })); route(); }, 'small ghost icon' + (e.pinned ? ' primary' : ''), 'pin', { title: e.pinned ? 'Закреплён — не удаляется с роутера' : 'Закрепить: оставить на роутере', 'aria-label': 'Закрепить', disabled: !e.local }))));
   content.append(
     h('div', { class: 'vh' }, h('h1', { text: 'Резервные копии' }), h('span', { class: 'grow' }),
       btn('Создать снимок сейчас', async () => { const note = prompt('Подпись к снимку (необязательно):', ''); if (note === null) return; if (await guarded(() => api('snapshot_create', { note }), 'Снимок создан')) route(true); }, 'primary', 'plus')),
     h('div', { class: 'cards2' },
-      panel('На роутере', chip(`${plural(data.items.length, 'снимок', 'снимка', 'снимков')} · ${fmtBytes(data.total)}`, 'num'),
+      panel('На роутере', chip(`${plural(data.local, 'снимок', 'снимка', 'снимков')} · ${fmtBytes(data.total)}`, 'num'),
         h('p', { class: 'sm muted', text: 'Снимок — конфиг, все списки, блобы и настройки интерфейса. Создаётся перед изменениями через интерфейс (не чаще раза в 15 минут), раз в сутки в 04:05 и вручную.' }),
-        h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Хранить' }), h('div', { class: 'row' }, maxDays, h('span', { class: 'sm', text: 'дней, не больше' }), maxCount, h('span', { class: 'sm', text: 'снимков' }),
+        R.on ? null : h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Хранить' }), h('div', { class: 'row' }, maxDays, h('span', { class: 'sm', text: 'дней, не больше' }), maxCount, h('span', { class: 'sm', text: 'снимков' }),
           btn('Применить', async () => { if (await guarded(() => api('settings_set', { snapshots: { max_count: maxCount.value, max_days: maxDays.value } }), 'Сохранено')) route(); }, 'small'))),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Где' }), h('span', { class: 'mono sm', text: data.dir })),
-        h('p', { class: 'sm faint', text: 'Пять последних снимков и закреплённые не удаляются никогда.' })),
+        h('p', { class: 'sm faint', text: R.on ? `Включена отправка на NAS: на роутере остаются ${data.settings.remote.keep_local} последних, закреплённые и ещё не отправленные, остальные — только на NAS.` : 'Пять последних снимков и закреплённые не удаляются никогда.' })),
       panel('Вне роутера', null,
         h('div', { class: 'row' }, h('a', { class: 'btn', href: 'api.php?download=current' }, icon('download'), 'Скачать архив'),
           h('label', { class: 'btn' }, icon('upload'), 'Восстановить из файла', fileInput)),
-        h('p', { class: 'sm muted', text: 'Архив .tar.gz сохраняется на устройство, с которого открыт интерфейс — ПК или телефон. Из него же можно восстановить: перед этим делается снимок текущего состояния.' }),
-        h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Копия на NAS' }), h('span', { class: 'sm muted', text: 'настраивается следующим этапом — нужен ключ доступа к NAS' })))),
-    panel('Снимки на роутере', null, data.items.length ? h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
-      h('thead', {}, h('tr', {}, h('th', { text: 'Когда' }), h('th', { text: 'Почему' }), h('th', { class: 'wide', text: 'По сравнению с текущим' }), h('th', { class: 'num', text: 'Размер' }), h('th'))),
+        h('p', { class: 'sm muted', text: 'Архив .tar.gz сохраняется на устройство, с которого открыт интерфейс — ПК или телефон. Из него же можно восстановить: перед этим делается снимок текущего состояния.' }))),
+    remotePanel(data),
+    panel(R.stored ? 'Снимки' : 'Снимки на роутере', null, data.items.length ? h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
+      h('thead', {}, h('tr', {}, h('th', { text: 'Когда' }), h('th', { text: 'Почему' }), h('th', { class: 'wide', text: 'По сравнению с текущим' }), h('th', { text: 'Где' }), h('th', { class: 'num', text: 'Размер' }), h('th'))),
       h('tbody', {}, rows))) : h('p', { class: 'muted', text: 'Снимков пока нет.' })));
+}
+
+// Копии снимков на NAS (или другом устройстве с ssh): куда, ключ роутера, команда для той стороны, проверка
+function remotePanel(data) {
+  const R = data.remote;
+  const c = data.settings.remote;
+  const st = R.state || {};
+  const now = Math.floor(Date.now() / 1000);
+  const inp = (id, label, value, attrs = {}, hint = null) => h('div', { class: 'frow' }, h('label', { class: 'lbl', for: id, text: label }),
+    h('input', { class: 'input', id, value: value ?? '', spellcheck: 'false', autocapitalize: 'off', ...attrs }), hint ? h('span', { class: 'hint', text: hint }) : null);
+  const on = h('input', { type: 'checkbox', id: 'rm-on', checked: !!c.enabled });
+  const val = (id) => document.getElementById(id).value.trim();
+  const save = async (quiet) => {
+    const r = await guarded(() => api('remote_set', { enabled: on.checked, host: val('rm-host'), port: val('rm-port'), user: val('rm-user'), dir: val('rm-dir'), keep_local: val('rm-keep') }), quiet ? null : 'Сохранено');
+    if (r && !quiet) route();
+    return r;
+  };
+  const status = !R.tool ? notice('bad', 'На роутере нет ssh-клиента', 'Нужен dbclient (dropbear) или ssh (OpenSSH).')
+    : !c.enabled ? h('p', { class: 'sm muted', text: 'Отправка выключена — снимки хранятся только на роутере.' })
+    : st.error ? notice('warn', 'Последняя отправка не удалась' + (st.error_ts ? ' · ' + fmtAgo(now - st.error_ts) : ''), st.error + (R.pending ? ` Ждут отправки: ${R.pending}.` : ''))
+    : h('p', { class: 'sm' }, h('span', { class: 'status-ok', text: '✓ Отправка включена' }), h('span', { class: 'muted', text: ` · на NAS ${plural(R.stored, 'снимок', 'снимка', 'снимков')}` + (st.ok ? ' · последняя отправка ' + fmtAgo(now - st.ok) : '') + (R.pending ? ` · ждут отправки: ${R.pending}` : '') }));
+  return panel('Копии на NAS', c.enabled && !st.error && R.on ? chip('включено', 'ok') : null,
+    h('p', { class: 'sm muted', text: 'Роутер сам отправляет каждый новый снимок по ssh на NAS (или другое устройство с ssh). Там хранятся все снимки, на роутере — только последние. Ключ роутера на NAS ограничен одной папкой: им можно положить новый снимок и прочитать старые, но нельзя ни удалить, ни перезаписать их, ни войти в систему.' }),
+    status,
+    h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Отправлять' }), h('label', { class: 'row' }, on, h('span', { text: 'каждый новый снимок на NAS' }))),
+    inp('rm-host', 'Адрес', c.host, { class: 'input mono', placeholder: '192.168.1.207' }),
+    inp('rm-port', 'Порт ssh', c.port, { type: 'number', min: 1, max: 65535, style: 'width:110px' }),
+    inp('rm-user', 'Пользователь', c.user, { class: 'input mono', placeholder: 'имя пользователя на NAS' }),
+    inp('rm-dir', 'Папка на NAS', c.dir, { class: 'input mono', placeholder: '/volume1/homes/имя/Backups/nfqws2-ui' }, 'Полный путь. Другую папку роутер выбрать не сможет — она записывается в разрешение ключа на NAS.'),
+    inp('rm-keep', 'Оставлять на роутере', c.keep_local, { type: 'number', min: 1, max: 50, style: 'width:110px' }, 'последних снимков, плюс закреплённые'),
+    h('div', { class: 'row' },
+      btn('Сохранить', () => save(false), 'primary'),
+      btn('Проверить связь', async () => {
+        if (!(await save(true))) return;
+        const r = await guarded(() => api('remote_test'));
+        if (r) toast('Связь есть' + (r.count != null ? ` · на NAS ${plural(r.count, 'снимок', 'снимка', 'снимков')}` : ''));
+      }, '', null, { disabled: !R.pub }),
+      btn('Отправить сейчас', async () => {
+        const r = await guarded(() => api('remote_push'));
+        if (r) { r.error ? toast('Не отправлено: ' + r.error, { err: true }) : toast(r.busy ? 'Отправка уже идёт' : `Отправлено снимков: ${r.sent}`); route(); }
+      }, '', null, { disabled: !R.on })),
+    h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Ключ роутера' }),
+      R.pub ? h('div', { class: 'stack', style: 'gap:6px' },
+        h('code', { class: 'sm mono', style: 'overflow-wrap:anywhere', text: R.pub }),
+        // когда всё работает, команда для NAS больше не нужна — свёрнута
+        R.setup ? h('details', { open: !(R.on && st.ok && !st.error) }, h('summary', { class: 'sm', text: 'Команда для NAS — выполнить один раз под этим пользователем (по ssh): кладёт скрипт приёма снимков и разрешает ключ роутера только для него' }),
+          h('textarea', { class: 'input mono', rows: 6, readonly: true, style: 'width:100%;resize:vertical;font-size:12px;margin-top:6px', text: R.setup }),
+          h('div', { class: 'row' }, btn('Копировать команду', () => copyText(R.setup), 'small', 'copy')))
+          : h('p', { class: 'sm muted', text: 'Укажите папку на NAS и сохраните — здесь появится команда для NAS.' }))
+        : btn('Создать ключ роутера', async () => { if (await guarded(() => api('remote_key'), 'Ключ создан')) route(); }, '', 'plus', { disabled: !R.tool })));
 }
 
 async function compareSnapshot(e) {
