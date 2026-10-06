@@ -699,6 +699,7 @@ async function route(refresh = false) {
   placeSide();
   try {
     await (views[r.tab] || viewOverview)(main, r);
+    if (seq === routeSeq) placeRail(main, pageOf(r));
   } catch (e) {
     console.error(e);
     main.replaceChildren(notice('bad', 'Ошибка', e.message));
@@ -721,17 +722,18 @@ const setDirty = (v) => { S.dirty = v; S.dirtyHash = location.hash; };
 // ============ колонка обзора ============
 
 const SIDE = {};
-function sideBlocks() {
+// gather = false — только создать блоки (колонке состояния справа), не забирая проверку сайта со страницы
+function sideBlocks(gather = true) {
   if (!SIDE.root) {
     SIDE.service = h('section', { class: 'blk' });
     SIDE.problems = h('section', { class: 'blk' });
     SIDE.backup = h('section', { class: 'blk' });
     SIDE.traffic = h('section', { class: 'blk' });
     SIDE.monitor = h('section', { class: 'blk' });
-    SIDE.root = h('div', { class: 'side-in' }, SIDE.service, S.check.el, SIDE.problems, SIDE.monitor, SIDE.backup, SIDE.traffic);
+    SIDE.root = h('div', { class: 'side-in' });
   }
-  // блоки могла забрать страница «Обзор» или карточка сайта — возвращаем на место
-  SIDE.root.append(SIDE.service, S.check.el, SIDE.problems, SIDE.monitor, SIDE.backup, SIDE.traffic);
+  // блоки могла забрать страница «Обзор», карточка сайта или колонка состояния — возвращаем на место
+  if (gather) SIDE.root.append(SIDE.service, S.check.el, SIDE.problems, SIDE.monitor, SIDE.backup, SIDE.traffic);
   return SIDE.root;
 }
 // Слева на широком экране: «Вкладки» — колонка обзора, «Боковое меню» — меню, «Вокруг сайта» — ничего
@@ -744,6 +746,18 @@ function placeSide() {
   } else {
     side.replaceChildren();
   }
+  updateSide();
+}
+// Колонка состояния справа — на страницах-формах, проверках и таблицах, когда для неё хватает ширины
+// (показывает CSS по ширине области содержимого). Во «Вкладках» не нужна: обзор и так слева.
+// Списки, профили, конфиг, журнал и мониторинг отдают всю ширину своему содержимому, «Обзор» — карточкам.
+const RAIL_PAGES = ['diag', 'pick', 'trace', 'phist', 'auto', 'tg', 'asn', 'basic', 'base', 'backup', 'hist', 'report', 'look', 'about', 'site'];
+function placeRail(main, page) {
+  main.classList.toggle('formy', RAIL_PAGES.includes(page));   // строки форм на широком экране — подсказки справа от поля
+  if (!isWide() || overviewCol() || !RAIL_PAGES.includes(page)) return;
+  sideBlocks(false);
+  const rail = h('aside', { class: 'rail', 'aria-label': 'Состояние' }, SIDE.service, SIDE.problems, SIDE.monitor, SIDE.backup);
+  main.replaceChildren(h('div', { class: 'mwrap' }, h('div', { class: 'mcol' }, ...main.childNodes), rail));
   updateSide();
 }
 function updateSide() {
@@ -3197,7 +3211,7 @@ async function viewMonitor(main) {
   const add = h('input', { class: 'input mono grow', id: 'mon-add', placeholder: 'добавить сайт, например rutracker.org', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Добавить сайт' });
   const interval = h('select', { class: 'select', 'aria-label': 'Как часто' }, [10, 30, 60, 180, 720].map((n) => h('option', { value: n, text: n < 60 ? `каждые ${n} мин` : `каждые ${n / 60} ч`, selected: n === cfg.interval })));
   const enabled = h('input', { type: 'checkbox', id: 'mon-on', checked: cfg.enabled });
-  const listBox = h('div', { class: 'stack', style: 'gap:0' });
+  const listBox = h('div', { class: 'stack mon-list', style: 'gap:0' });
   const nextInfo = h('p', { class: 'sm muted' });
   const checking = new Set();
   const save = async (extra = {}) => guarded(() => api('monitor_set', { sites, interval: Number(interval.value), enabled: enabled.checked, ...extra }));

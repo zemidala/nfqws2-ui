@@ -573,7 +573,6 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
   :root[data-layout="menu"] { --side-w: 236px; }
   :root[data-layout="site"] .layout { display: block; }
   :root[data-layout="site"] #side { display: none; }
-  :root[data-layout="site"] main { max-width: 1240px; margin: 0 auto; }
   /* без колонки обзора управление сервисом и плашка «нужен перезапуск» остаются в шапке */
   :root:not([data-layout="tabs"]) #banner { display: block; }
   :root:not([data-layout="tabs"]) .svc-ctl { display: inline-flex; }
@@ -645,8 +644,6 @@ a.over-row:hover { background: var(--soft); }
 .over-row .faint { flex: 0 1 auto; max-width: 50%; }
 .kv { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: 13px; }
 
-/* ширина содержимого в «Боковом меню»: строки не растягиваются на весь широкий экран; конфигу целиком ширина нужна */
-@media (min-width: 1100px) { :root[data-layout="menu"] main { max-width: 1320px; } :root[data-layout="menu"] main:has(.cfg) { max-width: none; } }
 
 /* меню списков: разделы «сайты» и «IP», строка в одну линию (полоска — обход или исключение, номера профилей, число записей),
    действия закреплены внизу */
@@ -972,3 +969,43 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
 :root[data-nooutline] .cfg { grid-template-columns: minmax(0, 1fr); }
 :root[data-nooutline] .cfg > .outline { display: none; }
 .cfg-tools .btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent); }
+
+/* ---------- широкий экран: вся ширина занята, а раскладка зависит от того, что на странице ----------
+   Пороги — по ширине самой области содержимого (main), а не окна: меню, свёрнутое меню и колонка обзора
+   отнимают разную ширину. Строки «название — значение» не растягиваются: широкое место отдаётся колонкам. */
+@media (min-width: 1100px) { main { container: main / inline-size; } }
+.rail { display: none; }
+.mwrap { display: grid; grid-template-columns: minmax(0, 1fr); gap: 18px; align-items: start; min-width: 0; }
+.mcol { display: grid; gap: 14px; align-content: start; min-width: 0; }
+
+/* формы, проверки и таблицы: справа колонка состояния (сервис, замечания, мониторинг, копии) */
+@container main (min-width: 1480px) {
+  .mwrap { grid-template-columns: minmax(0, 1fr) 340px; }
+  .rail { display: grid; gap: 14px; align-content: start; position: sticky; top: calc(var(--top-h) + 16px); max-height: calc(100vh - var(--top-h) - 32px); overflow-y: auto; scrollbar-width: thin; }
+  /* строки форм: подсказки и замечания — справа от поля, а не под ним */
+  .formy .frow { grid-template-columns: 170px minmax(0, 560px) minmax(0, 1fr); grid-auto-flow: dense; column-gap: 24px; }
+  .formy .frow > :not(.lbl):not(.hint) { grid-column: 2; }
+  .formy .frow > .hint { grid-column: 3; margin-top: 0; }
+  :root[data-variant="k"] .formy .frow { grid-template-columns: minmax(0, 560px) minmax(0, 1fr); column-gap: 28px; }
+  :root[data-variant="k"] .formy .frow > :not(.hint) { grid-column: 1; }
+  :root[data-variant="k"] .formy .frow > .hint { grid-column: 2; align-self: center; }
+}
+
+/* «Обзор»: карточек становится больше в ряду, а не шире каждая */
+@container main (min-width: 1500px) {
+  .ov-masonry { columns: 360px; }
+  .ov-tiles { display: block; columns: 380px; column-gap: 14px; }
+  .ov-tiles > .tiles { column-span: all; margin-bottom: 14px; }
+  .ov-tiles .ov-cols, .ov-tiles .ov-cols > .stack, .ov-tiles .ov-pair { display: contents; }
+  .ov-tiles .blk { break-inside: avoid; margin-bottom: 14px; }
+  .ov-panel { grid-template-columns: repeat(auto-fill, minmax(400px, 1fr)); }
+  .ov-panel > :last-child { grid-column: auto / -1; }
+  .ov-brief { max-width: none; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); align-items: start; }
+  .ov-brief > .ov-folds { grid-column: 1 / -1; display: block; columns: 520px; column-gap: 0; column-rule: 1px solid var(--line); }
+  .ov-brief .ofold { break-inside: avoid; }
+  /* записи списка и сайты мониторинга — в несколько колонок вместо одной длинной полосы */
+  .entries { display: block; columns: 640px; column-gap: 0; column-rule: 1px solid var(--line); }
+  .mon-list { display: block; columns: 640px; column-gap: 32px; }
+  .entries > .ent, .mon-list > .act { break-inside: avoid; }
+  .two { grid-template-columns: minmax(0, 1fr) minmax(340px, 30%); }
+}
