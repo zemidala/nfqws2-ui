@@ -3094,6 +3094,104 @@ const STD_HTTP = [
   ['fake badsum + multisplit', ['--lua-desync=fake:blob=0x00000000:badsum', '--lua-desync=multisplit:pos=method+2']],
 ];
 
+// ----- каталог стратегий по правилам blockcheck2 (zapret2, blockcheck2.d/standard) -----
+// Те же функции, позиции разреза и способы испортить фейк, что перебирает blockcheck2. Взяты только варианты
+// из одних шагов --lua-desync (без дополнительных --payload/--out-range). «Расширенный» — без перебора TTL и
+// с основными позициями (~330 TLS), «полный» — всё (~3000 TLS): его проверяет параллельный прогон.
+const CAT_FOOL = ['tcp_md5', 'badsum', 'tcp_seq=-3000', 'tcp_seq=1000000', 'tcp_ack=-66000:tcp_ts_up', 'tcp_ts=-1000', 'tcp_flags_unset=ACK', 'tcp_flags_set=SYN'];
+const CAT_SPLITS_TLS = ['2', '1', 'sniext+1', 'sniext+4', 'host+1', 'midsld', '1,midsld', '1,midsld,1220', '1,sniext+1,host+1,midsld-2,midsld,midsld+2,endhost-1'];
+const CAT_SPLITS_HTTP = ['method+2', 'midsld', 'method+2,midsld'];
+
+function catalogCandidates(string $level, bool $http): array
+{
+  $full = $level === 'full';
+  $fool = CAT_FOOL;
+  foreach (range(1, 5) as $d) {
+    $fool[] = "ip_autottl=-$d,3-20";
+  }
+  if ($full) {
+    foreach (range(1, 12) as $t) {
+      $fool[] = "ip_ttl=$t";
+    }
+  }
+  $splits = $http ? CAT_SPLITS_HTTP : CAT_SPLITS_TLS;
+  $fake = $http ? 'fake_default_http' : 'fake_default_tls';
+  $d = '--lua-desync=';
+  $out = [];
+  $add = function (array $steps) use (&$out) {
+    $out[implode(' ', $steps)] = $steps;
+  };
+  // разрез без фейков
+  foreach (['multisplit', 'multidisorder'] as $f) {
+    foreach ($splits as $p) {
+      $add(["{$d}$f:pos=$p"]);
+    }
+  }
+  // фейк: варианты blockcheck2 (pktws_fake_https_vary_)
+  $fakes = function (string $fl) use ($d, $fake, $http): array {
+    $v = [["{$d}fake:blob=$fake:$fl"], ["{$d}fake:blob=0x00000000:$fl"]];
+    if (!$http) {
+      $v[] = ["{$d}fake:blob=0x00000000:$fl", "{$d}fake:blob=$fake:$fl:tls_mod=rnd,dupsid"];
+      $v[] = ["{$d}multisplit:blob=$fake:$fl:pos=2:nodrop"];
+      $v[] = ["{$d}fake:blob=$fake:$fl:tls_mod=rnd,dupsid,padencap"];
+    }
+    return $v;
+  };
+  foreach ($fool as $fl) {
+    foreach ($fakes($fl) as $v) {
+      $add($v);
+    }
+  }
+  // hostfakesplit
+  foreach ($fool as $fl) {
+    foreach ($full ? ['', 'disorder_after:'] : [''] as $dis) {
+      foreach ($full ? ['', 'nofake1:', 'nofake2:', 'midhost=midsld:', 'nofake1:midhost=midsld:', 'nofake2:midhost=midsld:'] : ['', 'midhost=midsld:'] as $m) {
+        $add(["{$d}hostfakesplit:$dis$m$fl"]);
+      }
+    }
+  }
+  // фейк + разрез
+  $msplits = $full ? $splits : ($http ? $splits : ['2', 'midsld', '1,midsld']);
+  foreach (['multisplit', 'multidisorder'] as $f) {
+    foreach ($msplits as $p) {
+      foreach ($fool as $fl) {
+        foreach ($full ? $fakes($fl) : array_slice($fakes($fl), 0, 2) as $v) {
+          $add(array_merge($v, ["{$d}$f:pos=$p"]));
+        }
+      }
+    }
+  }
+  // fakedsplit / fakeddisorder — только в полном
+  if ($full) {
+    foreach (['fakedsplit', 'fakeddisorder'] as $f) {
+      foreach ($http ? $splits : array_slice(CAT_SPLITS_TLS, 0, 7) + [7 => CAT_SPLITS_TLS[8]] as $p) {
+        foreach ($fool as $fl) {
+          $add(["{$d}$f:pos=$p:$fl"]);
+        }
+      }
+    }
+  }
+  // перекрытие последовательности (seqovl)
+  $add(["{$d}tcpseg:pos=0,-1:seqovl=1", "{$d}drop"]);
+  foreach ($http ? ['method+2', 'method+2,midsld'] : ['10', '10,sniext+1', '10,sniext+4', '10,midsld'] as $p) {
+    $add(["{$d}multisplit:pos=$p:seqovl=1"]);
+  }
+  foreach ($http ? [['method+1', 'method+2'], ['midsld-1', 'midsld'], ['method+1', 'method+2,midsld']]
+    : [['1', '2'], ['sniext', 'sniext+1'], ['sniext+3', 'sniext+4'], ['midsld-1', 'midsld'], ['1', '2,midsld']] as [$a, $b]) {
+    $add(["{$d}multidisorder:pos=$b:seqovl=$a"]);
+  }
+  // сегменты с повтором (только в полном)
+  if ($full) {
+    foreach ([1, 20, 100, 260] as $r) {
+      foreach ($http ? ['0,method+2', '0,midsld'] : ['0,1', '0,midsld'] as $p) {
+        $add(["{$d}tcpseg:pos=$p:ip_id=rnd:repeats=$r"]);
+      }
+    }
+  }
+  $from = 'каталог zapret2 (' . ($full ? 'полный' : 'расширенный') . ')';
+  return array_map(fn($s) => ['name' => strategyName($s), 'from' => $from, 'steps' => $s, 'catalog' => true], array_values($out));
+}
+
 // Стратегии из конфига: шаги профилей, которые могут обработать это соединение; circular раскладывается на стратегии
 function configCandidates(string $proto): array
 {
@@ -3141,7 +3239,9 @@ function configCandidates(string $proto): array
   return array_values($out);
 }
 
-function testRules(string $mode, string $iface): void
+// $slots — для параллельного прогона: пакеты каждой дорожки (свой кусок проверочных портов) получают свою метку,
+// по ней nfqws2 выбирает профиль (--filter-mark)
+function testRules(string $mode, string $iface, int $slots = 0): void
 {
   $ipt = 'iptables -w -t mangle ';
   // снять старое
@@ -3163,6 +3263,11 @@ function testRules(string $mode, string $iface): void
     $ipt . '-I POSTROUTING 1 -j nfqws_test_post', $ipt . '-I PREROUTING 1 -j nfqws_test_pre',
   ];
   if ($mode === 'queue') {
+    for ($k = 0; $k < $slots; $k++) {
+      [$lo, $hi] = parPorts($k);
+      $cmds[] = $ipt . "-A nfqws_test_post -o $if -p tcp --sport $lo:$hi -j MARK --set-xmark " . parMark($k) . '/' . PAR_MASK;
+      $cmds[] = $ipt . "-A nfqws_test_pre -i $if -p tcp --dport $lo:$hi -j MARK --set-xmark " . parMark($k) . '/' . PAR_MASK;
+    }
     $cmds[] = $ipt . "-A nfqws_test_post -o $if -p tcp -m multiport --sports " . TEST_PORTS . ' -m mark ! --mark 0x40000000/0x40000000 -j NFQUEUE --queue-num ' . TEST_QNUM . ' --queue-bypass';
     $cmds[] = $ipt . "-A nfqws_test_pre -i $if -p tcp -m multiport --dports " . TEST_PORTS . ' -m connbytes --connbytes-dir=reply --connbytes-mode=packets --connbytes 1:15 -j NFQUEUE --queue-num ' . TEST_QNUM . ' --queue-bypass';
   }
@@ -3211,6 +3316,112 @@ function curlProbe(string $host, bool $http, string $path = '/'): array
     }
   }
   return ['ok' => $ok, 'code' => (int)$code, 'ms' => (int)round((float)$time * 1000), 'reason' => $reason];
+}
+
+// ----- параллельный прогон: много стратегий в одном nfqws2, по дорожке на стратегию -----
+// Дорожка — свой кусок проверочных портов; iptables метит её пакеты (биты 0x0F000000 свободны: podkop занимает
+// 0x00100000/0x00200000, nfqws2 — 0x40000000), nfqws2 выбирает профиль по метке. curl SO_MARK ставить не умеет —
+// поэтому метка по порту. Каждая дорожка сама делает до N запросов подряд и бросает после первой неудачи.
+const PAR_SLOTS = 15;
+const PAR_MASK = '0x0f000000';
+const PAR_MIN = 24;       // меньше кандидатов — проверяем по одной, как раньше
+const PAR_CONFIRM = 8;    // сколько лучших находок перепроверить по одной: 15 соединений к одному сайту разом
+                          // иногда путают оборудование провайдера, и параллельный итог расходится с проверкой по одной
+
+function parMark(int $k): string
+{
+  return sprintf('0x%08x', ($k + 1) << 24);
+}
+
+function parPorts(int $k): array
+{
+  $lo = (int)explode(':', TEST_PORTS)[0] + $k * 64;
+  return [$lo, $lo + 63];
+}
+
+function curlReason(int $rc, int $code): string
+{
+  return match ($rc) {
+    6 => 'имя не разрешается',
+    7 => 'не удалось подключиться',
+    28 => $code > 0 ? REASON_FREEZE : 'тайм-аут',
+    35 => 'обрыв TLS',
+    52 => 'пустой ответ',
+    56 => 'соединение сброшено',
+    default => "ошибка curl $rc",
+  };
+}
+
+// Пачка стратегий за один запуск nfqws2. Возвращает результаты в том же порядке.
+function parTry(array $chunk, ?array &$nfq, array $baseArgs, array $filter, int $repeats, string $host, bool $http): array
+{
+  $args = $baseArgs;
+  foreach (array_values($chunk) as $k => $c) {
+    if ($k) {
+      $args[] = '--new';
+    }
+    array_push($args, '--filter-mark=' . parMark($k) . '/' . PAR_MASK, ...$filter, ...$c['steps']);
+  }
+  $nfq = testNfqwsStart($args);
+  if (!$nfq) {
+    // какую-то стратегию nfqws2 не принял — ищем её делением пачки пополам
+    if (count($chunk) === 1) {
+      return [['ok' => 0, 'tries' => 0, 'ms' => null, 'reason' => 'nfqws2 не принял параметры']];
+    }
+    $half = (int)ceil(count($chunk) / 2);
+    return array_merge(parTry(array_slice($chunk, 0, $half), $nfq, $baseArgs, $filter, $repeats, $host, $http),
+      parTry(array_slice($chunk, $half), $nfq, $baseArgs, $filter, $repeats, $host, $http));
+  }
+  $sh = TEST_DIR . '/slot.sh';
+  // одна дорожка: до R запросов, после первой неудачи — стоп; маленькая страница — ещё и проверка объёма отправкой
+  file_put_contents($sh, implode("\n", [
+    'P=$1; U=$2; R=$3; O=$4; : > "$O"; i=0',
+    'while [ $i -lt $R ]; do i=$((i+1))',
+    '  set -- $(curl -4 -sk -o /dev/null --local-port $P --connect-timeout 4 -A "$UA" -m 7 -r 0-' . (VOLUME_BYTES - 1) . ' -w "%{http_code} %{time_total} %{size_download}" "$U" 2>/dev/null; echo " $?")',
+    '  code=$1; t=$2; size=$3; rc=$4; v=""',
+    '  if [ "$rc" = 0 ] && [ "${size%.*}" -lt ' . VOLUME_SMALL . ' ]; then',
+    '    a=$(curl -4 -sk -o /dev/null --local-port $P --connect-timeout 4 -A "$UA" -m 8 -H "Expect:" -H "Content-Type: application/octet-stream" --data-binary @' . TEST_DIR . '/volume.bin -w "%{time_appconnect}" "$U?t=$i$$" 2>/dev/null); vrc=$?; v="$vrc $a"',
+    '  fi',
+    '  echo "$rc $code $t $size $v" >> "$O"',
+    '  [ "$rc" = 0 ] || break',
+    '  case "$v" in "28 "*) [ "${v#28 }" != "0.000000" ] && break;; esac',   // отправка повисла после рукопожатия — заморозка
+    'done', '']));
+  if (!is_file(TEST_DIR . '/volume.bin') || filesize(TEST_DIR . '/volume.bin') !== VOLUME_BYTES) {
+    file_put_contents(TEST_DIR . '/volume.bin', random_bytes(VOLUME_BYTES));
+  }
+  $url = ($http ? 'http://' : 'https://') . $host . '/';
+  $cmd = 'UA=' . escapeshellarg('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130 Safari/537.36') . '; export UA; ';
+  foreach (array_keys(array_values($chunk)) as $k) {
+    [$lo, $hi] = parPorts($k);
+    $cmd .= 'sh ' . escapeshellarg($sh) . " $lo-$hi " . escapeshellarg($url) . " $repeats " . escapeshellarg(TEST_DIR . "/slot$k.out") . ' & ';
+  }
+  exec($cmd . 'wait');
+  testNfqwsStop($nfq);
+  $nfq = null;
+  $res = [];
+  foreach (array_keys(array_values($chunk)) as $k) {
+    $ok = 0;
+    $times = [];
+    $reason = null;
+    $tries = 0;
+    foreach (file(TEST_DIR . "/slot$k.out", FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
+      $f = explode(' ', trim($line));
+      $tries++;
+      [$rc, $code, $t] = [(int)$f[0], (int)($f[1] ?? 0), (float)($f[2] ?? 0)];
+      if ($rc !== 0 || $code === 0) {
+        $reason = curlReason($rc, $code);
+        break;
+      }
+      if (isset($f[4]) && (int)$f[4] === 28 && (float)($f[5] ?? 0) > 0) {
+        $reason = REASON_FREEZE;
+        break;
+      }
+      $ok++;
+      $times[] = (int)round($t * 1000);
+    }
+    $res[] = ['ok' => $ok, 'tries' => max(1, $tries), 'ms' => $times ? (int)round(array_sum($times) / count($times)) : null, 'reason' => $ok === $tries ? null : ($reason ?? 'нет ответа')];
+  }
+  return $res;
 }
 
 // Запускает отдельный nfqws2 на тестовой очереди; возвращает процесс или null
@@ -3358,6 +3569,16 @@ function testJob(): void
   if (!empty($job['steps'])) {
     array_unshift($cands, ['name' => strategyName($job['steps']), 'from' => 'вставленный профиль', 'steps' => $job['steps']]);
   }
+  // каталог по правилам blockcheck2: расширенный или полный; то, что уже есть выше, не повторяем
+  $level = in_array('full', $job['sets'], true) ? 'full' : (in_array('ext', $job['sets'], true) ? 'ext' : null);
+  if ($level) {
+    $have = array_flip(array_map(fn($c) => implode(' ', $c['steps']), $cands));
+    foreach (catalogCandidates($level, $http) as $c) {
+      if (!isset($have[implode(' ', $c['steps'])])) {
+        $cands[] = $c;
+      }
+    }
+  }
   // То, что уже работало: совпавшие с набором стратегии помечаем, остальные добавляем
   $own = in_array('hist', $job['sets'], true);
   $byKey = [];
@@ -3462,19 +3683,63 @@ function testJob(): void
     $nfq = null;
     return ['ok' => $ok, 'tries' => $i < $repeats ? $i + 1 : $repeats, 'ms' => $times ? (int)round(array_sum($times) / count($times)) : null, 'reason' => $reason];
   };
-  foreach ($cands as $c) {
-    if (is_file(TEST_DIR . '/stop')) {
-      $status['state'] = 'stopped';
-      break;
+  $entry = fn(array $c, array $r) => ['name' => $c['name'], 'from' => $c['from'], 'steps' => $c['steps'], 'profile' => array_merge($filter, $c['steps'])]
+    + (isset($c['hist']) ? ['hist' => $c['hist']] : []) + (isset($c['community']) ? ['community' => $c['community']] : []) + $r;
+  if (!$auto && count($cands) > PAR_MIN) {
+    // большой набор — параллельно, пачками по PAR_SLOTS; из каталога в результатах остаётся только то, что хоть раз открыло
+    // сайт (иначе статус разрастается до мегабайта), остальное — счётчиком причин
+    testRules('queue', $iface, PAR_SLOTS);
+    $status['parallel'] = PAR_SLOTS;
+    $status['failed'] = [];
+    foreach (array_chunk($cands, PAR_SLOTS) as $chunk) {
+      if (is_file(TEST_DIR . '/stop')) {
+        $status['state'] = 'stopped';
+        break;
+      }
+      $status['current'] = 'пачка ' . ((int)floor(($status['done'] - 1) / PAR_SLOTS) + 1) . ' из ' . (int)ceil(count($cands) / PAR_SLOTS) . ': ' . implode(', ', array_slice(array_column($chunk, 'name'), 0, 3)) . (count($chunk) > 3 ? '…' : '');
+      testSaveStatus($status);
+      foreach (parTry($chunk, $nfq, $baseArgs, $filter, $repeats, $job['host'], $http) as $k => $r) {
+        $c = $chunk[$k];
+        if ($r['ok'] > 0 || empty($c['catalog'])) {
+          $status['results'][] = $entry($c, $r) + ['par' => true];
+        } else {
+          $why = $r['reason'] ?? 'нет ответа';
+          $status['failed'][$why] = ($status['failed'][$why] ?? 0) + 1;
+        }
+      }
+      $status['done'] += count($chunk);
+      testSaveStatus($status);
     }
-    $status['current'] = $c['name'];
-    testSaveStatus($status);
-    $status['results'][] = ['name' => $c['name'], 'from' => $c['from'], 'steps' => $c['steps'], 'profile' => array_merge($filter, $c['steps'])]
-      + (isset($c['hist']) ? ['hist' => $c['hist']] : []) + (isset($c['community']) ? ['community' => $c['community']] : []) + $try($c['steps']);
-    $status['done']++;
-    testSaveStatus($status);
-    if ($auto && end($status['results'])['ok'] === $repeats) {
-      break;   // автоподбору хватает первой стратегии, открывшей сайт каждый раз
+    // перепроверка: лучшие находки — по одной, как в обычном подборе; параллельный прогон мог и ошибиться
+    testRules('queue', $iface);
+    $best = array_keys(array_filter($status['results'], fn($r) => $r['ok'] >= $repeats));
+    usort($best, fn($a, $b) => ($status['results'][$a]['ms'] ?? PHP_INT_MAX) <=> ($status['results'][$b]['ms'] ?? PHP_INT_MAX));
+    if ($best && $status['state'] === 'running') {
+      $status['phase'] = 'confirm';
+      foreach (array_slice($best, 0, PAR_CONFIRM) as $i) {
+        if (is_file(TEST_DIR . '/stop')) {
+          break;
+        }
+        $status['current'] = 'перепроверка: ' . $status['results'][$i]['name'];
+        testSaveStatus($status);
+        $status['results'][$i] = array_merge($status['results'][$i], $try($status['results'][$i]['steps']), ['confirmed' => true]);
+      }
+      $status['phase'] = 'pick';
+    }
+  } else {
+    foreach ($cands as $c) {
+      if (is_file(TEST_DIR . '/stop')) {
+        $status['state'] = 'stopped';
+        break;
+      }
+      $status['current'] = $c['name'];
+      testSaveStatus($status);
+      $status['results'][] = $entry($c, $try($c['steps']));
+      $status['done']++;
+      testSaveStatus($status);
+      if ($auto && end($status['results'])['ok'] === $repeats) {
+        break;   // автоподбору хватает первой стратегии, открывшей сайт каждый раз
+      }
     }
   }
   if ($status['state'] === 'running' && !($auto && !$cands)) {
@@ -3662,7 +3927,8 @@ function picksAdd(array $status, int $repeats): void
   $full = array_values(array_filter($status['results'], fn($r) => $r['ok'] === $repeats));
   usort($full, fn($a, $b) => ($a['ms'] ?? PHP_INT_MAX) <=> ($b['ms'] ?? PHP_INT_MAX));
   $rec = ['ts' => time(), 'host' => $status['host'], 'proto' => $status['proto'], 'baseline' => $status['baseline'] ?? null,
-    'ok' => count($full), 'total' => count($status['results']), 'best' => $full ? $full[0]['name'] : null,
+    // после параллельного прогона в results только то, что хоть раз открыло сайт, — сколько проверено, считаем по done
+    'ok' => count($full), 'total' => !empty($status['parallel']) ? max(count($status['results']), $status['done'] - 1) : count($status['results']), 'best' => $full ? $full[0]['name'] : null,
     'dur' => time() - $status['started'], 'state' => $status['state'], 'repeats' => $repeats, 'auto' => !empty($status['auto']),
     // параметры храним только у того, что открыло сайт хоть раз: остальное заново не понадобится
     'results' => array_map(fn($r) => array_filter(['name' => $r['name'], 'from' => $r['from'], 'ok' => $r['ok'], 'tries' => $r['tries'], 'ms' => $r['ms'],
@@ -5952,7 +6218,7 @@ switch ($cmd) {
       flock($diagLock, LOCK_UN);
       fclose($diagLock);
     }
-    $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : ['config', 'std'], ['config', 'std', 'hist', 'other', 'community']));
+    $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : ['config', 'std'], ['config', 'std', 'hist', 'other', 'community', 'ext', 'full']));
     $own = array_values(array_filter(is_array($in['steps'] ?? null) ? $in['steps'] : [], fn($t) => is_string($t) && preg_match('/^--lua-desync=[^\s"`$\\\\]+$/', $t)));
     testLaunch(['type' => $cmd === 'trace_start' ? 'trace' : 'pick', 'host' => $host,
       'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https', 'sets' => $own ? $sets : ($sets ?: ['config', 'std']), 'steps' => $own, 'repeats' => (int)($in['repeats'] ?? 3), 'refine' => !empty($in['refine'])]);
@@ -5998,7 +6264,8 @@ switch ($cmd) {
 
   case 'test_candidates':
     $proto = ($in['proto'] ?? '') === 'http' ? 'http' : 'https';
-    respond(['config' => configCandidates($proto), 'std' => array_map(fn($x) => ['name' => $x[0], 'steps' => $x[1]], $proto === 'http' ? STD_HTTP : STD_TLS)]);
+    respond(['config' => configCandidates($proto), 'std' => array_map(fn($x) => ['name' => $x[0], 'steps' => $x[1]], $proto === 'http' ? STD_HTTP : STD_TLS),
+      'catalog' => ['ext' => count(catalogCandidates('ext', $proto === 'http')), 'full' => count(catalogCandidates('full', $proto === 'http'))]]);
 
   case 'tests_history':
     // без host — все запуски без подробностей; с host — запуски одного сайта целиком

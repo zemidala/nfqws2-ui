@@ -328,6 +328,7 @@ const FEATURES = [
   ['pick:share', '1.9.0', '«Поделиться» и «Подтвердить» у найденной стратегии'],
   ['phist:share', '1.9.0', '«Поделиться» в истории подборов'],
   ['frz', '1.10.0', 'проба «Обрыв на 16 КБ» — какое имя в фейке снимает обрыв у зарубежных хостингов'],
+  ['pick:catalog', '1.10.0', 'каталог стратегий zapret2 в подборе (сотни и тысячи стратегий, параллельно)'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 // на сколько минорных версий функция старше текущей (у сборки до выпуска — меньше нуля)
@@ -3524,6 +3525,16 @@ async function viewTests(main, r, bare = false) {
   const setStd = h('input', { type: 'checkbox', id: 't-std', checked: true });
   const setHist = h('input', { type: 'checkbox', id: 't-hist', checked: true });
   const setComm = h('input', { type: 'checkbox', id: 't-comm', checked: true });
+  // каталог по правилам blockcheck2: большой набор проверяется параллельно
+  const catSel = h('select', { class: 'select', 'aria-label': 'Каталог zapret2' },
+    h('option', { value: '', text: 'не брать' }), h('option', { value: 'ext', text: 'расширенный' }), h('option', { value: 'full', text: 'полный — долго' }));
+  const catNote = h('span', { class: 'sm muted' });
+  const catCounts = () => api('test_candidates', { proto: proto.value }).then((r) => {
+    catSel.options[1].text = `расширенный — ${r.catalog.ext} стратегий, 2–5 минут`;
+    catSel.options[2].text = `полный — ${r.catalog.full} стратегий, 15–30 минут`;
+  }).catch(() => {});
+  catCounts();
+  proto.addEventListener('change', catCounts);
   const repeats = h('select', { class: 'select', 'aria-label': 'Повторов' }, [1, 2, 3, 5].map((n) => h('option', { value: n, text: plural(n, 'повтор', 'повтора', 'повторов'), selected: n === 3 })));
   const refine = h('input', { type: 'checkbox', id: 't-refine' });
   const out = h('div', { class: 'stack', style: 'gap:14px' });
@@ -3534,7 +3545,7 @@ async function viewTests(main, r, bare = false) {
 
   async function start() {
     const cmd = tab === 'trace' ? 'trace_start' : 'test_start';
-    const sets = [setCfg.checked && 'config', setStd.checked && 'std', setHist.checked && 'hist', setHist.checked && 'other', setComm.checked && 'community'].filter(Boolean);
+    const sets = [setCfg.checked && 'config', setStd.checked && 'std', setHist.checked && 'hist', setHist.checked && 'other', setComm.checked && 'community', catSel.value].filter(Boolean);
     if (tab !== 'trace' && !sets.length) { toast('Выберите, что пробовать', { err: true }); return; }
     if (!await guarded(() => api(cmd, { host: host.value, proto: proto.value, sets, repeats: Number(repeats.value), refine: refine.checked }))) return;
     poll();
@@ -3579,7 +3590,8 @@ async function viewTests(main, r, bare = false) {
   function pickResult(s, running) {
     const rep = s.repeats || Number(repeats.value);
     const res = [...(s.results || [])];
-    const good = res.filter((x) => x.ok > 0 && x.ok === x.tries && x.tries >= Math.min(rep, x.tries)).sort((a, b) => b.ok - a.ok || a.ms - b.ms);
+    // после параллельного прогона надёжны перепроверенные по одной — они первыми и в рекомендации
+    const good = res.filter((x) => x.ok > 0 && x.ok === x.tries && x.tries >= Math.min(rep, x.tries)).sort((a, b) => (s.parallel ? (b.confirmed ? 1 : 0) - (a.confirmed ? 1 : 0) : 0) || b.ok - a.ok || a.ms - b.ms);
     const best = good[0];
     const baseline = s.baseline;
     const rows = res.sort((a, b) => (b.ok / Math.max(1, b.tries)) - (a.ok / Math.max(1, a.tries)) || (a.ms ?? 1e9) - (b.ms ?? 1e9)).map((x) => {
@@ -3587,7 +3599,7 @@ async function viewTests(main, r, bare = false) {
       return h('tr', {},
         h('td', {}, levelIcon(full ? 'ok' : x.ok ? 'warning' : 'error')),
         h('td', {}, h('div', { text: x.name }), h('code', { class: 'sm muted', style: 'word-break:break-all', text: x.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') })),
-        h('td', { class: 'sm muted' }, x.from, x.hist ? h('div', { class: 'nowrap' }, chip('работала ' + fmtDate(x.hist), 'ok')) : null),
+        h('td', { class: 'sm muted' }, x.from, x.hist ? h('div', { class: 'nowrap' }, chip('работала ' + fmtDate(x.hist), 'ok')) : null, x.confirmed ? h('div', { class: 'nowrap' }, chip('перепроверена', 'ok')) : null),
         h('td', { class: 'sm', text: full ? `открылся ${x.ok} из ${x.ok}` : x.ok ? `${x.ok} из ${x.tries}` : x.reason || 'не открылся' }),
         h('td', { class: 'num', text: x.ms ? x.ms + ' мс' : '—' }),
         h('td', {}, x.ok || x.community ? h('div', { class: 'row', style: 'flex-wrap:nowrap;justify-content:flex-end' }, x.ok ? applyMenu(x, s) : null, full || x.community ? shareBtn(x, s) : null) : null));
@@ -3604,6 +3616,9 @@ async function viewTests(main, r, bare = false) {
       communityNote(s, best),
       !running && !best && res.length ? notice('bad', 'Ни одна стратегия не помогла', isFreeze(baseline?.reason) ? FREEZE_HINT : 'Попробуйте больше повторов, протокол HTTP или другой сайт. Если без обхода соединение не устанавливается вовсе — возможно, заблокирован IP, тогда nfqws2 не поможет.') : null,
       refinePanel(s, rep),
+      s.failed && Object.keys(s.failed).length ? h('p', { class: 'sm muted' }, `Из каталога не помогли ${plural(Object.values(s.failed).reduce((a, b) => a + b, 0), 'стратегия', 'стратегии', 'стратегий')}: `
+        + Object.entries(s.failed).sort((a, b) => b[1] - a[1]).map(([w, n]) => `${w} — ${n}`).join(', ') + '. В таблице — только то, что открыло сайт хоть раз.') : null,
+      s.parallel && !running ? h('p', { class: 'sm muted', text: 'Большой набор проверялся параллельно, по 15 стратегий сразу. Когда к одному сайту идёт много разных соединений одновременно, оборудование провайдера иногда путается, и такой итог может разойтись с проверкой по одной. Поэтому до 8 лучших находок перепроверены по одной (отметка «перепроверена») — применять лучше их.' }) : null,
       panel(`Результаты для ${s.host}`, h('span', { class: 'sm muted num', text: `${res.length} стратегий · ${rep} повт.` + (s.finished ? ` · ${Math.round((s.finished - s.started))} с` : '') }),
         h('div', { class: 'scroll' }, h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, h('th'), h('th', { text: 'Стратегия' }), h('th', { text: 'Откуда' }), h('th', { text: 'Результат' }), h('th', { class: 'num', text: 'Время' }), h('th'))), h('tbody', {}, rows)))));
   }
@@ -3618,7 +3633,8 @@ async function viewTests(main, r, bare = false) {
     const part = tried.filter((x) => x.ok && x.ok < x.tries).length;
     return h('div', { class: 'flow' },
       cell('baseline', '1 · Без обхода', s.baseline ? (s.baseline.ok ? 'сайт открывается' : s.baseline.reason) : 'проверяю…'),
-      cell('pick', '2 · Перебор', res.length ? `${plural(tried.length, 'стратегия', 'стратегии', 'стратегий')}: работают ${full}` + (part ? `, почти — ${part}` : '') : 'ожидает'),
+      cell('pick', '2 · Перебор', s.parallel && s.done > 1 ? `${plural(s.done - 1, 'стратегия', 'стратегии', 'стратегий')} из ${s.total - 1}: работают ${full}` + (part ? `, почти — ${part}` : '') + (s.phase === 'confirm' ? ' · перепроверка' : '')
+        : res.length ? `${plural(tried.length, 'стратегия', 'стратегии', 'стратегий')}: работают ${full}` + (part ? `, почти — ${part}` : '') : 'ожидает'),
       cell('refine', '3 · Уточнение', s.refine ? `основа — ${s.refine.base}` : now === 'done' ? 'не понадобилось' : 'если рабочих не найдётся'),
       cell('done', '4 · Итог', now !== 'done' ? '' : best ? best.name : 'рабочей стратегии нет'));
   }
@@ -3809,6 +3825,9 @@ async function viewTests(main, r, bare = false) {
           h('label', { class: 'row' }, setCfg, 'стратегии из вашего конфига'), h('label', { class: 'row' }, setStd, 'стандартный набор'),
           h('label', { class: 'row', title: 'Стратегии из истории подборов: сначала работавшие для этого сайта, затем до пяти помогавших другим сайтам' }, setHist, 'что работало раньше'),
           h('label', { class: 'row', title: 'До восьми стратегий, которые сработали у абонентов вашего провайдера (база на GitHub, раз в сутки). Сначала — открывавшие этот сайт или его сеть.' }, setComm, 'стратегии сообщества', newTag('pick:community')))),
+        h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Каталог zapret2' }), h('div', { class: 'stack', style: 'gap:2px' },
+          h('div', { class: 'row' }, catSel, newTag('pick:catalog')),
+          h('span', { class: 'sm muted', text: 'Те же функции, позиции разреза и способы испортить фейк, что перебирает blockcheck2 из zapret2. Большой набор проверяется параллельно, по 15 стратегий сразу; лучшие находки потом перепроверяются по одной.' }))),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Повторов' }), h('div', { class: 'row' }, repeats, h('span', { class: 'sm muted', text: 'Стратегия засчитывается, если сайт открылся каждый раз.' }))),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Уточнение' }), h('div', { class: 'stack', style: 'gap:2px' },
           h('label', { class: 'row' }, refine, 'искать вариант полегче, даже если рабочая стратегия найдена'),
