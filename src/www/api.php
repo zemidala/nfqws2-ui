@@ -950,7 +950,8 @@ function packageVersion(string $pkg): ?string
 
 function tokens(string $s): array
 {
-  $s = trim($s);
+  // «\» в конце строки — перенос значения по строкам, оболочка его убирает; параметром он не является
+  $s = trim(preg_replace('/\\\\\r?\n/', ' ', $s));
   return $s === '' ? [] : preg_split('/\s+/', $s);
 }
 
@@ -2573,7 +2574,8 @@ function editTokenInText(string $text, string $var, int $i, ?string $new): strin
     fail("Переменная $var не найдена");
   }
   $base = $m[1][1];
-  preg_match_all('/\S+/', $m[1][0], $tm, PREG_OFFSET_CAPTURE);
+  // «\» перед переводом строки — перенос, а не аргумент (см. tokens()); длина не меняется — смещения те же
+  preg_match_all('/\S+/', preg_replace('/\\\\(?=\r?\n)/', ' ', $m[1][0]), $tm, PREG_OFFSET_CAPTURE);
   if (!isset($tm[0][$i])) {
     fail('Замечание устарело — обновите страницу');
   }

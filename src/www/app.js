@@ -170,7 +170,8 @@ const listName = (f) => LIST_NAMES[f] || f.replace(/\.list$/, '');
 const base = (p) => String(p).split('/').pop();
 const debounce = (fn, ms) => { let t; const d = (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; d.flush = (...a) => { clearTimeout(t); fn(...a); }; return d; };
 const worst = (issues) => (issues || []).reduce((w, x) => (LEVEL_RANK[x.level] > (LEVEL_RANK[w] || 0) ? x.level : w), null);
-const tokensOf = (s) => (s || '').trim().split(/\s+/).filter(Boolean);
+// «\» в конце строки — перенос значения по строкам (оболочка его убирает), а не параметр
+const tokensOf = (s) => (s || '').replace(/\\\r?\n/g, ' ').trim().split(/\s+/).filter(Boolean);
 
 function toast(text, opts = {}) {
   const t = h('div', { class: 'toast' + (opts.err ? ' err' : ''), role: opts.err ? 'alert' : 'status' }, h('span', { text }));
@@ -2866,7 +2867,7 @@ const LUA_INFO = {
 // Выбор интерфейса провайдера: автоопределение по маршруту по умолчанию и список интерфейсов роутера
 function ifacePicker(ifaces, get, set, inputId) {
   const box = h('div', { class: 'iface-pick' });
-  const list = () => get().trim().split(/\s+/).filter(Boolean);
+  const list = () => tokensOf(get());
   // «интернет» — интерфейсы с маршрутом по умолчанию; туннели (VPN) только если других нет
   const auto = () => {
     const d = ifaces.filter((x) => x.default.length && x.usable);
@@ -2907,7 +2908,7 @@ function ifacePicker(ifaces, get, set, inputId) {
 
 async function paneBase(content) {
   const [sys] = await Promise.all([api('sysinfo').catch(() => null), loadCatalog()]);
-  const orig = S.conf.vars.NFQWS_BASE_ARGS.trim().split(/\s+/).filter(Boolean).join('\n');
+  const orig = tokensOf(S.conf.vars.NFQWS_BASE_ARGS).join('\n');
   let issues = (S.state.lint?.issues || []).filter((x) => x.var === 'NFQWS_BASE_ARGS');
   const help = h('div', { class: 'help' });
   const sug = createSuggest();
