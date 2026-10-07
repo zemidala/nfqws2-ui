@@ -167,6 +167,7 @@ function uiSettings(): array
     'auto' => ['enabled' => false, 'apply' => false, 'fails' => 2, 'pause' => 12],
     'provider' => '',
     'provider_asn' => 0,   // номер AS провайдера: по нему берутся стратегии сообщества
+    'seen' => null,        // метки «новое»: см. seenInfo()
     'asn' => [],
     'subs' => [],
   ];
@@ -184,6 +185,23 @@ function uiSettings(): array
     $r['asn'] = array_values($s['asn']);
   }
   return $r;
+}
+
+// Метки «новое» у новых функций интерфейса (список функций — FEATURES в app.js):
+// since — версия, с которой человек начал пользоваться интерфейсом (метки — только у того, что новее),
+// open — что из нового уже открыто, told — о какой версии уже показано сообщение «Обновлено до…».
+// Хранится на роутере: открыл новое с телефона — метка пропала и на компьютере.
+function seenInfo(): array
+{
+  $s = uiSettings();
+  if (!is_array($s['seen'])) {
+    // меток ещё не было. Если интерфейсом уже пользовались (эти файлы появляются за первые минуты работы) —
+    // это обновление с версии без меток, 1.8.0 или раньше; иначе — новая установка, и новым ничего не считается
+    $used = array_filter(['settings.json', 'update.json', 'monitor.json', 'picks.json'], fn($f) => is_file(UI_CONF_DIR . "/$f"));
+    $s['seen'] = ['since' => $used ? '1.8.0' : UI_VERSION, 'open' => [], 'told' => $used ? '' : UI_VERSION];
+    saveUiSettings($s);
+  }
+  return $s['seen'] + ['since' => UI_VERSION, 'open' => [], 'told' => ''];
 }
 
 function saveUiSettings(array $s): void
@@ -4825,6 +4843,7 @@ function restartNeeded(?array $proc): bool
 
 function state(): array
 {
+  $seen = seenInfo();   // первым: до того, как состояние само создаст файлы, по которым видно «уже пользовались»
   historyScan('auto');
   $pid = findPid();
   $proc = $pid ? processInfo($pid) : null;
@@ -4851,9 +4870,9 @@ function state(): array
     // Профили по конфигу (для редактора) — могут отличаться от запущенных до перезапуска
     'conf_profiles' => $pid === null ? $profiles : loadProfiles(null, $expected, $globals),
     'subs' => uiSettings()['subs'],
-    'ui' => (function () {
+    'ui' => (function () use ($seen) {
       $w = uiWeb();
-      return ['version' => UI_VERSION, 'conf_file' => CONF_FILE, 'https_port' => $w['https_port'], 'legacy_port' => $w['legacy_port'], 'auth' => authEnabled(),
+      return ['version' => UI_VERSION, 'seen' => $seen, 'conf_file' => CONF_FILE, 'https_port' => $w['https_port'], 'legacy_port' => $w['legacy_port'], 'auth' => authEnabled(),
         'provider' => uiSettings()['provider'], 'platform' => ROOT ? 'Keenetic' : 'OpenWrt', 'repo' => REPO_URL, 'update' => updateInfo() + ['running' => updateRunning()]];
     })(),
     'undo' => (function () {
@@ -5266,6 +5285,7 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
     remotePush();
     exit(0);
   }
+  seenInfo();   // первым — как и в state()
   historyScan('auto');
   nfqLogsTrim();
   monitorRun(false);
@@ -6082,6 +6102,22 @@ switch ($cmd) {
     }
     saveUiSettings($s);
     respond(['provider' => $s['provider'], 'asn' => $s['provider_asn']]);
+
+  case 'seen_mark':
+    // открытые новые функции: метка «новое» у них больше не показывается
+    $s = uiSettings();
+    $s['seen'] = seenInfo();
+    foreach (array_slice(is_array($in['ids'] ?? null) ? $in['ids'] : [], 0, 50) as $id) {
+      if (is_string($id) && preg_match('/^[a-z]{1,20}(:[a-z0-9_-]{1,40})?$/', $id) && !in_array($id, $s['seen']['open'], true)) {
+        $s['seen']['open'][] = $id;
+      }
+    }
+    $s['seen']['open'] = array_slice($s['seen']['open'], -300);
+    if (preg_match('/^\d+\.\d+\.\d+$/', (string)($in['told'] ?? ''))) {
+      $s['seen']['told'] = $in['told'];
+    }
+    saveUiSettings($s);
+    respond(['seen' => $s['seen']]);
 
   case 'community_get':
     session_write_close();

@@ -692,6 +692,11 @@ a.over-row:hover { background: var(--soft); }
 .dstep.skip b { color: var(--faint); font-weight: 500; }
 @media (max-width: 759px) { .dstep { grid-template-columns: 22px minmax(0, 1fr); } .dstep > :last-child { grid-column: 2; } }
 .tag.new { border-color: var(--accent); color: var(--accent); }
+/* «новое»: точка на вкладках, разделах нижней панели, кнопках меню и у группы в свёрнутом меню */
+.tabs a.has-new, .bottom a.has-new, .bottom > button.has-new, #burger.has-new, .mgrp.has-new .nav-h { position: relative; }
+.tabs a.has-new::after, .bottom a.has-new::after, .bottom > button.has-new::after, #burger.has-new::after, :root[data-navmini] .mgrp.has-new .nav-h::after {
+  content: ''; position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.bottom a.has-new::after, .bottom > button.has-new::after { top: 8px; right: calc(50% - 16px); }
 .subtabs a { display: inline-flex; align-items: center; gap: 6px; }
 
 /* подбор: ход по шагам и перебранные значения уточнения */
@@ -898,8 +903,8 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
   :root[data-variant="k"] .subtabs a { font-size: 15.5px; padding: 9px 12px; }
 }
 :root[data-variant="k"] .top .btn.ghost.danger { color: var(--bad); }
-/* у Keenetic в меню нет меток «новое» — и без них названия не обрезаются */
-:root[data-variant="k"] .mnav .tag.new { display: none; }
+/* у Keenetic меню узкое: «новое» в нём — точка, чтобы названия не обрезались */
+:root[data-variant="k"] .mnav .tag.new { font-size: 0; padding: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); border: 0; display: inline-block; }
 /* страница — белая, формы прямо на ней, без рамок: у Keenetic карточки только на «Системном мониторе» */
 :root[data-variant="k"] { --bg: #ffffff; }
 :root[data-variant="k"][data-mode="dark"] { --bg: #222428; }

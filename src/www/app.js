@@ -318,7 +318,57 @@ const PAGES = {
   // ещё не сделаны: в меню видны, но заблокированы и помечены «скоро»
   diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], comm: ['#/tests/community', 'Стратегии сообщества'], auto: ['#/tests/auto', 'Автоподбор'], asn: ['#/asn', 'Список по ASN'], report: ['#/settings/report', 'Отчёт для помощи'],
 };
-const NEW_PAGES = ['diag', 'phist', 'auto', 'asn', 'report', 'comm'];   // только что появились — помечаются в меню (в упрощённом виде — нет)
+// Новые функции — метка «новое». КАЖДАЯ новая функция интерфейса записывается сюда:
+// [страница из PAGES или «страница:функция», версия, в которой появилась, подпись для сообщения «Обновлено до…»].
+// Метку видит тот, кто начал пользоваться интерфейсом до этой версии, пока не откроет страницу, и не дольше двух
+// версий. У функции внутри страницы метка стоит и у страницы в меню; внутри — newTag('страница:функция') рядом с ней.
+const FEATURES = [
+  ['comm', '1.9.0', 'Стратегии сообщества'],
+  ['pick:community', '1.9.0', 'стратегии сообщества в подборе'],
+  ['pick:share', '1.9.0', '«Поделиться» и «Подтвердить» у найденной стратегии'],
+  ['phist:share', '1.9.0', '«Поделиться» в истории подборов'],
+];
+const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
+// на сколько минорных версий функция старше текущей (у сборки до выпуска — меньше нуля)
+const vage = (v) => { const [a, b] = (S.state?.ui?.version || v).split('.').map(Number), [c, d] = v.split('.').map(Number); return (a - c) * 100 + (b - d); };
+function isNewF(id) {
+  const seen = S.state?.ui?.seen;
+  const f = FEATURES.find((x) => x[0] === id);
+  return !!(seen && f && !seen.open.includes(id) && vcmp(f[1], seen.since) > 0 && vage(f[1]) <= 1);
+}
+const pageFeatures = (page) => FEATURES.map((f) => f[0]).filter((id) => (id === page || id.startsWith(page + ':')) && isNewF(id));
+const pageNew = (page) => pageFeatures(page).length > 0;
+const NEW_TAG = () => h('span', { class: 'tag new', text: 'новое', title: 'Появилось в последнем обновлении' });
+// метка у функции внутри страницы: видна весь этот заход на страницу, при следующем — уже нет
+const newTag = (id) => S.newHere?.has(id) ? NEW_TAG() : null;
+
+// Открыли страницу — её новые функции больше не новые (на роутере: для всех устройств)
+function seenPage(page) {
+  const ids = pageFeatures(page);
+  if (!ids.length) return;
+  S.state.ui.seen.open.push(...ids);
+  api('seen_mark', { ids }).catch(() => {});
+  placeSide();
+  updateChrome();
+}
+
+// После обновления, пока не закроют: что появилось, со ссылками
+function updatedNote() {
+  const seen = S.state?.ui?.seen;
+  const ver = S.state?.ui?.version;
+  if (!seen || !ver || seen.told === ver || document.getElementById('new-note')) return;
+  const items = FEATURES.filter((f) => isNewF(f[0]));
+  const told = () => { seen.told = ver; api('seen_mark', { ids: [], told: ver }).catch(() => {}); };
+  if (!items.length) { told(); return; }
+  // прочитанным сообщение считается, когда его закрыли или пошли по ссылке, а не когда показали
+  const done = () => { document.getElementById('new-note')?.remove(); told(); };
+  const page = (id) => id.split(':')[0];
+  const links = [...new Map(items.map((f) => [page(f[0]), f])).values()].filter((f) => PAGES[page(f[0])]?.[0]);
+  document.getElementById('upd-banner')?.before(h('div', { id: 'new-note', class: 'banner info' }, h('div', { class: 'banner-in' },
+    h('span', {}, h('b', { text: `Обновлено до ${ver}. ` }), 'Новое: ', ...links.flatMap((f, i) => [i ? ', ' : '', h('a', { href: PAGES[page(f[0])][0], onclick: done, text: items.filter((x) => page(x[0]) === page(f[0])).map((x) => x[2]).join(', ') })]),
+      '. В меню такие места отмечены «новое», пока вы их не откроете.'),
+    btn('Что изменилось', () => { done(); go('#/settings/changelog'); }, 'small'), btn('Понятно', done, 'small ghost'))));
+}
 const SOON_HINT = 'Ещё в разработке — появится в одной из следующих версий';
 const SYS_PAGES = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 const SYS_NAV = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
@@ -394,17 +444,17 @@ function menuNav() {
     // у раздела — отметка первой из его страниц, у которой она есть (упавшие сайты, ошибки, обновление); число снимков — только во вкладке
     return h('nav', { class: 'nav mnav', 'aria-label': 'Разделы' }, MENU_SIMPLE.map(([id, label, ic, pages]) =>
       h('a', { href: PAGES[id][0], 'data-pages': pages.join(' '), class: pages.includes(cur) ? 'on' : null },
-        icon(ic), h('span', { class: 'nm', text: label }), pages.filter((x) => x !== 'backup').map(pageTail).find(Boolean) || null)));
+        icon(ic), h('span', { class: 'nm', text: label }), pages.some(pageNew) ? h('span', { class: 'tail' }, NEW_TAG()) : pages.filter((x) => x !== 'backup').map(pageTail).find(Boolean) || null)));
   }
   // группа — заголовок и её страницы; в свёрнутом меню (полоска значков) страницы группы всплывают рядом со значком
   const mini = document.documentElement.hasAttribute('data-navmini');
-  return h('nav', { class: 'nav mnav', 'aria-label': 'Разделы' }, MENU.map(([head, ids]) => h('div', { class: 'mgrp' + (ids.some((id) => id === cur || (id === 'pick' && cur === 'site')) ? ' here' : '') },
+  return h('nav', { class: 'nav mnav', 'aria-label': 'Разделы' }, MENU.map(([head, ids]) => h('div', { class: 'mgrp' + (ids.some((id) => id === cur || (id === 'pick' && cur === 'site')) ? ' here' : '') + (ids.some(pageNew) ? ' has-new' : '') },
     head ? h('div', { class: 'nav-h', tabindex: mini ? 0 : null, title: mini ? head : null }, icon(NAV_ICON[head] || 'settings'), h('span', { class: 'nh-t', text: head })) : null,
     h('div', { class: head ? 'mlinks' : 'mtop' }, head && mini ? h('div', { class: 'mfly-h', text: head }) : null,
       ids.map((id) => PAGES[id][0]
         ? h('a', { href: PAGES[id][0], 'data-pages': id === 'pick' ? 'pick site' : id, class: id === cur || (id === 'pick' && cur === 'site') ? 'on' : null, title: mini && !head ? PAGES[id][1] : null },
           id === 'over' ? h('span', { class: 'k-ic' }, icon('dash')) : null,
-          h('span', { class: 'nm', text: PAGES[id][1] }), NEW_PAGES.includes(id) ? h('span', { class: 'tag new', text: 'новое' }) : pageTail(id))
+          h('span', { class: 'nm', text: PAGES[id][1] }), pageNew(id) ? h('span', { class: 'tail' }, NEW_TAG()) : pageTail(id))
         : soonItem(id))))),
   // свернуть меню в полоску значков — как «Скрыть меню» у Keenetic; только на широком экране
   h('button', { type: 'button', class: 'nav-mini', title: mini ? 'Развернуть меню' : 'Свернуть меню в полоску значков — больше места под страницу', 'aria-label': mini ? 'Развернуть меню' : 'Свернуть меню',
@@ -428,7 +478,7 @@ function subTabs(page) {
   const tab = (layout() === 'menu' ? (simple() ? MENU_SIMPLE : []) : TOP_TABS[layout()]).find((t) => t[3].includes(page));
   const ids = tab ? tab[3].filter((id) => id !== 'site') : [];
   if (ids.length < 2 || page === 'site') return null;
-  return h('nav', { class: 'subtabs', 'aria-label': tab[1] }, ids.map((id) => PAGES[id][0] ? h('a', { href: PAGES[id][0], class: id === page ? 'on' : null }, PAGES[id][1], NEW_PAGES.includes(id) && !simple() ? h('span', { class: 'tag new', text: 'новое' }) : null) : soonItem(id)));
+  return h('nav', { class: 'subtabs', 'aria-label': tab[1] }, ids.map((id) => PAGES[id][0] ? h('a', { href: PAGES[id][0], class: id === page ? 'on' : null }, PAGES[id][1], pageNew(id) ? NEW_TAG() : null) : soonItem(id)));
 }
 
 function renderShell() {
@@ -492,6 +542,12 @@ function updateChrome() {
   const page = pageOf();
   document.querySelectorAll('[data-pages]').forEach((a) => a.classList.toggle('on', a.dataset.pages.split(' ').includes(page)));
   if (!st) return;
+  // точка «новое» на вкладках и разделах нижней панели; на кнопках меню — если новое есть где-то ещё
+  document.querySelectorAll('.tabs [data-pages], .bottom [data-pages]').forEach((a) => a.classList.toggle('has-new', a.dataset.pages.split(' ').some(pageNew)));
+  const inBottom = BOTTOM.flatMap((b) => b[3]);
+  const elsewhere = Object.keys(PAGES).some((id) => pageNew(id) && !inBottom.includes(id));
+  document.getElementById('burger')?.classList.toggle('has-new', Object.keys(PAGES).some(pageNew));
+  document.querySelector('.bottom > button')?.classList.toggle('has-new', elsewhere);
   // Ссылка на HTTPS — только если он включён (nfqws-ui-setup https on); в упрощённом виде — пунктом меню «⋯»
   const hp = st.ui?.https_port;
   const httpsUrl = location.protocol === 'http:' && hp ? `https://${location.hostname}:${hp}/${location.hash}` : null;
@@ -696,11 +752,14 @@ async function route(refresh = false) {
   if (seq !== routeSeq) return;
   if (r.tab !== 'settings' || r.arg !== 'raw') setFocus(false);
   const views = { '': viewOverview, sites: viewSites, tests: viewTests, settings: viewSettings, log: viewLog, site: viewSite, diag: viewDiag, asn: viewAsn };
+  // новое на этой странице: метки внутри видны весь этот заход, после отрисовки страница считается открытой
+  S.newHere = new Set(pageFeatures(pageOf(r)));
   main.replaceChildren(subTabs(pageOf(r)));
   placeSide();
+  updatedNote();
   try {
     await (views[r.tab] || viewOverview)(main, r);
-    if (seq === routeSeq) placeRail(main, pageOf(r));
+    if (seq === routeSeq) { placeRail(main, pageOf(r)); seenPage(pageOf(r)); }
   } catch (e) {
     console.error(e);
     main.replaceChildren(notice('bad', 'Ошибка', e.message));
@@ -3538,7 +3597,7 @@ async function viewTests(main, r, bare = false) {
       !running && best ? h('div', { class: 'notice ok' }, icon('ok'), h('div', { class: 'grow' },
         h('b', { text: `Работают ${good.length} из ${res.length}. Быстрее всех — ${best.name}, ${best.ms} мс.` }),
         h('div', { class: 't', text: best.from }), h('code', { class: 'sm', style: 'word-break:break-all', text: best.steps.join(' ') })),
-        h('div', { class: 'notice-actions' }, applyMenu(best, s, 'primary'), btn('Скопировать', () => copyText(best.steps.join('\n')), 'small', 'copy'), shareBtn(best, s, true))) : null,
+        h('div', { class: 'notice-actions' }, applyMenu(best, s, 'primary'), btn('Скопировать', () => copyText(best.steps.join('\n')), 'small', 'copy'), shareBtn(best, s, true), newTag('pick:share'))) : null,
       communityNote(s, best),
       !running && !best && res.length ? notice('bad', 'Ни одна стратегия не помогла', isFreeze(baseline?.reason) ? FREEZE_HINT : 'Попробуйте больше повторов, протокол HTTP или другой сайт. Если без обхода соединение не устанавливается вовсе — возможно, заблокирован IP, тогда nfqws2 не поможет.') : null,
       refinePanel(s, rep),
@@ -3746,7 +3805,7 @@ async function viewTests(main, r, bare = false) {
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Что пробовать' }), h('div', { class: 'row' },
           h('label', { class: 'row' }, setCfg, 'стратегии из вашего конфига'), h('label', { class: 'row' }, setStd, 'стандартный набор'),
           h('label', { class: 'row', title: 'Стратегии из истории подборов: сначала работавшие для этого сайта, затем до пяти помогавших другим сайтам' }, setHist, 'что работало раньше'),
-          h('label', { class: 'row', title: 'До восьми стратегий, которые сработали у абонентов вашего провайдера (база на GitHub, раз в сутки). Сначала — открывавшие этот сайт или его сеть.' }, setComm, 'стратегии сообщества'))),
+          h('label', { class: 'row', title: 'До восьми стратегий, которые сработали у абонентов вашего провайдера (база на GitHub, раз в сутки). Сначала — открывавшие этот сайт или его сеть.' }, setComm, 'стратегии сообщества', newTag('pick:community')))),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Повторов' }), h('div', { class: 'row' }, repeats, h('span', { class: 'sm muted', text: 'Стратегия засчитывается, если сайт открылся каждый раз.' }))),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Уточнение' }), h('div', { class: 'stack', style: 'gap:2px' },
           h('label', { class: 'row' }, refine, 'искать вариант полегче, даже если рабочая стратегия найдена'),
@@ -3979,7 +4038,7 @@ async function viewPickHistSite(main, host, bare) {
         btn('Удалить историю', async () => { if (confirm(`Удалить историю подборов для ${host}?`) && await guarded(() => api('picks_delete', { host }), 'Удалено')) { if (bare) route(true); else go(PAGES.phist[0]); } }, 'small danger', 'trash')),
         h('p', { class: 'sm muted', text: '«Проверить снова» пробует только то, что для этого сайта уже работало, — это секунды, а не минуты. Применить стратегию можно из результатов проверки.' }),
         applied ? h('p', { class: 'sm' }, 'Применена ', h('b', { text: fmtDate(applied.ts) }), ': ', h('span', { class: 'mono', text: applied.name }), applied.target ? ` — ${applied.target}` : '') : null),
-      panel('Что работало', h('span', { class: 'sm muted num', text: plural(list.length, 'стратегия', 'стратегии', 'стратегий') }),
+      panel('Что работало', h('span', { class: 'row', style: 'gap:8px' }, newTag('phist:share'), h('span', { class: 'sm muted num', text: plural(list.length, 'стратегия', 'стратегии', 'стратегий') })),
         list.length ? h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
           h('thead', {}, h('tr', {}, h('th'), h('th', { text: 'Стратегия' }), h('th', { text: 'Работала' }), h('th', { class: 'nowrap', text: 'Последний раз' }), h('th', { class: 'num', text: 'Время' }), h('th'))),
           h('tbody', {}, list.map((g) => h('tr', {},
