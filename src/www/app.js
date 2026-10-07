@@ -3594,12 +3594,12 @@ async function viewTests(main, r, bare = false) {
     const good = res.filter((x) => x.ok > 0 && x.ok === x.tries && x.tries >= Math.min(rep, x.tries)).sort((a, b) => (s.parallel ? (b.confirmed ? 1 : 0) - (a.confirmed ? 1 : 0) : 0) || b.ok - a.ok || a.ms - b.ms);
     const best = good[0];
     const baseline = s.baseline;
-    const rows = res.sort((a, b) => (b.ok / Math.max(1, b.tries)) - (a.ok / Math.max(1, a.tries)) || (a.ms ?? 1e9) - (b.ms ?? 1e9)).map((x) => {
+    const rows = res.sort((a, b) => (b.ok / Math.max(1, b.tries)) - (a.ok / Math.max(1, a.tries)) || (b.unsure ? 1 : 0) - (a.unsure ? 1 : 0) || (a.ms ?? 1e9) - (b.ms ?? 1e9)).map((x) => {
       const full = x.ok && x.ok === x.tries;
       return h('tr', {},
-        h('td', {}, levelIcon(full ? 'ok' : x.ok ? 'warning' : 'error')),
+        h('td', {}, levelIcon(full ? 'ok' : x.ok || x.unsure ? 'warning' : 'error')),
         h('td', {}, h('div', { text: x.name }), h('code', { class: 'sm muted', style: 'word-break:break-all', text: x.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') })),
-        h('td', { class: 'sm muted' }, x.from, x.hist ? h('div', { class: 'nowrap' }, chip('работала ' + fmtDate(x.hist), 'ok')) : null, x.confirmed ? h('div', { class: 'nowrap' }, chip('перепроверена', 'ok')) : null),
+        h('td', { class: 'sm muted' }, x.from, x.hist ? h('div', { class: 'nowrap' }, chip('работала ' + fmtDate(x.hist), 'ok')) : null, x.confirmed ? h('div', { class: 'nowrap' }, full ? chip('перепроверена', 'ok') : chip('в пачке открывала, по одной — нет')) : null),
         h('td', { class: 'sm', text: full ? `открылся ${x.ok} из ${x.ok}` : x.ok ? `${x.ok} из ${x.tries}` : x.reason || 'не открылся' }),
         h('td', { class: 'num', text: x.ms ? x.ms + ' мс' : '—' }),
         h('td', {}, x.ok || x.community ? h('div', { class: 'row', style: 'flex-wrap:nowrap;justify-content:flex-end' }, x.ok ? applyMenu(x, s) : null, full || x.community ? shareBtn(x, s) : null) : null));
@@ -3618,7 +3618,7 @@ async function viewTests(main, r, bare = false) {
       refinePanel(s, rep),
       s.failed && Object.keys(s.failed).length ? h('p', { class: 'sm muted' }, `Из каталога не помогли ${plural(Object.values(s.failed).reduce((a, b) => a + b, 0), 'стратегия', 'стратегии', 'стратегий')}: `
         + Object.entries(s.failed).sort((a, b) => b[1] - a[1]).map(([w, n]) => `${w} — ${n}`).join(', ') + '. В таблице — только то, что открыло сайт хоть раз.') : null,
-      s.parallel && !running ? h('p', { class: 'sm muted', text: 'Большой набор проверялся параллельно, по 15 стратегий сразу. Когда к одному сайту идёт много разных соединений одновременно, оборудование провайдера иногда путается, и такой итог может разойтись с проверкой по одной. Поэтому до 8 лучших находок перепроверены по одной (отметка «перепроверена») — применять лучше их.' }) : null,
+      s.parallel && !running ? h('p', { class: 'sm muted', text: 'Большой набор проверялся параллельно, по 15 стратегий сразу. Когда к одному сайту идёт много разных соединений одновременно, оборудование провайдера иногда путается, и такой итог может разойтись с проверкой по одной. Поэтому находки перепроверяются по одной, начиная с быстрых, пока не наберётся 8 подтверждённых (отметка «перепроверена»). Рабочими считаются только они; открывшие сайт лишь в пачке показаны в таблице, но применить их отсюда нельзя.' }) : null,
       panel(`Результаты для ${s.host}`, h('span', { class: 'sm muted num', text: `${res.length} стратегий · ${rep} повт.` + (s.finished ? ` · ${Math.round((s.finished - s.started))} с` : '') }),
         h('div', { class: 'scroll' }, h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, h('th'), h('th', { text: 'Стратегия' }), h('th', { text: 'Откуда' }), h('th', { text: 'Результат' }), h('th', { class: 'num', text: 'Время' }), h('th'))), h('tbody', {}, rows)))));
   }

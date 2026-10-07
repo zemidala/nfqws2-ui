@@ -3325,8 +3325,9 @@ function curlProbe(string $host, bool $http, string $path = '/'): array
 const PAR_SLOTS = 15;
 const PAR_MASK = '0x0f000000';
 const PAR_MIN = 24;       // меньше кандидатов — проверяем по одной, как раньше
-const PAR_CONFIRM = 8;    // сколько лучших находок перепроверить по одной: 15 соединений к одному сайту разом
+const PAR_CONFIRM = 8;    // сколько подтверждённых по одной находок набрать: 15 соединений к одному сайту разом
                           // иногда путают оборудование провайдера, и параллельный итог расходится с проверкой по одной
+const PAR_CONFIRM_TRIES = 24;   // и сколько всего перепроверок, если находки пачки не подтверждаются
 
 function parMark(int $k): string
 {
@@ -3616,6 +3617,16 @@ function testJob(): void
     }
     $status['community'] = $info;
   }
+  // Что нашла проба «Обрыв на 16 КБ»: в каталоге и стандартном наборе фейков с именем нет, а обрыв снимают только они
+  foreach ($http ? [] : freezeCandidates($job['host']) as $fc) {
+    $key = implode(' ', $fc['steps']);
+    if (isset($byKey[$key])) {
+      $cands[$byKey[$key]]['rank'] = min($cands[$byKey[$key]]['rank'] ?? 2, $fc['rank']);
+      continue;
+    }
+    $byKey[$key] = count($cands);
+    $cands[] = $fc;
+  }
   // Функции, которых нет в подключённых lua-скриптах, пропускаем
   $funcs = luaCatalog()['functions'];
   $cands = array_values(array_filter($cands, function ($c) use ($funcs) {
@@ -3688,15 +3699,32 @@ function testJob(): void
   if (!$auto && count($cands) > PAR_MIN) {
     // большой набор — параллельно, пачками по PAR_SLOTS; из каталога в результатах остаётся только то, что хоть раз открыло
     // сайт (иначе статус разрастается до мегабайта), остальное — счётчиком причин
-    testRules('queue', $iface, PAR_SLOTS);
     $status['parallel'] = PAR_SLOTS;
     $status['failed'] = [];
-    foreach (array_chunk($cands, PAR_SLOTS) as $chunk) {
+    // работавшее раньше, находки пробы обрыва и сообщества — по одной и первыми: их мало, и именно они вероятнее всего
+    // рабочие, а итог пачки ненадёжен (провайдер судит по адресу сайта в целом, соединения пачки влияют друг на друга:
+    // king.hr — 19 из 275 «открыли» сайт в пачке и ни одна по одной)
+    $solo = array_values(array_filter($cands, fn($c) => ($c['rank'] ?? 2) < 2));
+    $rest = array_values(array_filter($cands, fn($c) => ($c['rank'] ?? 2) >= 2));
+    foreach ($solo as $c) {
       if (is_file(TEST_DIR . '/stop')) {
         $status['state'] = 'stopped';
         break;
       }
-      $status['current'] = 'пачка ' . ((int)floor(($status['done'] - 1) / PAR_SLOTS) + 1) . ' из ' . (int)ceil(count($cands) / PAR_SLOTS) . ': ' . implode(', ', array_slice(array_column($chunk, 'name'), 0, 3)) . (count($chunk) > 3 ? '…' : '');
+      $status['current'] = $c['name'];
+      testSaveStatus($status);
+      $status['results'][] = $entry($c, $try($c['steps']));
+      $status['done']++;
+      testSaveStatus($status);
+    }
+    testRules('queue', $iface, PAR_SLOTS);
+    $chunks = $status['state'] === 'running' ? array_chunk($rest, PAR_SLOTS) : [];
+    foreach ($chunks as $n => $chunk) {
+      if (is_file(TEST_DIR . '/stop')) {
+        $status['state'] = 'stopped';
+        break;
+      }
+      $status['current'] = 'пачка ' . ($n + 1) . ' из ' . count($chunks) . ': ' . implode(', ', array_slice(array_column($chunk, 'name'), 0, 3)) . (count($chunk) > 3 ? '…' : '');
       testSaveStatus($status);
       foreach (parTry($chunk, $nfq, $baseArgs, $filter, $repeats, $job['host'], $http) as $k => $r) {
         $c = $chunk[$k];
@@ -3710,22 +3738,26 @@ function testJob(): void
       $status['done'] += count($chunk);
       testSaveStatus($status);
     }
-    // перепроверка: лучшие находки — по одной, как в обычном подборе; параллельный прогон мог и ошибиться
+    // перепроверка по одной, как в обычном подборе: итог пачки может и ошибаться. Идём от быстрых, пока не наберётся
+    // PAR_CONFIRM подтверждённых (или не кончатся попытки); что открывало сайт только в пачке — рабочим не считается
     testRules('queue', $iface);
-    $best = array_keys(array_filter($status['results'], fn($r) => $r['ok'] >= $repeats));
+    $best = array_keys(array_filter($status['results'], fn($r) => !empty($r['par']) && $r['ok'] >= $repeats));
     usort($best, fn($a, $b) => ($status['results'][$a]['ms'] ?? PHP_INT_MAX) <=> ($status['results'][$b]['ms'] ?? PHP_INT_MAX));
-    if ($best && $status['state'] === 'running') {
-      $status['phase'] = 'confirm';
-      foreach (array_slice($best, 0, PAR_CONFIRM) as $i) {
-        if (is_file(TEST_DIR . '/stop')) {
-          break;
-        }
-        $status['current'] = 'перепроверка: ' . $status['results'][$i]['name'];
+    $good = 0;
+    foreach ($best as $n => $i) {
+      $r = &$status['results'][$i];
+      if ($status['state'] === 'running' && $good < PAR_CONFIRM && $n < PAR_CONFIRM_TRIES && !is_file(TEST_DIR . '/stop')) {
+        $status['phase'] = 'confirm';
+        $status['current'] = 'перепроверка: ' . $r['name'];
         testSaveStatus($status);
-        $status['results'][$i] = array_merge($status['results'][$i], $try($status['results'][$i]['steps']), ['confirmed' => true]);
+        $r = array_merge($r, ['par_ok' => $r['ok']], $try($r['steps']), ['confirmed' => true]);
+        $good += $r['ok'] === $repeats ? 1 : 0;
+      } else {
+        $r = array_merge($r, ['par_ok' => $r['ok'], 'ok' => 0, 'ms' => null, 'unsure' => true, 'reason' => 'открыла в пачке, по одной не проверялась']);
       }
-      $status['phase'] = 'pick';
+      unset($r);
     }
+    $status['phase'] = 'pick';
   } else {
     foreach ($cands as $c) {
       if (is_file(TEST_DIR . '/stop')) {
@@ -3892,6 +3924,29 @@ function freezeJob(array $job, array &$status, ?array &$nfq, string $iface, arra
   $status['current'] = null;
   testSaveStatus($status);
   @file_put_contents(FREEZE_FILE, json_encode(array_intersect_key($status, array_flip(['state', 'started', 'finished', 'nets'])), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+}
+
+// Находки последней пробы для подбора: сначала найденное в сети этого сайта, затем в остальных сетях
+function freezeCandidates(string $host): array
+{
+  $f = json_decode((string)@file_get_contents(FREEZE_FILE), true);
+  $nets = array_filter($f['nets'] ?? [], fn($n) => !empty($n['found']['steps']));
+  if (!$nets) {
+    return [];
+  }
+  $asn = hostAsn($host);
+  $out = [];
+  foreach ($nets as $n) {
+    $same = $asn && ($n['asn'] ?? null) === $asn;
+    $key = implode(' ', $n['found']['steps']);
+    if (isset($out[$key]) && !$same) {
+      continue;
+    }
+    $out[$key] = ['name' => strategyName($n['found']['steps']) . ' · ' . $n['found']['name'], 'steps' => $n['found']['steps'], 'rank' => 1, 'same' => $same ? 1 : 0,
+      'from' => 'проба обрыва: ' . ($same ? "сеть сайта AS$asn" : 'помогло в сети ' . $n['label'])];
+  }
+  usort($out, fn($a, $b) => $b['same'] <=> $a['same']);
+  return array_map(fn($c) => array_diff_key($c, ['same' => 1]), $out);
 }
 
 // ----- история подборов: что и когда работало для каждого сайта -----
