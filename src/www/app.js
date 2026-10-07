@@ -38,6 +38,7 @@ const ICONS = {
   download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
   upload: '<path d="M12 20V9M7 14l5-5 5 5M5 4h14"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/>',
+  share: '<path d="M12 15V3M7 8l5-5 5 5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/>',
   pin: '<path d="M9 4h6l-1 6 4 4H6l4-4z"/><path d="M12 14v7"/>',
   undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
   power: '<path d="M12 3v8"/><path d="M7 6.3a8 8 0 1 0 10 0"/>',
@@ -315,23 +316,23 @@ const PAGES = {
   backup: ['#/settings/backup', 'Резервные копии'], hist: ['#/settings/hist', 'История изменений'], log: ['#/log', 'Журнал'],
   look: ['#/settings/look', 'Оформление'], about: ['#/settings/about', 'О программе'],
   // ещё не сделаны: в меню видны, но заблокированы и помечены «скоро»
-  diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], auto: ['#/tests/auto', 'Автоподбор'], asn: ['#/asn', 'Список по ASN'], report: ['#/settings/report', 'Отчёт для помощи'],
+  diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], comm: ['#/tests/community', 'Стратегии сообщества'], auto: ['#/tests/auto', 'Автоподбор'], asn: ['#/asn', 'Список по ASN'], report: ['#/settings/report', 'Отчёт для помощи'],
 };
-const NEW_PAGES = ['diag', 'phist', 'auto', 'asn', 'report'];   // только что появились — помечаются в меню (в упрощённом виде — нет)
+const NEW_PAGES = ['diag', 'phist', 'auto', 'asn', 'report', 'comm'];   // только что появились — помечаются в меню (в упрощённом виде — нет)
 const SOON_HINT = 'Ещё в разработке — появится в одной из следующих версий';
 const SYS_PAGES = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 const SYS_NAV = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 // Компоновка «Боковое меню»: группы и их страницы
-const MENU = [[null, ['over']], ['Проверка сайта', ['diag', 'pick', 'trace', 'phist']], ['Наблюдение', ['mon', 'auto', 'tg']], ['Обход', ['prof', 'lists', 'asn']], ['Система', SYS_NAV]];
+const MENU = [[null, ['over']], ['Проверка сайта', ['diag', 'pick', 'trace', 'phist', 'comm']], ['Наблюдение', ['mon', 'auto', 'tg']], ['Обход', ['prof', 'lists', 'asn']], ['Система', SYS_NAV]];
 // Упрощённый вид (галочка в «Оформлении»): шесть разделов, страницы раздела — вкладками над страницей (как в TOP_TABS)
-const MENU_SIMPLE = [['over', 'Обзор', 'home', ['over']], ['pick', 'Проверка сайта', 'tests', ['diag', 'pick', 'trace', 'phist', 'site']], ['mon', 'Наблюдение', 'pulse', ['mon', 'auto', 'tg']],
+const MENU_SIMPLE = [['over', 'Обзор', 'home', ['over']], ['pick', 'Проверка сайта', 'tests', ['diag', 'pick', 'trace', 'phist', 'comm', 'site']], ['mon', 'Наблюдение', 'pulse', ['mon', 'auto', 'tg']],
   ['prof', 'Профили', 'layers', ['prof']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]];
 // Верхние вкладки компоновок: страница по клику, подпись, значок, страницы вкладки, «только на узком экране»
 const TOP_TABS = {
   menu: [],
-  tabs: [['over', 'Обзор', 'home', ['over'], true], ['pick', 'Проверка', 'tests', ['diag', 'pick', 'trace', 'phist', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'auto', 'tg']],
+  tabs: [['over', 'Обзор', 'home', ['over'], true], ['pick', 'Проверка', 'tests', ['diag', 'pick', 'trace', 'phist', 'comm', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'auto', 'tg']],
     ['prof', 'Профили', 'layers', ['prof']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
-  site: [['over', 'Обзор', 'home', ['over']], ['mon', 'Сайты', 'pulse', ['mon', 'diag', 'pick', 'trace', 'phist', 'auto', 'tg', 'site']],
+  site: [['over', 'Обзор', 'home', ['over']], ['mon', 'Сайты', 'pulse', ['mon', 'diag', 'pick', 'trace', 'phist', 'comm', 'auto', 'tg', 'site']],
     ['prof', 'Профили', 'layers', ['prof']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
 };
 // Нижняя панель телефона — одна для всех компоновок; остальное — в меню
@@ -355,7 +356,7 @@ function pageOf(r = parseRoute()) {
   if (r.tab === 'site') return 'site';
   if (r.tab === 'diag') return 'diag';
   if (r.tab === 'asn') return 'asn';
-  if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace', history: 'phist', auto: 'auto' }[r.arg] || 'pick';
+  if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace', history: 'phist', community: 'comm', auto: 'auto' }[r.arg] || 'pick';
   if (r.tab === 'settings') return SYS_PAGES.includes(r.arg) ? r.arg : ['readme', 'changelog'].includes(r.arg) ? 'about' : 'prof';
   return 'over';
 }
@@ -637,7 +638,7 @@ async function service(action) {
   toast(names[action] + '…');
   const r = await guarded(() => api('service', { action }));
   if (!r) return;
-  if (!r.ok) modal('Не получилось: ' + action, h('div', { class: 'stack' }, h('p', { class: 'sm muted', text: 'Вот что ответил скрипт запуска:' }), h('pre', { class: 'box', text: r.output || 'без вывода' })));
+  if (!r.ok) modal('Не получилось: ' + action, h('div', { class: 'stack modal-b' }, h('p', { class: 'sm muted', text: 'Вот что ответил скрипт запуска:' }), h('pre', { class: 'box', text: r.output || 'без вывода' })));
   await loadState().catch(() => {});
   if (r.ok) toast(S.state?.running ? 'nfqws2 работает' : 'nfqws2 остановлен');
   route();
@@ -751,7 +752,7 @@ function placeSide() {
 // Колонка состояния справа — на страницах-формах, проверках и таблицах, когда для неё хватает ширины
 // (показывает CSS по ширине области содержимого). Во «Вкладках» не нужна: обзор и так слева.
 // Списки, профили, конфиг, журнал и мониторинг отдают всю ширину своему содержимому, «Обзор» — карточкам.
-const RAIL_PAGES = ['diag', 'pick', 'trace', 'phist', 'auto', 'tg', 'asn', 'basic', 'base', 'backup', 'hist', 'report', 'look', 'about', 'site'];
+const RAIL_PAGES = ['diag', 'pick', 'trace', 'phist', 'comm', 'auto', 'tg', 'asn', 'basic', 'base', 'backup', 'hist', 'report', 'look', 'about', 'site'];
 function placeRail(main, page) {
   main.classList.toggle('formy', RAIL_PAGES.includes(page));   // строки форм на широком экране — подсказки справа от поля
   if (!isWide() || overviewCol() || !RAIL_PAGES.includes(page)) return;
@@ -2237,7 +2238,7 @@ function shareProfile(index, args) {
   prov.addEventListener('input', draw);
   const keep = () => { if (prov.value.trim() !== (st.ui.provider || '')) api('provider_set', { provider: prov.value.trim() }).then((r) => { st.ui.provider = r.provider; }).catch(() => {}); };
   draw();
-  modal(`Профиль #${index} — для чата`, h('div', { class: 'stack' },
+  modal(`Профиль #${index} — для чата`, h('div', { class: 'stack modal-b' },
     h('div', { class: 'row' }, h('span', { class: 'sm muted', text: 'Провайдер' }), prov,
       btn('Определить', async () => { const r = await guarded(() => api('provider_detect')); if (r) { prov.value = r.provider; draw(); keep(); } }, 'small', 'search', { title: 'Роутер спросит у RIPEstat, чьей сети принадлежит ваш внешний адрес. Сам адрес в текст не попадает.' })),
     ta, h('p', { class: 'sm faint', text: 'В тексте только параметры профиля и подпись. Пути к спискам остаются как у вас — получателю их поправит «Вставить чужой».' })),
@@ -2287,7 +2288,7 @@ function pasteProfile() {
     await safeRestart();
     go('#/settings/p1');
   };
-  const bg = modal('Вставить чужой профиль', h('div', { class: 'stack' },
+  const bg = modal('Вставить чужой профиль', h('div', { class: 'stack modal-b' },
     h('p', { class: 'sm muted', text: 'Вставьте текст профиля из чата как есть — подписи, кавычки и переносы уберутся сами. Останутся только параметры, которые знает nfqws2 на этом роутере.' }),
     ta, h('div', { class: 'row' }, btn('Разобрать и проверить', check, 'primary small')), out));
 }
@@ -3447,6 +3448,7 @@ async function viewTests(main, r, bare = false) {
   clearInterval(testPoll);
   if (r.arg === 'history') return viewPickHist(main, r);
   if (r.arg === 'auto') return viewAuto(main);
+  if (r.arg === 'community') return viewCommunity(main);
   const tab = ['trace', 'monitor', 'notify'].includes(r.arg) ? r.arg : 'pick';
   if (tab === 'monitor') {
     main.append(h('div', { class: 'vh' }, h('h1', { text: layout() === 'site' ? 'Сайты' : 'Мониторинг' })));
@@ -3460,6 +3462,7 @@ async function viewTests(main, r, bare = false) {
   const setCfg = h('input', { type: 'checkbox', id: 't-cfg', checked: true });
   const setStd = h('input', { type: 'checkbox', id: 't-std', checked: true });
   const setHist = h('input', { type: 'checkbox', id: 't-hist', checked: true });
+  const setComm = h('input', { type: 'checkbox', id: 't-comm', checked: true });
   const repeats = h('select', { class: 'select', 'aria-label': 'Повторов' }, [1, 2, 3, 5].map((n) => h('option', { value: n, text: plural(n, 'повтор', 'повтора', 'повторов'), selected: n === 3 })));
   const refine = h('input', { type: 'checkbox', id: 't-refine' });
   const out = h('div', { class: 'stack', style: 'gap:14px' });
@@ -3470,7 +3473,7 @@ async function viewTests(main, r, bare = false) {
 
   async function start() {
     const cmd = tab === 'trace' ? 'trace_start' : 'test_start';
-    const sets = [setCfg.checked && 'config', setStd.checked && 'std', setHist.checked && 'hist', setHist.checked && 'other'].filter(Boolean);
+    const sets = [setCfg.checked && 'config', setStd.checked && 'std', setHist.checked && 'hist', setHist.checked && 'other', setComm.checked && 'community'].filter(Boolean);
     if (tab !== 'trace' && !sets.length) { toast('Выберите, что пробовать', { err: true }); return; }
     if (!await guarded(() => api(cmd, { host: host.value, proto: proto.value, sets, repeats: Number(repeats.value), refine: refine.checked }))) return;
     poll();
@@ -3525,7 +3528,7 @@ async function viewTests(main, r, bare = false) {
         h('td', { class: 'sm muted' }, x.from, x.hist ? h('div', { class: 'nowrap' }, chip('работала ' + fmtDate(x.hist), 'ok')) : null),
         h('td', { class: 'sm', text: full ? `открылся ${x.ok} из ${x.ok}` : x.ok ? `${x.ok} из ${x.tries}` : x.reason || 'не открылся' }),
         h('td', { class: 'num', text: x.ms ? x.ms + ' мс' : '—' }),
-        h('td', {}, x.ok ? applyMenu(x, s) : null));
+        h('td', {}, x.ok ? h('div', { class: 'row', style: 'flex-wrap:nowrap;justify-content:flex-end' }, applyMenu(x, s), full ? shareBtn(x, s) : null) : null));
     });
     return h('div', { class: 'stack', style: 'gap:14px' },
       flow(s, running, res, best),
@@ -3535,7 +3538,8 @@ async function viewTests(main, r, bare = false) {
       !running && best ? h('div', { class: 'notice ok' }, icon('ok'), h('div', { class: 'grow' },
         h('b', { text: `Работают ${good.length} из ${res.length}. Быстрее всех — ${best.name}, ${best.ms} мс.` }),
         h('div', { class: 't', text: best.from }), h('code', { class: 'sm', style: 'word-break:break-all', text: best.steps.join(' ') })),
-        h('div', { class: 'notice-actions' }, applyMenu(best, s, 'primary'), btn('Скопировать', () => copyText(best.steps.join('\n')), 'small', 'copy'))) : null,
+        h('div', { class: 'notice-actions' }, applyMenu(best, s, 'primary'), btn('Скопировать', () => copyText(best.steps.join('\n')), 'small', 'copy'), shareBtn(best, s, true))) : null,
+      communityNote(s),
       !running && !best && res.length ? notice('bad', 'Ни одна стратегия не помогла', isFreeze(baseline?.reason) ? FREEZE_HINT : 'Попробуйте больше повторов, протокол HTTP или другой сайт. Если без обхода соединение не устанавливается вовсе — возможно, заблокирован IP, тогда nfqws2 не поможет.') : null,
       refinePanel(s, rep),
       panel(`Результаты для ${s.host}`, h('span', { class: 'sm muted num', text: `${res.length} стратегий · ${rep} повт.` + (s.finished ? ` · ${Math.round((s.finished - s.started))} с` : '') }),
@@ -3741,7 +3745,8 @@ async function viewTests(main, r, bare = false) {
       tab === 'pick' ? [
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Что пробовать' }), h('div', { class: 'row' },
           h('label', { class: 'row' }, setCfg, 'стратегии из вашего конфига'), h('label', { class: 'row' }, setStd, 'стандартный набор'),
-          h('label', { class: 'row', title: 'Стратегии из истории подборов: сначала работавшие для этого сайта, затем до пяти помогавших другим сайтам' }, setHist, 'что работало раньше'))),
+          h('label', { class: 'row', title: 'Стратегии из истории подборов: сначала работавшие для этого сайта, затем до пяти помогавших другим сайтам' }, setHist, 'что работало раньше'),
+          h('label', { class: 'row', title: 'До восьми стратегий, которые сработали у абонентов вашего провайдера (база на GitHub, раз в сутки). Сначала — открывавшие этот сайт или его сеть.' }, setComm, 'стратегии сообщества'))),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Повторов' }), h('div', { class: 'row' }, repeats, h('span', { class: 'sm muted', text: 'Стратегия засчитывается, если сайт открылся каждый раз.' }))),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Уточнение' }), h('div', { class: 'stack', style: 'gap:2px' },
           h('label', { class: 'row' }, refine, 'искать вариант полегче, даже если рабочая стратегия найдена'),
@@ -3754,6 +3759,122 @@ async function viewTests(main, r, bare = false) {
       h('tbody', {}, hist.items.slice(0, 5).map((x) => h('tr', {}, h('td', { class: 'date', text: fmtDate(x.ts) }), h('td', { class: 'mono' }, h('a', { href: pickHistHref(x.host), text: x.host })),
         h('td', { text: x.baseline?.ok ? 'открывается' : x.baseline?.reason || '—' }), h('td', { class: 'num', text: `${x.ok} из ${x.total}` }), h('td', { class: 'mono sm', text: x.best || '—' }))))))) : null);
   poll();
+}
+
+// ============ Стратегии сообщества: что сработало у абонентов того же провайдера ============
+// База — отдельный репозиторий на GitHub. Поделиться — заполненная форма issue (токен на роутере не нужен);
+// присланное проверяет GitHub Action. Из базы ничего не применяется без проверки подбором на этом роутере.
+
+// «Поделиться» у стратегии, открывшей сайт каждый раз; у взятой из базы — «Подтвердить»
+function shareBtn(x, s, labelled = false) {
+  const conf = !!x.community;
+  const title = conf ? 'Стратегия из базы сообщества сработала и у вас — подтвердите, это поднимет её для других' : 'Отправить стратегию в базу сообщества: её будут пробовать абоненты вашего провайдера';
+  return btn(labelled || conf ? (conf ? 'Подтвердить' : 'Поделиться') : '', () => shareStrategy(x, s), 'small' + (labelled || conf ? '' : ' ghost'), conf ? 'ok' : 'share', { title, 'aria-label': conf ? 'Подтвердить' : 'Поделиться' });
+}
+
+// Что подбор взял из базы сообщества — одна строка под результатами
+function communityNote(s) {
+  const c = s.community;
+  if (!c || (s.state && ['running', 'starting'].includes(s.state))) return null;
+  if (c.error) return h('p', { class: 'sm muted' }, 'Стратегии сообщества не проверялись: ' + c.error + '. ', h('a', { href: PAGES.comm[0], text: 'Подробнее' }));
+  if (!c.count) return h('p', { class: 'sm muted' }, `Для вашего провайдера (AS${c.asn}) в базе сообщества стратегий пока нет. `, h('a', { href: PAGES.comm[0], text: 'Как поделиться своей' }));
+  return null;
+}
+
+// Окно «Поделиться»: что уйдёт в публичный issue — видно целиком; отправляет сам человек на GitHub
+async function shareStrategy(x, s) {
+  const proto = s.proto === 'http' ? 'http' : 'tls';
+  const body = h('div', { class: 'stack modal-b' }, spinner('Определяю провайдера и сеть сайта…'));
+  const send = btn('Открыть форму на GitHub', null, 'primary', 'share', { disabled: true });
+  const bg = modal(x.community ? 'Подтвердить стратегию' : 'Поделиться стратегией', body, send);
+  const info = await api('share_info', { host: s.host }).catch((e) => ({ error: e.message }));
+  const asn = h('input', { class: 'input mono', value: info.asn || '', placeholder: '12389', style: 'max-width:120px', 'aria-label': 'AS провайдера' });
+  const prov = h('input', { class: 'input grow', value: info.provider || '', placeholder: 'название провайдера', 'aria-label': 'Провайдер' });
+  const withHost = h('input', { type: 'checkbox', checked: true });
+  const pre = h('pre', { class: 'box', style: 'white-space:pre-wrap;word-break:break-all' });
+  const result = `${x.ok}/${x.ok}`;
+  const fields = () => ({
+    asn: asn.value.trim().replace(/^AS/i, ''), provider: prov.value.trim(), proto, target_host: withHost.checked ? s.host : '',
+    target_asn: info.target_asn ? String(info.target_asn) : '', strategy: x.steps.join('\n'), result, nfqws2: info.nfqws2 || '', ui: info.ui || '',
+  });
+  const draw = () => {
+    const f = fields();
+    pre.textContent = [`AS провайдера: ${f.asn || '—'}${f.provider ? ' · ' + f.provider : ''}`, `Протокол: ${proto}`,
+      `Сайт: ${f.target_host || 'не указан'}${f.target_asn ? ' · сеть AS' + f.target_asn : ''}`, `Результат: открылся ${x.ok} из ${x.ok}`, '', f.strategy].join('\n');
+    send.disabled = !/^\d{1,10}$/.test(f.asn);
+  };
+  [asn, prov].forEach((e) => e.addEventListener('input', draw));
+  withHost.addEventListener('change', draw);
+  send.onclick = () => {
+    const f = fields();
+    // AS и название провайдера запоминаем: в следующий раз и в подборе они уже будут
+    if (f.asn !== String(info.asn || '') || f.provider !== (info.provider || '')) api('provider_set', { provider: f.provider, asn: f.asn }).then((r) => { if (S.state?.ui) S.state.ui.provider = r.provider; }).catch(() => {});
+    const q = new URLSearchParams({ template: 'strategy.yml', title: `${x.community ? 'Подтверждаю' : 'AS' + f.asn} · ${proto} · ${strategyLabel(x)}`, ...f });
+    window.open(`${info.repo}/issues/new?${q}`, '_blank', 'noopener');
+    bg.close();
+  };
+  body.replaceChildren(
+    info.error ? notice('warn', 'Не всё удалось определить', info.error) : null,
+    h('div', { class: 'row' }, h('span', { class: 'sm muted', text: 'Провайдер' }), asn, prov),
+    !info.asn ? h('p', { class: 'sm muted', text: 'Номер AS провайдера определить не удалось — впишите его (узнать можно на bgp.he.net по своему адресу).' }) : null,
+    h('label', { class: 'row' }, withHost, `указать сайт ${s.host}`),
+    pre,
+    h('p', { class: 'sm faint' }, 'Откроется форма в ', h('a', { href: info.repo || '#', target: '_blank', rel: 'noopener', text: 'базе стратегий' }),
+      ' на GitHub, уже заполненная, — проверьте и нажмите Create (нужен аккаунт GitHub). Issue публичный: в нём только то, что выше. Ваш IP-адрес не отправляется. ',
+      x.community ? 'Подтверждение поднимает стратегию для других абонентов вашего провайдера.' : 'Стратегию проверит GitHub Action и добавит в базу; nfqws2-ui у абонентов вашего провайдера будет пробовать её при подборе.'));
+  draw();
+}
+
+const strategyLabel = (x) => x.name || x.steps.map((t) => t.replace('--lua-desync=', '').split(':')[0]).join(' + ');
+
+async function viewCommunity(main) {
+  const site = h('input', { class: 'input mono grow', placeholder: 'сайт для проверки, например rutracker.org', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Сайт для проверки', style: 'max-width:320px' });
+  const body = h('div', { class: 'stack', style: 'gap:14px' }, spinner('Загружаю базу стратегий…'));
+  main.append(h('div', { class: 'vh' }, h('h1', { text: 'Стратегии сообщества' })), body);
+  const host = () => site.value.trim().replace(/^[a-z]+:\/\//i, '').replace(/[/?#].*$/, '');
+  // проверка — обычным подбором, только по выбранному: отдельный nfqws2, трафик не затрагивается
+  const test = async (steps, h0) => {
+    const hh = host() || h0;
+    if (!hh) { toast('Укажите сайт для проверки', { err: true }); site.focus(); return; }
+    if (!await guarded(() => api('test_start', steps ? { host: hh, sets: [], steps, repeats: 3 } : { host: hh, sets: ['community'], repeats: 3 }))) return;
+    go(pickHref(hh));
+  };
+  const load = async (opts = {}) => {
+    const d = await api('community_get', opts).catch((e) => ({ error: e.message, items: [] }));
+    const http = d.items.filter((x) => x.proto === 'http');
+    const tls = d.items.filter((x) => x.proto === 'tls');
+    const table = (items) => h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
+      h('thead', {}, h('tr', {}, h('th', { text: 'Стратегия' }), h('th', { class: 'wide', text: 'Где работала' }), h('th', { class: 'num', text: 'Подтвердили' }), h('th', { class: 'nowrap', text: 'Последний раз' }), h('th'))),
+      h('tbody', {}, items.map((x) => h('tr', {},
+        h('td', { style: 'min-width:220px' }, h('div', { text: x.name }), h('code', { class: 'sm muted', style: 'word-break:break-all', text: x.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') })),
+        h('td', { class: 'sm' }, x.targets.length ? x.targets.slice(0, 6).map((t) => h('div', { class: 'mono', text: [t.host, t.asn ? 'AS' + t.asn : null].filter(Boolean).join(' · ') })) : h('span', { class: 'muted', text: 'сайт не указан' }),
+          x.targets.length > 6 ? h('div', { class: 'muted', text: `и ещё ${x.targets.length - 6}` }) : null),
+        h('td', { class: 'num', text: x.reports }),
+        h('td', { class: 'date', text: x.last || '—' }),
+        h('td', {}, h('div', { class: 'row', style: 'flex-wrap:nowrap;justify-content:flex-end' },
+          btn('Проверить', () => test(x.steps, x.targets.find((t) => t.host)?.host), 'small', 'play', { title: 'Прогнать эту стратегию на сайте из поля выше (или на сайте, где она работала)' }),
+          btn('', () => copyText(x.steps.join('\n')), 'small ghost', 'copy', { title: 'Скопировать', 'aria-label': 'Скопировать' }))))))));
+    const head = !d.asn
+      ? notice('warn', 'Провайдер не определён', 'Стратегии в базе разложены по провайдерам (номер AS). Роутер может узнать его у RIPEstat по вашему внешнему адресу — сам адрес никуда не сохраняется.',
+        btn('Определить', () => load({ detect: true }), 'small', 'search'))
+      : h('div', { class: 'row' }, h('b', { text: `AS${d.asn}` }), d.provider ? h('span', { class: 'muted', text: d.provider }) : null, h('span', { class: 'grow' }),
+        h('span', { class: 'sm muted', text: d.fetched ? 'база загружена ' + fmtDate(d.fetched) : '' }),
+        btn('Обновить', () => load({ force: true }), 'small', 'refresh'));
+    body.replaceChildren(
+      panel(null, null, head,
+        d.error ? notice('warn', 'База не загрузилась', d.error + ' — попробуйте позже.') : null,
+        d.asn && !d.error ? h('div', { class: 'row' }, site, btn('Проверить все на сайте', () => test(null), d.items.length ? 'primary' : '', 'play', { disabled: !d.items.length }),
+          h('span', { class: 'sm muted grow note-wide', text: 'Подбор только по стратегиям из базы — до восьми, сначала открывавшие этот сайт или его сеть. Ваш трафик не затрагивается.' })) : null),
+      d.asn && !d.error && !d.items.length ? panel(null, null, h('p', { class: 'muted', text: `Для AS${d.asn} в базе пока ничего нет (всего в базе ${plural(d.total || 0, 'стратегия', 'стратегии', 'стратегий')}). Станьте первым: после удачного подбора нажмите «Поделиться».` })) : null,
+      tls.length ? panel('HTTPS (TLS)', h('span', { class: 'sm muted num', text: plural(tls.length, 'стратегия', 'стратегии', 'стратегий') }), table(tls)) : null,
+      http.length ? panel('HTTP', h('span', { class: 'sm muted num', text: plural(http.length, 'стратегия', 'стратегии', 'стратегий') }), table(http)) : null,
+      panel('Как это устроено', null, h('ul', { class: 'sm', style: 'margin:0;padding-left:18px;display:grid;gap:4px' },
+        h('li', { text: 'DPI у провайдеров разный, поэтому стратегии собраны по номеру AS провайдера: здесь только те, что сработали у абонентов вашего.' }),
+        h('li', { text: 'Подбор пробует их вместе с остальными (галочка «стратегии сообщества») — и автоподбор при поломке тоже. Применяется только то, что открыло сайт на вашем роутере.' }),
+        h('li', { text: 'Поделиться: после подбора у стратегии, открывшей сайт каждый раз, — кнопка «Поделиться» (в результатах и в «Истории подборов»). У стратегии из базы, которая сработала и у вас, — «Подтвердить».' }),
+        h('li', {}, 'База — открытый репозиторий ', h('a', { href: d.repo, target: '_blank', rel: 'noopener', text: 'zemidala/nfqws2-strategies' }), '. Присланное проверяет GitHub Action: принимаются только шаги --lua-desync без путей к файлам.'))));
+  };
+  await load();
 }
 
 // ============ История подборов: что и когда работало для каждого сайта ============
@@ -3820,7 +3941,7 @@ async function viewPickHistSite(main, host, bare) {
       if (!strat.has(key)) strat.set(key, { name: x.name, steps: x.steps, seen: 0, full: 0, last: null, ms: null, refined: x.refined });
       const g = strat.get(key);
       g.seen++;
-      if (x.ok >= (e.repeats || 1)) { g.full++; if (!g.last) { g.last = e.ts; g.ms = x.ms; } }
+      if (x.ok >= (e.repeats || 1)) { g.full++; if (!g.last) { g.last = e.ts; g.ms = x.ms; g.rep = x.ok; } }
     }
   }
   const list = [...strat.values()].sort((a, b) => (b.last || 0) - (a.last || 0) || b.full - a.full);
@@ -3844,7 +3965,7 @@ async function viewPickHistSite(main, host, bare) {
             h('td', { class: 'sm nowrap', text: g.full ? `в ${g.full} из ${plural(g.seen, 'запуска', 'запусков', 'запусков')}` : 'открывала не каждый раз' }),
             h('td', { class: 'date', text: g.last ? fmtDate(g.last) : '—' }),
             h('td', { class: 'num nowrap', text: g.ms ? g.ms + ' мс' : '—' }),
-            h('td', {}, btn('Скопировать', () => copyText(g.steps.join('\n')), 'small', 'copy'))))))) : h('p', { class: 'muted', text: 'Ни одна стратегия этот сайт пока не открыла.' })),
+            h('td', {}, h('div', { class: 'row', style: 'flex-wrap:nowrap;justify-content:flex-end' }, g.full ? shareBtn({ steps: g.steps, ok: g.rep, name: g.name }, { host, proto }) : null, btn('Скопировать', () => copyText(g.steps.join('\n')), 'small', 'copy')))))))) : h('p', { class: 'muted', text: 'Ни одна стратегия этот сайт пока не открыла.' })),
       panel('Запуски', h('span', { class: 'sm muted num', text: String(runs.length) }),
         h('div', { class: 'stack', style: 'gap:6px' }, runs.map((e) => h('details', { class: 'prun' },
           h('summary', {}, levelIcon(e.baseline?.ok ? 'info' : e.best ? 'ok' : 'error'), h('span', { class: 'date', text: fmtDate(e.ts) }), e.auto ? chip('авто') : null,

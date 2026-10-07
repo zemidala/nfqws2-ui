@@ -166,6 +166,7 @@ function uiSettings(): array
     'notify' => ['tg_token' => '', 'tg_chat' => '', 'via' => '', 'iface' => '', 'proxy' => ''],
     'auto' => ['enabled' => false, 'apply' => false, 'fails' => 2, 'pause' => 12],
     'provider' => '',
+    'provider_asn' => 0,   // номер AS провайдера: по нему берутся стратегии сообщества
     'asn' => [],
     'subs' => [],
   ];
@@ -3357,6 +3358,20 @@ function testJob(): void
     $byKey[$key] = count($cands);
     $cands[] = $hc;
   }
+  // Что сработало у абонентов того же провайдера; совпавшее с уже взятым — только отметка
+  if (in_array('community', $job['sets'], true)) {
+    foreach (communityCandidates($job['host'], $status['proto'], $info) as $cc) {
+      $key = implode(' ', $cc['steps']);
+      if (isset($byKey[$key])) {
+        $cands[$byKey[$key]]['community'] = $cc['community'];
+        $cands[$byKey[$key]]['rank'] = min($cands[$byKey[$key]]['rank'] ?? 2, $cc['rank']);
+        continue;
+      }
+      $byKey[$key] = count($cands);
+      $cands[] = $cc;
+    }
+    $status['community'] = $info;
+  }
   // Функции, которых нет в подключённых lua-скриптах, пропускаем
   $funcs = luaCatalog()['functions'];
   $cands = array_values(array_filter($cands, function ($c) use ($funcs) {
@@ -3370,7 +3385,10 @@ function testJob(): void
   if (!$cands) {
     $status['state'] = 'error';
     $status['title'] = 'Подбор не запущен';
-    $status['error'] = $own && count($job['sets']) === 1 ? 'В истории нет стратегий, которые работали для этого сайта. Запустите обычный подбор.' : 'Нет ни одной стратегии для проверки.';
+    $status['error'] = $own && count($job['sets']) === 1 ? 'В истории нет стратегий, которые работали для этого сайта. Запустите обычный подбор.'
+      : ($job['sets'] === ['community'] ? 'Стратегий сообщества для вашего провайдера нет'
+        . (!empty($status['community']['error']) ? ': ' . $status['community']['error'] : (!empty($status['community']['asn']) ? ' (AS' . $status['community']['asn'] . ')' : '')) . '. Запустите обычный подбор.'
+      : 'Нет ни одной стратегии для проверки.');
     testSaveStatus($status);
     return;
   }
@@ -3429,7 +3447,7 @@ function testJob(): void
     $status['current'] = $c['name'];
     testSaveStatus($status);
     $status['results'][] = ['name' => $c['name'], 'from' => $c['from'], 'steps' => $c['steps'], 'profile' => array_merge($filter, $c['steps'])]
-      + (isset($c['hist']) ? ['hist' => $c['hist']] : []) + $try($c['steps']);
+      + (isset($c['hist']) ? ['hist' => $c['hist']] : []) + (isset($c['community']) ? ['community' => $c['community']] : []) + $try($c['steps']);
     $status['done']++;
     testSaveStatus($status);
     if ($auto && end($status['results'])['ok'] === $repeats) {
@@ -3523,6 +3541,124 @@ function picksCandidates(string $host, string $proto, bool $own, bool $other): a
   }
   $rest = array_slice(array_diff_key($rest, $mine), 0, PICKS_OTHER);
   return array_merge($own ? array_values($mine) : [], $other ? array_values($rest) : []);
+}
+
+// ----- стратегии сообщества: что сработало у абонентов того же провайдера -----
+// База — strategies.json в отдельном репозитории; пополняется формой issue (кнопка «Поделиться»),
+// присланное проверяет GitHub Action. Здесь база только читается, и всё из неё сначала проверяется подбором.
+
+const COMMUNITY_REPO = 'https://github.com/zemidala/nfqws2-strategies';
+const COMMUNITY_URL = 'https://raw.githubusercontent.com/zemidala/nfqws2-strategies/main/strategies.json';
+const COMMUNITY_FILE = '/tmp/nfqws-ui-community.json';   // в памяти: база скачивается заново после перезагрузки
+const COMMUNITY_MAX = 8;   // сколько стратегий сообщества пробовать в одном подборе
+// шаг — только --lua-desync без путей и блобов из файлов; то же проверяет и приём в репозитории
+const COMMUNITY_STEP = '/^--lua-desync=[a-z][a-z0-9_]{0,40}(:[A-Za-z0-9_.,=+%-]{1,200}){0,40}$/';
+
+// База: удачный ответ помним сутки, неудачу — 10 минут (как проверку обновлений)
+function communityLoad(bool $force = false): array
+{
+  $c = json_decode((string)@file_get_contents(COMMUNITY_FILE), true);
+  $c = is_array($c) ? $c + ['fetched' => 0, 'error' => null, 'items' => []] : ['fetched' => 0, 'error' => null, 'items' => [], 'checked' => 0];
+  if (!$force && time() - ($c['checked'] ?? 0) < ($c['error'] ? 600 : 86400)) {
+    return $c;
+  }
+  $ch = curl_init(COMMUNITY_URL);
+  curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_NOSIGNAL => 1,
+    CURLOPT_HTTPHEADER => ['User-Agent: nfqws2-ui/' . UI_VERSION]]);
+  $res = curl_exec($ch);
+  $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  $err = curl_error($ch);
+  curl_close($ch);
+  $j = json_decode((string)$res, true);
+  $c['checked'] = time();
+  if ($code === 200 && is_array($j['items'] ?? null)) {
+    // данные из интернета: берём только то, что подходит по формату
+    $items = [];
+    foreach ($j['items'] as $x) {
+      $steps = is_array($x['steps'] ?? null) ? array_values(array_filter($x['steps'], fn($t) => is_string($t) && preg_match(COMMUNITY_STEP, $t))) : [];
+      if (!$steps || count($steps) !== count($x['steps']) || count($steps) > 8 || !is_int($x['asn'] ?? null) || !in_array($x['proto'] ?? '', ['tls', 'http'], true)) {
+        continue;
+      }
+      $targets = [];
+      foreach (array_slice(is_array($x['targets'] ?? null) ? $x['targets'] : [], 0, 30) as $t) {
+        $h = is_string($t['host'] ?? null) && validHost($t['host']) && !isIp($t['host']) ? $t['host'] : null;
+        $a = is_int($t['asn'] ?? null) ? $t['asn'] : null;
+        if ($h || $a) {
+          $targets[] = array_filter(['host' => $h, 'asn' => $a]);
+        }
+      }
+      $str = fn($k, $n) => is_string($x[$k] ?? null) ? (preg_match('/^[^\x00-\x1f<>`$\\\\]{0,' . $n . '}/u', $x[$k], $m) ? $m[0] : '') : '';
+      $items[] = ['id' => preg_replace('/[^0-9a-f]/', '', $str('id', 16)), 'asn' => $x['asn'], 'provider' => $str('provider', 80), 'proto' => $x['proto'],
+        'steps' => $steps, 'targets' => $targets, 'reports' => max(1, (int)($x['reports'] ?? 1)),
+        'issues' => array_values(array_filter(array_slice(is_array($x['issues'] ?? null) ? $x['issues'] : [], 0, 20), 'is_int')),
+        'first' => $str('first', 10), 'last' => $str('last', 10), 'nfqws2' => $str('nfqws2', 30)];
+    }
+    $c = ['checked' => time(), 'fetched' => time(), 'error' => null, 'items' => $items];
+  } else {
+    $c['error'] = $err ?: ($code === 404 ? 'база стратегий не найдена' : "GitHub ответил $code");
+  }
+  @file_put_contents(COMMUNITY_FILE, json_encode($c, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+  return $c;
+}
+
+// Провайдер по внешнему адресу (RIPEstat); сам адрес никуда не сохраняется и не показывается
+function providerDetect(): ?array
+{
+  $ip = ripe('whats-my-ip')['ip'] ?? null;
+  $asn = $ip ? (int)(ripe('network-info', $ip)['asns'][0] ?? 0) : 0;
+  if (!$asn) {
+    return null;
+  }
+  $holder = (string)(ripe('as-overview', "AS$asn")['holder'] ?? '');
+  $s = uiSettings();
+  $s['provider_asn'] = $asn;
+  if ($s['provider'] === '' && $holder !== '') {
+    $s['provider'] = preg_match('/^[^\x00-\x1f"`$\\\\]{0,80}/u', $holder, $m) ? $m[0] : '';
+  }
+  saveUiSettings($s);
+  return ['provider' => $holder, 'asn' => $asn];
+}
+
+// AS провайдера: из настроек; $detect — если не задан, определить (запрос к RIPEstat)
+function myAsn(bool $detect): int
+{
+  $asn = (int)uiSettings()['provider_asn'];
+  if (!$asn && $detect) {
+    $asn = (int)(providerDetect()['asn'] ?? 0);
+  }
+  return $asn;
+}
+
+// Сеть сайта: по первому адресу; адрес podkop (FakeIP) или заглушка — не определить
+function hostAsn(string $host): ?int
+{
+  $ip = diagDns($host)['ips'][0] ?? null;
+  if (!$ip || (isIp4($ip) && ipReserved($ip))) {
+    return null;
+  }
+  $a = (int)(ripe('network-info', $ip)['asns'][0] ?? 0);
+  return $a ?: null;
+}
+
+// Стратегии сообщества для подбора: сначала работавшие для этого сайта, затем для его сети, затем — по числу подтверждений
+function communityCandidates(string $host, string $proto, ?array &$info): array
+{
+  $asn = myAsn(true);
+  $d = $asn ? communityLoad() : ['items' => [], 'error' => null];
+  $p = $proto === 'http' ? 'http' : 'tls';
+  $mine = array_filter($d['items'], fn($x) => $x['asn'] === $asn && $x['proto'] === $p);
+  $tAsn = $mine ? hostAsn($host) : null;
+  $out = [];
+  foreach ($mine as $x) {
+    $hosts = array_column($x['targets'], 'host');
+    $nets = array_column($x['targets'], 'asn');
+    $score = in_array($host, $hosts, true) ? 2 : ($tAsn && in_array($tAsn, $nets, true) ? 1 : 0);
+    $out[] = ['name' => strategyName($x['steps']), 'steps' => $x['steps'], 'community' => $x['id'], 'rank' => $score ? 1 : 2, 'score' => $score, 'reports' => $x['reports'], 'last' => $x['last'],
+      'from' => 'сообщество: ' . ($score === 2 ? "открывала $host" : ($score === 1 ? "работала в сети AS$tAsn" : "AS$asn")) . ', подтвердили ' . $x['reports']];
+  }
+  usort($out, fn($a, $b) => [$b['score'], $b['reports'], $b['last']] <=> [$a['score'], $a['reports'], $a['last']]);
+  $info = ['asn' => $asn, 'count' => count($mine), 'error' => $asn ? $d['error'] : 'провайдер не определён'];
+  return array_map(fn($c) => array_diff_key($c, ['score' => 1, 'reports' => 1, 'last' => 1]), array_slice($out, 0, COMMUNITY_MAX));
 }
 
 // ----- автоподбор при поломке: мониторинг увидел, что сайт перестал открываться, — подбираем стратегию сами -----
@@ -3653,7 +3789,7 @@ function autoTick(): void
     $d['sites'][$h]['last'] = time();
     autoLog($d, $h, 'start', 'Перестал открываться — запущен подбор стратегии.');
     autoSave($d);
-    testLaunch(['type' => 'pick', 'host' => $h, 'proto' => 'https', 'sets' => ['config', 'std', 'hist', 'other'], 'repeats' => 3, 'refine' => false, 'auto' => true]);
+    testLaunch(['type' => 'pick', 'host' => $h, 'proto' => 'https', 'sets' => ['config', 'std', 'hist', 'other', 'community'], 'repeats' => 3, 'refine' => false, 'auto' => true]);
     return;
   }
   if ($changed) {
@@ -5598,7 +5734,7 @@ switch ($cmd) {
       flock($diagLock, LOCK_UN);
       fclose($diagLock);
     }
-    $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : ['config', 'std'], ['config', 'std', 'hist', 'other']));
+    $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : ['config', 'std'], ['config', 'std', 'hist', 'other', 'community']));
     $own = array_values(array_filter(is_array($in['steps'] ?? null) ? $in['steps'] : [], fn($t) => is_string($t) && preg_match('/^--lua-desync=[^\s"`$\\\\]+$/', $t)));
     testLaunch(['type' => $cmd === 'trace_start' ? 'trace' : 'pick', 'host' => $host,
       'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https', 'sets' => $own ? $sets : ($sets ?: ['config', 'std']), 'steps' => $own, 'repeats' => (int)($in['repeats'] ?? 3), 'refine' => !empty($in['refine'])]);
@@ -5877,19 +6013,41 @@ switch ($cmd) {
     respond(['ok' => true]);
 
   case 'provider_detect':
-    $ip = ripe('whats-my-ip')['ip'] ?? null;
-    $asn = $ip ? (ripe('network-info', $ip)['asns'][0] ?? null) : null;
-    $holder = $asn ? (ripe('as-overview', "AS$asn")['holder'] ?? null) : null;
-    if (!$holder) {
+    $p = providerDetect();
+    if (!$p || $p['provider'] === '') {
       fail('Не удалось определить провайдера — впишите название вручную');
     }
-    respond(['provider' => $holder]);   // внешний адрес наружу интерфейса не отдаём
+    respond($p);   // внешний адрес наружу интерфейса не отдаём
 
   case 'provider_set':
     $s = uiSettings();
     $s['provider'] = preg_match('/^[^\x00-\x1f"`$\\\\]{0,80}/u', trim((string)($in['provider'] ?? '')), $pm) ? $pm[0] : '';
+    if (isset($in['asn'])) {
+      $s['provider_asn'] = preg_match('/^(?:AS)?(\d{1,10})$/i', trim((string)$in['asn']), $am) && (int)$am[1] < 4294967296 ? (int)$am[1] : 0;
+    }
     saveUiSettings($s);
-    respond(['provider' => $s['provider']]);
+    respond(['provider' => $s['provider'], 'asn' => $s['provider_asn']]);
+
+  case 'community_get':
+    session_write_close();
+    $asn = myAsn(!empty($in['detect']));
+    $d = communityLoad(!empty($in['force']));
+    $items = array_values(array_filter($d['items'], fn($x) => $x['asn'] === $asn));
+    foreach ($items as &$x) {
+      $x['name'] = strategyName($x['steps']);
+      unset($x['users']);
+    }
+    unset($x);
+    respond(['asn' => $asn, 'provider' => uiSettings()['provider'], 'fetched' => $d['fetched'], 'error' => $d['error'],
+      'total' => count($d['items']), 'items' => $items, 'repo' => COMMUNITY_REPO]);
+
+  case 'share_info':
+    // данные для формы «Поделиться»: AS провайдера, сеть сайта, версии
+    session_write_close();
+    $host = cleanHost($str('host'));
+    $asn = myAsn(true);
+    respond(['asn' => $asn, 'provider' => uiSettings()['provider'], 'target_asn' => validHost($host) && !isIp($host) ? hostAsn($host) : null,
+      'nfqws2' => (string)packageVersion('nfqws2-keenetic'), 'ui' => UI_VERSION, 'repo' => COMMUNITY_REPO]);
 
   case 'profile_check':
     respond(profileCheck(array_slice(is_array($in['tokens'] ?? null) ? $in['tokens'] : [], 0, 200)));
