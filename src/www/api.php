@@ -3544,30 +3544,27 @@ function picksCandidates(string $host, string $proto, bool $own, bool $other): a
 }
 
 // ----- стратегии сообщества: что сработало у абонентов того же провайдера -----
-// База — strategies.json в отдельном репозитории; пополняется формой issue (кнопка «Поделиться»),
-// присланное проверяет GitHub Action. Здесь база только читается, и всё из неё сначала проверяется подбором.
+// База — отдельный репозиторий: файл на провайдера data/AS<номер>.json и сводка index.json; пополняется
+// формой issue (кнопка «Поделиться»), присланное проверяет GitHub Action. Роутер качает только файл своего
+// провайдера (килобайты при любом размере базы); всё из него сначала проверяется подбором.
 
 const COMMUNITY_REPO = 'https://github.com/zemidala/nfqws2-strategies';
-const COMMUNITY_URL = 'https://raw.githubusercontent.com/zemidala/nfqws2-strategies/main/strategies.json';
-const COMMUNITY_FILE = '/tmp/nfqws-ui-community.json';   // в памяти: база скачивается заново после перезагрузки
+const COMMUNITY_RAW = 'https://raw.githubusercontent.com/zemidala/nfqws2-strategies/main/';
+const COMMUNITY_FILE = '/tmp/nfqws-ui-community.json';   // в памяти: скачивается заново после перезагрузки
+const COMMUNITY_INDEX = '/tmp/nfqws-ui-community-index.json';
 const COMMUNITY_MAX = 8;   // сколько стратегий сообщества пробовать в одном подборе
 // шаг — только --lua-desync без путей и блобов из файлов; то же проверяет и приём в репозитории
 const COMMUNITY_STEP = '/^--lua-desync=[a-z][a-z0-9_]{0,40}(:[A-Za-z0-9_.,=+%-]{1,200}){0,40}$/';
 
-// База: удачный ответ помним сутки, неудачу — 10 минут (как проверку обновлений)
-function communityLoad(bool $force = false): array
+// Файл из репозитория базы: [код, тело, ошибка]. Соединение не состоялось (чаще всего — DNS роутера
+// на секунду пропал при перезапуске AdGuard) — ещё одна попытка через 3 секунды.
+function communityFetch(string $path): array
 {
-  $c = json_decode((string)@file_get_contents(COMMUNITY_FILE), true);
-  $c = is_array($c) ? $c + ['fetched' => 0, 'error' => null, 'items' => []] : ['fetched' => 0, 'error' => null, 'items' => [], 'checked' => 0];
-  if (!$force && time() - ($c['checked'] ?? 0) < ($c['error'] ? 600 : 86400)) {
-    return $c;
-  }
-  // соединение не состоялось (чаще всего — DNS роутера на секунду пропал при перезапуске AdGuard) — ещё одна попытка
   for ($try = 0; $try < 2; $try++) {
     if ($try) {
       sleep(3);
     }
-    $ch = curl_init(COMMUNITY_URL);
+    $ch = curl_init(COMMUNITY_RAW . $path);
     curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_NOSIGNAL => 1,
       CURLOPT_HTTPHEADER => ['User-Agent: nfqws2-ui/' . UI_VERSION]]);
     $res = curl_exec($ch);
@@ -3578,14 +3575,29 @@ function communityLoad(bool $force = false): array
       break;
     }
   }
-  $j = json_decode((string)$res, true);
+  return [$code, (string)$res, $err];
+}
+
+// Стратегии своего провайдера: удачный ответ помним сутки, неудачу — 10 минут (как проверку обновлений).
+// Файла провайдера нет (404) — значит, для него в базе пока ничего нет; это не ошибка.
+function communityLoad(int $asn, bool $force = false): array
+{
+  $c = json_decode((string)@file_get_contents(COMMUNITY_FILE), true);
+  $c = is_array($c) && ($c['asn'] ?? 0) === $asn ? $c + ['fetched' => 0, 'error' => null, 'items' => []] : ['asn' => $asn, 'fetched' => 0, 'error' => null, 'items' => [], 'checked' => 0];
+  if (!$force && time() - ($c['checked'] ?? 0) < ($c['error'] ? 600 : 86400)) {
+    return $c;
+  }
+  [$code, $res, $err] = communityFetch("data/AS$asn.json");
+  $j = json_decode($res, true);
   $c['checked'] = time();
-  if ($code === 200 && is_array($j['items'] ?? null)) {
+  if ($code === 404) {
+    $c = ['asn' => $asn, 'checked' => time(), 'fetched' => time(), 'error' => null, 'items' => []];
+  } elseif ($code === 200 && is_array($j['items'] ?? null)) {
     // данные из интернета: берём только то, что подходит по формату
     $items = [];
     foreach ($j['items'] as $x) {
       $steps = is_array($x['steps'] ?? null) ? array_values(array_filter($x['steps'], fn($t) => is_string($t) && preg_match(COMMUNITY_STEP, $t))) : [];
-      if (!$steps || count($steps) !== count($x['steps']) || count($steps) > 8 || !is_int($x['asn'] ?? null) || !in_array($x['proto'] ?? '', ['tls', 'http'], true)) {
+      if (!$steps || count($steps) !== count($x['steps']) || count($steps) > 8 || ($x['asn'] ?? null) !== $asn || !in_array($x['proto'] ?? '', ['tls', 'http'], true)) {
         continue;
       }
       $targets = [];
@@ -3602,11 +3614,28 @@ function communityLoad(bool $force = false): array
         'issues' => array_values(array_filter(array_slice(is_array($x['issues'] ?? null) ? $x['issues'] : [], 0, 20), 'is_int')),
         'first' => $str('first', 10), 'last' => $str('last', 10), 'nfqws2' => $str('nfqws2', 30)];
     }
-    $c = ['checked' => time(), 'fetched' => time(), 'error' => null, 'items' => $items];
+    $c = ['asn' => $asn, 'checked' => time(), 'fetched' => time(), 'error' => null, 'items' => $items];
   } else {
-    $c['error'] = $err ?: ($code === 404 ? 'база стратегий не найдена' : "GitHub ответил $code");
+    $c['error'] = $err ?: "GitHub ответил $code";
   }
   @file_put_contents(COMMUNITY_FILE, json_encode($c, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+  return $c;
+}
+
+// Сводка по всей базе — только для строки «во всей базе N стратегий для M провайдеров»; не удалась — без неё
+function communityIndex(bool $force = false): ?array
+{
+  $c = json_decode((string)@file_get_contents(COMMUNITY_INDEX), true);
+  if (!$force && is_array($c) && time() - ($c['checked'] ?? 0) < 86400) {
+    return $c;
+  }
+  [$code, $res] = communityFetch('index.json');
+  $j = json_decode($res, true);
+  if ($code !== 200 || !is_array($j['providers'] ?? null)) {
+    return is_array($c) ? $c : null;
+  }
+  $c = ['checked' => time(), 'total' => max(0, (int)($j['total'] ?? 0)), 'providers' => count($j['providers'])];
+  @file_put_contents(COMMUNITY_INDEX, json_encode($c));
   return $c;
 }
 
@@ -3653,7 +3682,7 @@ function hostAsn(string $host): ?int
 function communityCandidates(string $host, string $proto, ?array &$info): array
 {
   $asn = myAsn(true);
-  $d = $asn ? communityLoad() : ['items' => [], 'error' => null];
+  $d = $asn ? communityLoad($asn) : ['items' => [], 'error' => null];
   $p = $proto === 'http' ? 'http' : 'tls';
   $mine = array_filter($d['items'], fn($x) => $x['asn'] === $asn && $x['proto'] === $p);
   $tAsn = $mine ? hostAsn($host) : null;
@@ -6057,8 +6086,9 @@ switch ($cmd) {
   case 'community_get':
     session_write_close();
     $asn = myAsn(!empty($in['detect']));
-    $d = communityLoad(!empty($in['force']));
-    $items = array_values(array_filter($d['items'], fn($x) => $x['asn'] === $asn));
+    $d = $asn ? communityLoad($asn, !empty($in['force'])) : ['items' => [], 'fetched' => 0, 'error' => null];
+    $idx = communityIndex(!empty($in['force']));
+    $items = $d['items'];
     foreach ($items as &$x) {
       $x['name'] = strategyName($x['steps']);
       $x['fresh'] = communityFresh($x);
@@ -6067,8 +6097,8 @@ switch ($cmd) {
     unset($x);
     usort($items, fn($a, $b) => [$a['skipped'], $b['fresh'], $b['reports'] - $b['fails'], $b['last']] <=> [$b['skipped'], $a['fresh'], $a['reports'] - $a['fails'], $a['last']]);
     respond(['asn' => $asn, 'provider' => uiSettings()['provider'], 'fetched' => $d['fetched'], 'error' => $d['error'],
-      'total' => count($d['items']), 'providers' => count(array_unique(array_column($d['items'], 'asn'))), 'items' => $items,
-      'repo' => COMMUNITY_REPO, 'page' => COMMUNITY_REPO . '/blob/main/STRATEGIES.md' . ($asn ? "#as$asn" : '')]);
+      'total' => $idx['total'] ?? null, 'providers' => $idx['providers'] ?? null, 'items' => $items, 'repo' => COMMUNITY_REPO,
+      'page' => COMMUNITY_REPO . '/blob/main/STRATEGIES.md', 'mine' => $items ? COMMUNITY_REPO . "/blob/main/providers/AS$asn.md" : null]);
 
   case 'share_info':
     // данные для формы «Поделиться»: AS провайдера, сеть сайта, версии

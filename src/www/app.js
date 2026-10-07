@@ -3878,15 +3878,16 @@ async function viewCommunity(main) {
       : h('div', { class: 'row' }, h('b', { text: `AS${d.asn}` }), d.provider ? h('span', { class: 'muted', text: d.provider }) : null, h('span', { class: 'grow' }),
         h('span', { class: 'sm muted', text: d.fetched ? 'база загружена ' + fmtDate(d.fetched) : '' }),
         btn('Обновить', () => load({ force: true }), 'small', 'refresh'));
+    const link = (href, text) => h('a', { href, target: '_blank', rel: 'noopener', text });
     const whole = d.page ? h('p', { class: 'sm muted' }, d.total ? `Во всей базе ${plural(d.total, 'стратегия', 'стратегии', 'стратегий')} для ${plural(d.providers || 0, 'провайдера', 'провайдеров', 'провайдеров')}. ` : '',
-      h('a', { href: d.page, target: '_blank', rel: 'noopener', text: 'Вся база по провайдерам на GitHub' })) : null;
+      d.mine ? [link(d.mine, `AS${d.asn} на GitHub`), ' · '] : null, link(d.page, 'все провайдеры')) : null;
     body.replaceChildren(
       panel(null, null, head,
         d.error ? notice('warn', 'База не загрузилась', d.error + ' — попробуйте позже.') : null,
         d.asn && !d.error ? h('div', { class: 'row' }, site, btn('Проверить все на сайте', () => test(null), d.items.length ? 'primary' : '', 'play', { disabled: !d.items.length }),
           h('span', { class: 'sm muted grow note-wide', text: 'Подбор только по стратегиям из базы — до восьми, сначала открывавшие этот сайт или его сеть. Ваш трафик не затрагивается.' })) : null,
         whole),
-      d.asn && !d.error && !d.items.length ? panel(null, null, h('p', { class: 'muted', text: `Для AS${d.asn} в базе пока ничего нет (всего в базе ${plural(d.total || 0, 'стратегия', 'стратегии', 'стратегий')}). Станьте первым: после удачного подбора нажмите «Поделиться».` })) : null,
+      d.asn && !d.error && !d.items.length ? panel(null, null, h('p', { class: 'muted', text: `Для AS${d.asn} в базе пока ничего нет${d.total ? ` (всего в базе ${plural(d.total, 'стратегия', 'стратегии', 'стратегий')})` : ''}. Станьте первым: после удачного подбора нажмите «Поделиться».` })) : null,
       tls.length ? panel('HTTPS (TLS)', h('span', { class: 'sm muted num', text: plural(tls.length, 'стратегия', 'стратегии', 'стратегий') }), table(tls)) : null,
       http.length ? panel('HTTP', h('span', { class: 'sm muted num', text: plural(http.length, 'стратегия', 'стратегии', 'стратегий') }), table(http)) : null,
       panel('Как это устроено', null, h('ul', { class: 'sm', style: 'margin:0;padding-left:18px;display:grid;gap:4px' },
