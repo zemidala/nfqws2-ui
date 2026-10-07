@@ -882,6 +882,9 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
 :root[data-variant="k"] .input.mono { font-size: 14.5px; }
 :root[data-variant="k"] .btn:not(.ghost) { min-height: 40px; font-size: 16px; padding: 6px 20px; }
 :root[data-variant="k"] .btn.small:not(.ghost) { min-height: 34px; font-size: 14.5px; padding: 4px 14px; }
+/* «Проблемы»: кнопка исправления не крупнее текста замечания, иначе список из кнопок, а не из замечаний */
+:root[data-variant="k"] .problem .item-main b { font-size: 14.5px; }
+@media (min-width: 760px) { :root[data-variant="k"] .problem .btn.small:not(.ghost) { min-height: 26px; font-size: 13px; padding: 1px 10px; } }
 :root[data-variant="k"] .tbl { font-size: 15px; }
 :root[data-variant="k"] .tbl th { font-size: 15px; padding: 12px 14px; }
 :root[data-variant="k"] .tbl td { padding: 12px 14px; }

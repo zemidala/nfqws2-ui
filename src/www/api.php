@@ -5616,7 +5616,8 @@ function rivals(): array
     $pid = (int)basename(dirname($f));
     if (isset($names[$c])) {
       $found[$names[$c]] = true;
-    } elseif ($c === 'nfqws2' && $pid !== $main && !str_contains((string)@file_get_contents("/proc/$pid/cmdline"), '--qnum=' . TEST_QNUM)) {
+    } elseif ($c === 'nfqws2' && $pid !== $main && !preg_match('/--qnum=' . TEST_QNUM . '\b|--dry-run/', (string)@file_get_contents("/proc/$pid/cmdline"))) {
+      // --dry-run — наша же проверка конфига: на медленном роутере она идёт заметное время и попадала сюда
       $found['ещё один nfqws2 (zapret2)'] = true;
     }
   }
