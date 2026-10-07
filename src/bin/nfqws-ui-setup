@@ -156,7 +156,9 @@ pkg_install() {
 	if [ -z "$R" ] && command -v apk >/dev/null 2>&1; then
 		apk update >/dev/null && apk add "$@"
 	else
-		opkg update >/dev/null && opkg install "$@"
+		# один недоступный источник пакетов не должен мешать установке (см. install.sh)
+		opkg update >/dev/null 2>&1
+		opkg install "$@"
 	fi
 }
 

@@ -84,7 +84,13 @@ fetch "$BASE/sha256sums.txt" "$TMP/sha256sums.txt" || die "не удалось �
 # --- установка ---
 if [ "$PM" = opkg ]; then
 	say "Обновляю список пакетов и ставлю зависимости (lighttpd, php8)…"
-	opkg update >/dev/null || die "opkg update не прошёл — проверьте интернет на роутере"
+	# Один недоступный источник (часто — от удалённого пакета) даёт ошибку всего opkg update, хотя нужные списки
+	# скачались. Не останавливаемся: если зависимостей действительно не найти, остановит opkg install ниже.
+	if ! opkg update >"$TMP/opkg-update.log" 2>&1; then
+		say "Внимание: часть источников пакетов недоступна — продолжаю с тем, что скачалось:"
+		grep -o 'https\{0,1\}://[^ ,]*Packages\.gz' "$TMP/opkg-update.log" | sort -u | sed 's/^/  /'
+		say "  (ненужный источник можно убрать из /opt/etc/opkg/ или /etc/opkg/customfeeds.conf)"
+	fi
 	# NFQWS_UI_FORCE=1 (nfqws-ui update --force) — поставить заново ту же версию
 	opkg install ${NFQWS_UI_FORCE:+--force-reinstall} "$TMP/$FILE" || die "opkg install не прошёл (см. выше)"
 else
