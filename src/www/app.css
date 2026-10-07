@@ -555,6 +555,7 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 .iface:hover { background: var(--soft); }
 .iface.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
 .iface.dim { opacity: .7; }
+.tbl tr.dim > td { opacity: .6; }
 .iface .mono { font-weight: 600; }
 /* «Параметры запуска»: добавление из списков */
 .base-add .select { flex: 1 1 180px; min-width: 0; }

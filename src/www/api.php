@@ -3562,13 +3562,22 @@ function communityLoad(bool $force = false): array
   if (!$force && time() - ($c['checked'] ?? 0) < ($c['error'] ? 600 : 86400)) {
     return $c;
   }
-  $ch = curl_init(COMMUNITY_URL);
-  curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_NOSIGNAL => 1,
-    CURLOPT_HTTPHEADER => ['User-Agent: nfqws2-ui/' . UI_VERSION]]);
-  $res = curl_exec($ch);
-  $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
-  $err = curl_error($ch);
-  curl_close($ch);
+  // соединение не состоялось (чаще всего — DNS роутера на секунду пропал при перезапуске AdGuard) — ещё одна попытка
+  for ($try = 0; $try < 2; $try++) {
+    if ($try) {
+      sleep(3);
+    }
+    $ch = curl_init(COMMUNITY_URL);
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 20, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_NOSIGNAL => 1,
+      CURLOPT_HTTPHEADER => ['User-Agent: nfqws2-ui/' . UI_VERSION]]);
+    $res = curl_exec($ch);
+    $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+    $err = curl_error($ch);
+    curl_close($ch);
+    if ($code !== 0) {
+      break;
+    }
+  }
   $j = json_decode((string)$res, true);
   $c['checked'] = time();
   if ($code === 200 && is_array($j['items'] ?? null)) {
@@ -3589,7 +3598,7 @@ function communityLoad(bool $force = false): array
       }
       $str = fn($k, $n) => is_string($x[$k] ?? null) ? (preg_match('/^[^\x00-\x1f<>`$\\\\]{0,' . $n . '}/u', $x[$k], $m) ? $m[0] : '') : '';
       $items[] = ['id' => preg_replace('/[^0-9a-f]/', '', $str('id', 16)), 'asn' => $x['asn'], 'provider' => $str('provider', 80), 'proto' => $x['proto'],
-        'steps' => $steps, 'targets' => $targets, 'reports' => max(1, (int)($x['reports'] ?? 1)),
+        'steps' => $steps, 'targets' => $targets, 'reports' => max(0, (int)($x['reports'] ?? 1)), 'fails' => max(0, (int)($x['fails'] ?? 0)), 'last_fail' => $str('last_fail', 10),
         'issues' => array_values(array_filter(array_slice(is_array($x['issues'] ?? null) ? $x['issues'] : [], 0, 20), 'is_int')),
         'first' => $str('first', 10), 'last' => $str('last', 10), 'nfqws2' => $str('nfqws2', 30)];
     }
@@ -3650,15 +3659,32 @@ function communityCandidates(string $host, string $proto, ?array &$info): array
   $tAsn = $mine ? hostAsn($host) : null;
   $out = [];
   foreach ($mine as $x) {
+    // «не сработала» у большинства (и хотя бы у двоих) — не пробуем; на странице сообщества она видна
+    if ($x['fails'] >= 2 && $x['fails'] > $x['reports']) {
+      continue;
+    }
     $hosts = array_column($x['targets'], 'host');
     $nets = array_column($x['targets'], 'asn');
     $score = in_array($host, $hosts, true) ? 2 : ($tAsn && in_array($tAsn, $nets, true) ? 1 : 0);
-    $out[] = ['name' => strategyName($x['steps']), 'steps' => $x['steps'], 'community' => $x['id'], 'rank' => $score ? 1 : 2, 'score' => $score, 'reports' => $x['reports'], 'last' => $x['last'],
-      'from' => 'сообщество: ' . ($score === 2 ? "открывала $host" : ($score === 1 ? "работала в сети AS$tAsn" : "AS$asn")) . ', подтвердили ' . $x['reports']];
+    $fresh = communityFresh($x) ? 1 : 0;
+    $out[] = ['name' => strategyName($x['steps']), 'steps' => $x['steps'], 'community' => $x['id'], 'rank' => $score && $fresh ? 1 : 2,
+      'key' => [$fresh, $score, $x['reports'] - $x['fails'], $x['last']],
+      'from' => 'сообщество: ' . ($score === 2 ? "открывала $host" : ($score === 1 ? "работала в сети AS$tAsn" : "AS$asn")) . ', подтвердили ' . $x['reports']
+        . ($x['fails'] ? ', не сработала у ' . $x['fails'] : '') . ($fresh ? '' : ', давно не подтверждалась')];
   }
-  usort($out, fn($a, $b) => [$b['score'], $b['reports'], $b['last']] <=> [$a['score'], $a['reports'], $a['last']]);
+  // сначала подтверждённые недавно; среди них — тот же сайт, затем та же сеть, затем по «работает» минус «не сработала».
+  // В подборе свежие с совпадением сайта или сети идут вместе с историей (rank 1), остальные — со стандартным набором
+  usort($out, fn($a, $b) => $b['key'] <=> $a['key']);
   $info = ['asn' => $asn, 'count' => count($mine), 'error' => $asn ? $d['error'] : 'провайдер не определён'];
-  return array_map(fn($c) => array_diff_key($c, ['score' => 1, 'reports' => 1, 'last' => 1]), array_slice($out, 0, COMMUNITY_MAX));
+  return array_map(fn($c) => array_diff_key($c, ['key' => 1]), array_slice($out, 0, COMMUNITY_MAX));
+}
+
+// Подтверждалась ли стратегия за последние COMMUNITY_FRESH_DAYS дней: DPI меняется, старое опускаем
+const COMMUNITY_FRESH_DAYS = 60;
+function communityFresh(array $x): bool
+{
+  $t = strtotime((string)$x['last']);
+  return $t !== false && time() - $t < COMMUNITY_FRESH_DAYS * 86400;
 }
 
 // ----- автоподбор при поломке: мониторинг увидел, что сайт перестал открываться, — подбираем стратегию сами -----
@@ -6035,11 +6061,14 @@ switch ($cmd) {
     $items = array_values(array_filter($d['items'], fn($x) => $x['asn'] === $asn));
     foreach ($items as &$x) {
       $x['name'] = strategyName($x['steps']);
-      unset($x['users']);
+      $x['fresh'] = communityFresh($x);
+      $x['skipped'] = $x['fails'] >= 2 && $x['fails'] > $x['reports'];   // подбор её не пробует
     }
     unset($x);
+    usort($items, fn($a, $b) => [$a['skipped'], $b['fresh'], $b['reports'] - $b['fails'], $b['last']] <=> [$b['skipped'], $a['fresh'], $a['reports'] - $a['fails'], $a['last']]);
     respond(['asn' => $asn, 'provider' => uiSettings()['provider'], 'fetched' => $d['fetched'], 'error' => $d['error'],
-      'total' => count($d['items']), 'items' => $items, 'repo' => COMMUNITY_REPO]);
+      'total' => count($d['items']), 'providers' => count(array_unique(array_column($d['items'], 'asn'))), 'items' => $items,
+      'repo' => COMMUNITY_REPO, 'page' => COMMUNITY_REPO . '/blob/main/STRATEGIES.md' . ($asn ? "#as$asn" : '')]);
 
   case 'share_info':
     // данные для формы «Поделиться»: AS провайдера, сеть сайта, версии
