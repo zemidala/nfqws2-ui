@@ -535,6 +535,10 @@ adopt)
 	status
 	;;
 remove)
+	# метка политики Keenetic для проверочных соединений роутера (ставит api.php)
+	while iptables -w -t mangle -D OUTPUT -j nfqws_ui_out 2>/dev/null; do :; done
+	iptables -w -t mangle -F nfqws_ui_out 2>/dev/null
+	iptables -w -t mangle -X nfqws_ui_out 2>/dev/null
 	if [ "$MANAGED" = true ] && [ -f "$LCONF" ]; then
 		standalone=
 		grep -q '^server\.port :=' "$LCONF" && standalone=1

@@ -1488,6 +1488,65 @@ const VOLUME_SMALL = 24576;   // страница меньше — объёмо�
 const REASON_FREEZE = 'соединение зависает на объёме (после ~16–20 КБ)';
 
 // true — соединение замерло на объёме; false — прошло или результат не показателен
+// Keenetic, «только политика»: запросы самого роутера nfqws2 не обрабатывает — мониторинг и «Проверить сайт» видели бы
+// сайт без обхода. Поэтому проверочные соединения роутера получают метку политики (своя цепочка в mangle OUTPUT, только
+// TCP с портов PROBE_PORTS) и идут тем же путём, что устройства из политики: через её подключение и через nfqws2.
+// Прошивка время от времени перестраивает таблицы — правило проверяется перед каждой проверкой.
+const PROBE_PORTS = '41000:41099';
+const PROBE_CHAIN = 'nfqws_ui_out';
+
+function policyProbeEnsure(?array $policy = null, bool $fresh = false): bool
+{
+  static $done = null;
+  if ($done !== null && !$fresh) {
+    return $done;
+  }
+  $policy ??= interceptInfo()['policy'];
+  $ipt = 'iptables -w -t mangle ';
+  if (($policy['mode'] ?? '') !== 'only' || !preg_match('/^0x[0-9a-f]+$/i', $policy['mark'])) {
+    policyProbeRemove();
+    return $done = false;
+  }
+  $rule = '-p tcp --sport ' . PROBE_PORTS . ' -j MARK --set-xmark ' . $policy['mark'] . '/0x0fffffff';
+  $ok = fn(string $c): bool => exec($ipt . $c . ' 2>/dev/null', $o, $rc) !== null && $rc === 0;
+  if (!$ok('-C ' . PROBE_CHAIN . ' ' . $rule)) {
+    exec($ipt . '-N ' . PROBE_CHAIN . ' 2>/dev/null');
+    exec($ipt . '-F ' . PROBE_CHAIN . ' 2>/dev/null');
+    exec($ipt . '-A ' . PROBE_CHAIN . ' ' . $rule . ' 2>/dev/null');
+  }
+  if (!$ok('-C OUTPUT -j ' . PROBE_CHAIN)) {
+    exec($ipt . '-I OUTPUT 1 -j ' . PROBE_CHAIN . ' 2>/dev/null');
+  }
+  return $done = $ok('-C ' . PROBE_CHAIN . ' ' . $rule) && $ok('-C OUTPUT -j ' . PROBE_CHAIN);
+}
+
+function policyProbeRemove(): void
+{
+  $ipt = 'iptables -w -t mangle ';
+  exec($ipt . '-S ' . PROBE_CHAIN . ' 2>/dev/null', $o, $rc);
+  if ($rc !== 0) {
+    return;   // цепочки нет
+  }
+  while (true) {
+    exec($ipt . '-D OUTPUT -j ' . PROBE_CHAIN . ' 2>/dev/null', $o, $rc);
+    if ($rc !== 0) {
+      break;
+    }
+  }
+  exec($ipt . '-F ' . PROBE_CHAIN . ' 2>/dev/null; ' . $ipt . '-X ' . PROBE_CHAIN . ' 2>/dev/null');
+}
+
+// Параметры curl для запроса «как от устройства политики»: порт источника из PROBE_PORTS
+function policyProbeOpts(): array
+{
+  if (!policyProbeEnsure()) {
+    return [];
+  }
+  [$lo, $hi] = array_map('intval', explode(':', PROBE_PORTS));
+  $from = mt_rand($lo, $hi - 20);
+  return [CURLOPT_LOCALPORT => $from, CURLOPT_LOCALPORTRANGE => $hi - $from + 1];
+}
+
 function volumeFrozen(string $url): bool
 {
   $ch = curl_init($url . (str_contains($url, '?') ? '&' : '?') . 't=' . mt_rand());
@@ -1504,7 +1563,7 @@ function volumeFrozen(string $url): bool
     CURLOPT_SSL_VERIFYPEER => false,
     CURLOPT_SSL_VERIFYHOST => 0,
     CURLOPT_USERAGENT => 'Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/130 Safari/537.36',
-  ]);
+  ] + policyProbeOpts());
   curl_exec($ch);
   // рукопожатие прошло (APPCONNECT), а ответа на 64 КБ нет. Если TLS не установился, CONNECT_TIME тоже 0 —
   // по нему «TCP или TLS» не различить
@@ -1540,7 +1599,7 @@ function probe(string $host): array
       $got += strlen($chunk);
       return $got > VOLUME_BYTES ? 0 : strlen($chunk);   // хватит: объём уже прошёл
     },
-  ]);
+  ] + policyProbeOpts());
   $t = microtime(true);
   curl_exec($ch);
   $errno = curl_errno($ch);
@@ -4337,8 +4396,9 @@ function autoTick(): void
     if ($n < $a['fails'] || !$was || in_array($h, $d['queue'], true) || time() - ($d['sites'][$h]['last'] ?? 0) < $a['pause'] * 3600) {
       continue;
     }
-    $policyOnly ??= (interceptInfo()['policy']['mode'] ?? '') === 'only';
-    // при «только политика» мониторинг ходит мимо nfqws2: сайт «не открывается» всегда, поломки стратегии за этим нет
+    $policyOnly ??= (interceptInfo()['policy']['mode'] ?? '') === 'only' && !policyProbeEnsure();
+    // «только политика», а пометить проверки роутера её меткой не вышло: мониторинг ходит мимо nfqws2,
+    // сайт «не открывается» всегда, поломки стратегии за этим нет
     $skip = $policyOnly ? 'nfqws2 обрабатывает только устройства политики доступа, запросы роутера идут мимо него — мониторинг не показывает, работает ли обход'
       : ($massive ? 'не открывается больше половины сайтов мониторинга — похоже на обрыв связи, а не на блокировку'
       : (findPid() === null ? 'nfqws2 не запущен — подбирать стратегию бессмысленно' : null));
@@ -5404,7 +5464,13 @@ function state(): array
     'profiles' => $profiles,
     'lists' => listsInventory($profiles),
     'iptables' => iptablesCounters(),
-    'intercept' => interceptInfo(),
+    'intercept' => (function () {
+      $i = interceptInfo();
+      if ($i['policy']) {
+        $i['policy']['probe'] = policyProbeEnsure($i['policy']);   // проверки роутера идут как от устройства политики
+      }
+      return $i;
+    })(),
     'logs' => nfqLogs(),
     'lint' => lintCurrent(),
     'conf_tokens' => array_map('tokens', array_intersect_key(confRawVars(file_get_contents(CONF_FILE)), array_flip(ARG_VARS))),
@@ -5665,7 +5731,8 @@ function reportText(array $sites, bool $hide, string $build): string
   $pol = $ic['policy'];
   $L[] = 'политика доступа: ' . (!$pol ? 'не действует — nfqws2 обрабатывает все соединения через интерфейс провайдера'
     : '«' . $pol['name'] . '», метка ' . $pol['mark'] . ' — ' . ($pol['mode'] === 'only'
-      ? 'обрабатываются ТОЛЬКО её устройства; запросы самого роутера (мониторинг, «Проверить сайт») идут мимо nfqws2'
+      ? 'обрабатываются ТОЛЬКО её устройства; проверки роутера (мониторинг, «Проверить сайт») '
+        . (policyProbeEnsure($pol) ? 'идут как от устройства политики (цепочка ' . PROBE_CHAIN . ', порты ' . PROBE_PORTS . ')' : 'идут МИМО nfqws2 — пометить их меткой политики не удалось')
       : 'её устройства исключены из обработки')
       . ($pol['passed'] !== null ? '; мимо по этому правилу прошло пакетов: ' . $pol['passed'] : ''));
   foreach (['nfqws_post' => 'POSTROUTING', 'nfqws_pre' => 'PREROUTING'] as $chain => $hook) {

@@ -890,16 +890,22 @@ function issueTarget(x) {
 }
 
 // Keenetic, политика доступа: nfqws2 обрабатывает только её устройства, а запросы самого роутера — нет.
-// Тогда мониторинг и «Проверить сайт» показывают сайт без обхода, а не то, что видят устройства.
+// Проверки роутера получают метку политики (p.probe) и идут как от её устройства; если пометить не вышло —
+// мониторинг и «Проверить сайт» показывают сайт без обхода, а не то, что видят устройства.
 function policyOnly() {
   const p = S.state.intercept?.policy;
-  return p?.mode === 'only' ? p : null;
+  return p?.mode === 'only' && !p.probe ? p : null;
 }
 function policyText(p) {
-  return `В Keenetic есть политика доступа «${p.name}», и nfqws2 обрабатывает только устройства из неё. Запросы самого роутера в политику не входят и идут мимо nfqws2, поэтому проверка с роутера показывает сайт без обхода — «не открывается» здесь не значит, что обход не работает на устройствах. Подбор стратегии и диагноз работают как обычно: у них свои правила.`
+  return `В Keenetic есть политика доступа «${p.name}», и nfqws2 обрабатывает только устройства из неё. Пометить проверочные запросы роутера меткой политики не удалось, они идут мимо nfqws2, поэтому проверка с роутера показывает сайт без обхода — «не открывается» здесь не значит, что обход не работает на устройствах. Подбор стратегии и диагноз работают как обычно: у них свои правила.`
     + ' Чтобы nfqws2 обрабатывал все устройства и сам роутер — переименуйте или удалите политику, либо задайте в конфиге POLICY_NAME с другим именем, и перезапустите nfqws2.';
 }
 const policyNote = () => { const p = policyOnly(); return p ? notice('warn', 'Проверка с роутера идёт мимо nfqws2', policyText(p)) : null; };
+// спокойная строка для «Мониторинга»: проверки идут как от устройства политики
+function policyProbeHint() {
+  const p = S.state.intercept?.policy;
+  return p?.mode === 'only' && p.probe ? h('p', { class: 'sm muted', text: `nfqws2 обрабатывает только политику доступа «${p.name}» — проверки с роутера идут как от её устройства: через то же подключение и через nfqws2.` }) : null;
+}
 
 function problemItems() {
   const st = S.state;
@@ -3434,7 +3440,7 @@ async function viewMonitor(main) {
   add.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addSite(); } });
   draw();
   main.append(
-    policyNote(),
+    policyNote(), policyProbeHint(),
     panel('Сайты', h('div', { class: 'row' },
       h('label', { class: 'row sm' }, enabled, 'включён'), interval,
       btn('Проверить все сейчас', async () => { toast('Проверяю…'); const r = await guarded(() => api('monitor_run')); if (r) { m.data = r.data; draw(); await loadState(); } }, 'small', 'refresh')),
