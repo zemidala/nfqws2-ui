@@ -895,10 +895,8 @@ function policyOnly() {
   const p = S.state.intercept?.policy;
   return p?.mode === 'only' ? p : null;
 }
-const queuedPkts = () => (S.state.iptables || []).reduce((a, x) => a + x.pkts, 0);
 function policyText(p) {
   return `В Keenetic есть политика доступа «${p.name}», и nfqws2 обрабатывает только устройства из неё. Запросы самого роутера в политику не входят и идут мимо nfqws2, поэтому проверка с роутера показывает сайт без обхода — «не открывается» здесь не значит, что обход не работает на устройствах. Подбор стратегии и диагноз работают как обычно: у них свои правила.`
-    + (!queuedPkts() && p.passed > 200 ? ' Сейчас через nfqws2 не прошло ни одного пакета — похоже, в политике нет устройств: добавьте их в политику в интерфейсе Keenetic.' : '')
     + ' Чтобы nfqws2 обрабатывал все устройства и сам роутер — переименуйте или удалите политику, либо задайте в конфиге POLICY_NAME с другим именем, и перезапустите nfqws2.';
 }
 const policyNote = () => { const p = policyOnly(); return p ? notice('warn', 'Проверка с роутера идёт мимо nfqws2', policyText(p)) : null; };
