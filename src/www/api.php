@@ -204,10 +204,31 @@ function seenInfo(): array
   return $s['seen'] + ['since' => UI_VERSION, 'open' => [], 'told' => ''];
 }
 
+// Запись, которая переживает отключение питания: данные сбрасываются на диск до того, как новый файл встанет на место
+// старого. Без этого после обрыва на месте файла оказывается пустой или обрезанный (так потерялась история подборов).
+function putSynced(string $file, string $data): bool
+{
+  $h = @fopen($file, 'w');
+  if (!$h) {
+    return false;
+  }
+  $ok = fwrite($h, $data) === strlen($data) && fflush($h);
+  if ($ok && function_exists('fsync')) {
+    @fsync($h);
+  }
+  fclose($h);
+  return $ok;
+}
+
+function putSafe(string $path, string $data): bool
+{
+  return putSynced("$path.tmp", $data) && rename("$path.tmp", $path);
+}
+
 function saveUiSettings(array $s): void
 {
   @mkdir(UI_CONF_DIR, 0755, true);
-  file_put_contents(UI_SETTINGS, json_encode($s, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
+  putSafe(UI_SETTINGS, json_encode($s, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_PRETTY_PRINT));
 }
 
 // Файлы, версии которых ведёт история: конфиг и списки (кроме огромных)
@@ -230,7 +251,7 @@ function snapIndex(): array
 
 function snapSaveIndex(array $idx): void
 {
-  file_put_contents(SNAP_DIR . '/index.json', json_encode(array_values($idx), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+  putSafe(SNAP_DIR . '/index.json', json_encode(array_values($idx), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 }
 
 function snapFileOf(string $id): string
@@ -256,7 +277,7 @@ function snapPaths(): array
   $p = ['etc/nfqws2/nfqws2.conf', 'etc/nfqws2/lists', 'etc/nfqws2/blobs'];
   // настройки интерфейса — кроме ключа роутера для NAS: закрытый ключ не должен уходить ни на NAS, ни в скачанный архив
   foreach (glob(UI_CONF_DIR . '/*') ?: [] as $f) {
-    if (is_file($f) && !preg_match('/^(remote_key(\.pub)?|known_hosts)$/', basename($f))) {
+    if (is_file($f) && !preg_match('/^(remote_key(\.pub)?|known_hosts)$|\.(tmp|bad)$/', basename($f))) {
       $p[] = substr($f, 1);
     }
   }
@@ -774,7 +795,7 @@ function writeWithBackup(string $path, string $content, string $note = ''): bool
   }
   beforeChange($note);
   $tmp = $path . '.tmp-ui';
-  if (file_put_contents($tmp, $content) === false) {
+  if (!putSynced($tmp, $content)) {
     return false;
   }
   if (is_file($path)) {
@@ -2693,8 +2714,7 @@ function pendingGet(): ?array
 
 function pendingSave(array $p): void
 {
-  file_put_contents(PENDING_FILE . '.tmp', json_encode($p, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-  rename(PENDING_FILE . '.tmp', PENDING_FILE);
+  putSafe(PENDING_FILE, json_encode($p, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 }
 
 function doRollback(array &$p, string $reason): void
@@ -2833,7 +2853,7 @@ function monitorRun(bool $force, ?array $only = null): ?array
     $data['last'] = time();   // ручная проверка отдельных сайтов не сдвигает расписание
   }
   @mkdir(UI_CONF_DIR, 0755, true);
-  file_put_contents(MONITOR_FILE, json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+  putSafe(MONITOR_FILE, json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
   if ($changes) {
     notifyTelegram("nfqws2 на роутере:\n" . implode("\n", $changes));
   }
@@ -3923,7 +3943,7 @@ function freezeJob(array $job, array &$status, ?array &$nfq, string $iface, arra
   $status['finished'] = time();
   $status['current'] = null;
   testSaveStatus($status);
-  @file_put_contents(FREEZE_FILE, json_encode(array_intersect_key($status, array_flip(['state', 'started', 'finished', 'nets'])), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+  putSafe(FREEZE_FILE, json_encode(array_intersect_key($status, array_flip(['state', 'started', 'finished', 'nets'])), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 }
 
 // Находки последней пробы для подбора: сначала найденное в сети этого сайта, затем в остальных сетях
@@ -3959,7 +3979,12 @@ function picksLoad(): array
 {
   $f = UI_CONF_DIR . '/picks.json';
   if (is_file($f)) {
-    return json_decode((string)@file_get_contents($f), true) ?: [];
+    $raw = (string)@file_get_contents($f);
+    $d = json_decode($raw, true);
+    if (!is_array($d) && strlen($raw) > 2) {
+      @copy($f, "$f.bad");   // файл испорчен (обрыв питания при записи) — не затираем молча, оставляем для разбора
+    }
+    return is_array($d) ? $d : [];
   }
   // записи прежней короткой истории — без подробностей
   return json_decode((string)@file_get_contents(UI_CONF_DIR . '/tests.json'), true) ?: [];
@@ -3973,8 +3998,7 @@ function picksSave(array $items): void
   if ($json === false) {
     return;
   }
-  file_put_contents("$f.tmp", $json);
-  rename("$f.tmp", $f);
+  putSafe($f, $json);
 }
 
 function picksAdd(array $status, int $repeats): void
@@ -4216,8 +4240,7 @@ function autoSave(array $d): void
   $d['log'] = array_slice($d['log'], 0, 60);
   $json = json_encode($d, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
   if ($json !== false) {
-    file_put_contents(AUTO_FILE . '.tmp', $json);
-    rename(AUTO_FILE . '.tmp', AUTO_FILE);
+    putSafe(AUTO_FILE, $json);
   }
 }
 
