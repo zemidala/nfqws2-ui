@@ -889,9 +889,29 @@ function issueTarget(x) {
   return '#/settings/raw';
 }
 
+// Keenetic, политика доступа: nfqws2 обрабатывает только её устройства, а запросы самого роутера — нет.
+// Тогда мониторинг и «Проверить сайт» показывают сайт без обхода, а не то, что видят устройства.
+function policyOnly() {
+  const p = S.state.intercept?.policy;
+  return p?.mode === 'only' ? p : null;
+}
+const queuedPkts = () => (S.state.iptables || []).reduce((a, x) => a + x.pkts, 0);
+function policyText(p) {
+  return `В Keenetic есть политика доступа «${p.name}», и nfqws2 обрабатывает только устройства из неё. Запросы самого роутера в политику не входят и идут мимо nfqws2, поэтому проверка с роутера показывает сайт без обхода — «не открывается» здесь не значит, что обход не работает на устройствах. Подбор стратегии и диагноз работают как обычно: у них свои правила.`
+    + (!queuedPkts() && p.passed > 200 ? ' Сейчас через nfqws2 не прошло ни одного пакета — похоже, в политике нет устройств: добавьте их в политику в интерфейсе Keenetic.' : '')
+    + ' Чтобы nfqws2 обрабатывал все устройства и сам роутер — переименуйте или удалите политику, либо задайте в конфиге POLICY_NAME с другим именем, и перезапустите nfqws2.';
+}
+const policyNote = () => { const p = policyOnly(); return p ? notice('warn', 'Проверка с роутера идёт мимо nfqws2', policyText(p)) : null; };
+
 function problemItems() {
   const st = S.state;
   const items = [];
+  const pol = policyOnly();
+  if (pol && st.running) items.push({ level: 'warning', title: `Только политика «${pol.name}»`, text: policyText(pol), href: PAGES.raw[0] });
+  const refs = st.intercept?.refs || {};
+  if (st.running && (refs.nfqws_post === 0 || refs.nfqws_pre === 0)) {
+    items.push({ level: 'error', title: 'Правила перехвата не подключены', text: 'Цепочки nfqws2 в iptables есть, но переходов в них из POSTROUTING / PREROUTING нет — пакеты до nfqws2 не доходят, обход не работает. Перезапустите nfqws2; если повторяется — пришлите «Отчёт для помощи».', href: PAGES.log[0] });
+  }
   const lint = st.lint || { issues: [] };
   if (lint.dry_run && !lint.dry_run.ok) items.push({ level: 'error', title: 'nfqws2 не примет конфиг', text: lint.dry_run.message, href: '#/settings/raw' });
   for (const x of lint.issues) {
@@ -1026,7 +1046,7 @@ function createCheck() {
         h('span', { class: 'grow' }), btn('Свернуть', () => { collapse(); input.value = ''; }, 'small ghost', 'up')));
     shown = res.host;
     const pr = await api('probe', { host: res.host }).catch((e) => ({ ok: false, reason: e.message }));
-    if (my === seq) probeBox.replaceChildren(probeVerdict(res, pr));
+    if (my === seq) probeBox.replaceChildren(...[probeVerdict(res, pr), !pr.ok ? policyNote() : null].filter(Boolean));
   }
   const el = h('section', { class: 'blk' },
     h('div', { class: 'blk-h' }, h('h2', { text: 'Проверить сайт' }), closeBtn),
@@ -3416,6 +3436,7 @@ async function viewMonitor(main) {
   add.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addSite(); } });
   draw();
   main.append(
+    policyNote(),
     panel('Сайты', h('div', { class: 'row' },
       h('label', { class: 'row sm' }, enabled, 'включён'), interval,
       btn('Проверить все сейчас', async () => { toast('Проверяю…'); const r = await guarded(() => api('monitor_run')); if (r) { m.data = r.data; draw(); await loadState(); } }, 'small', 'refresh')),
@@ -4210,6 +4231,7 @@ async function viewAuto(main) {
   [enabled, apply, fails, pause].forEach((el) => el.addEventListener('change', save));
   main.append(
     h('div', { class: 'vh' }, h('h1', { text: 'Автоподбор' })),
+    policyOnly() ? notice('warn', 'Автоподбор не запускается', 'nfqws2 обрабатывает только устройства политики доступа, а мониторинг ходит с самого роутера — мимо nfqws2. Он не видит, работает ли обход, и поломку от нормы не отличит.', h('a', { class: 'btn small', href: PAGES.mon[0] }, 'Мониторинг')) : null,
     !a.monitor.enabled || !a.monitor.sites ? notice('warn', 'Мониторинг выключен или пуст', 'Автоподбор узнаёт о поломке от мониторинга: включите его и добавьте сайты, за которыми нужно следить.', h('a', { class: 'btn small', href: PAGES.mon[0] }, 'Мониторинг')) : null,
     a.running ? notice('info', `Сейчас идёт автоподбор для ${a.running}`, 'Ход виден на странице подбора.', h('a', { class: 'btn small', href: pickHref(a.running) }, 'Открыть')) : null,
     a.offers.length ? panel('Найдено — ждёт вашего решения', null, a.offers.map((o) => h('div', { class: 'stack', style: 'gap:8px' },

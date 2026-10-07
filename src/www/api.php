@@ -4337,8 +4337,11 @@ function autoTick(): void
     if ($n < $a['fails'] || !$was || in_array($h, $d['queue'], true) || time() - ($d['sites'][$h]['last'] ?? 0) < $a['pause'] * 3600) {
       continue;
     }
-    $skip = $massive ? 'не открывается больше половины сайтов мониторинга — похоже на обрыв связи, а не на блокировку'
-      : (findPid() === null ? 'nfqws2 не запущен — подбирать стратегию бессмысленно' : null);
+    $policyOnly ??= (interceptInfo()['policy']['mode'] ?? '') === 'only';
+    // при «только политика» мониторинг ходит мимо nfqws2: сайт «не открывается» всегда, поломки стратегии за этим нет
+    $skip = $policyOnly ? 'nfqws2 обрабатывает только устройства политики доступа, запросы роутера идут мимо него — мониторинг не показывает, работает ли обход'
+      : ($massive ? 'не открывается больше половины сайтов мониторинга — похоже на обрыв связи, а не на блокировку'
+      : (findPid() === null ? 'nfqws2 не запущен — подбирать стратегию бессмысленно' : null));
     if ($skip !== null) {
       // связь или сервис вернутся — попробуем на следующем проходе; в журнал пишем один раз
       if (($d['log'][0]['host'] ?? '') !== $h || ($d['log'][0]['kind'] ?? '') !== 'skip') {
@@ -5328,6 +5331,42 @@ function iptablesCounters(): array
   return $rows;
 }
 
+// Подключены ли цепочки nfqws2 и не ограничен ли перехват политикой доступа Keenetic (POLICY_NAME в конфиге).
+// «Только политика»: мимо nfqws2 идёт всё без её метки — в том числе запросы самого роутера, то есть мониторинг и
+// «Проверить сайт»; подбор при этом работает, у него свои правила. $full — ещё и сами правила, для отчёта.
+function interceptInfo(bool $full = false): array
+{
+  $refs = [];
+  $rules = [];
+  $policy = null;
+  foreach (['nfqws_post' => 'POSTROUTING', 'nfqws_pre' => 'PREROUTING'] as $chain => $hook) {
+    $out = [];
+    exec("iptables -w -t mangle -v -S $chain 2>/dev/null", $out);
+    if (!$out) {
+      $refs[$chain] = null;   // цепочки нет
+      continue;
+    }
+    $jumps = [];
+    exec("iptables -w -t mangle -S $hook 2>/dev/null", $jumps);
+    $refs[$chain] = count(preg_grep('/-j ' . $chain . '\b/', $jumps));
+    foreach ($out as $l) {
+      if (!str_starts_with($l, '-A ')) {
+        continue;
+      }
+      $rules[] = $l;
+      // метка политики — с маской 0x0fffffff; служебные метки nfqws2 (0x40000000, 0x20000000) сюда не подходят
+      if ($chain === 'nfqws_post' && !$policy && preg_match('/-m mark (! )?--mark (0x[0-9a-f]+)\/0x0?fffffff\b.*-j RETURN/i', $l, $m)) {
+        $policy = ['mode' => $m[1] !== '' ? 'only' : 'exclude', 'mark' => $m[2],
+          'passed' => preg_match('/-c (\d+) \d+/', $l, $c) ? (int)$c[1] : null];
+      }
+    }
+  }
+  if ($policy) {
+    $policy['name'] = preg_match('/^\s*POLICY_NAME=["\']?([^"\'\s#]*)/m', (string)@file_get_contents(CONF_FILE), $m) && $m[1] !== '' ? $m[1] : 'nfqws';
+  }
+  return ['refs' => $refs, 'policy' => $policy] + ($full ? ['rules' => $rules] : []);
+}
+
 function restartNeeded(?array $proc): bool
 {
   if (!$proc || !$proc['started']) {
@@ -5365,6 +5404,7 @@ function state(): array
     'profiles' => $profiles,
     'lists' => listsInventory($profiles),
     'iptables' => iptablesCounters(),
+    'intercept' => interceptInfo(),
     'logs' => nfqLogs(),
     'lint' => lintCurrent(),
     'conf_tokens' => array_map('tokens', array_intersect_key(confRawVars(file_get_contents(CONF_FILE)), array_flip(ARG_VARS))),
@@ -5616,7 +5656,29 @@ function reportText(array $sites, bool $hide, string $build): string
   $v6 = [];
   exec('ip -6 route show default 2>/dev/null', $v6);
   $L[] = 'IPv6 от провайдера: ' . ($v6 ? 'есть (' . preg_replace('/\s+/', ' ', preg_replace('/[0-9a-f]*:[0-9a-f:]+/i', '…', $v6[0])) . ')' : 'нет');
-  $L[] = 'правила перехвата: ' . json_encode($st['iptables'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+  // политика доступа Keenetic: при «только политика» запросы самого роутера идут мимо nfqws2
+  $raw = (string)file_get_contents(CONF_FILE);
+  foreach (['POLICY_NAME', 'POLICY_EXCLUDE'] as $v) {
+    $L[] = "$v=" . (preg_match('/^\s*' . $v . '=["\']?([^"\'\s#]*)/m', $raw, $m) ? $m[1] : '(не задано)');
+  }
+  $ic = interceptInfo(true);
+  $pol = $ic['policy'];
+  $L[] = 'политика доступа: ' . (!$pol ? 'не действует — nfqws2 обрабатывает все соединения через интерфейс провайдера'
+    : '«' . $pol['name'] . '», метка ' . $pol['mark'] . ' — ' . ($pol['mode'] === 'only'
+      ? 'обрабатываются ТОЛЬКО её устройства; запросы самого роутера (мониторинг, «Проверить сайт») идут мимо nfqws2'
+      : 'её устройства исключены из обработки')
+      . ($pol['passed'] !== null ? '; мимо по этому правилу прошло пакетов: ' . $pol['passed'] : ''));
+  foreach (['nfqws_post' => 'POSTROUTING', 'nfqws_pre' => 'PREROUTING'] as $chain => $hook) {
+    $n = $ic['refs'][$chain];
+    $L[] = "цепочка $chain: " . ($n === null ? 'НЕТ' : ($n ? "подключена к $hook" : "есть, но к $hook НЕ подключена — пакеты в неё не попадают"));
+  }
+  $L[] = 'правила перехвата (-c пакеты байты; счётчики обнуляются при каждой перезагрузке правил):';
+  foreach ($ic['rules'] as $r) {
+    $L[] = '  ' . $r;
+  }
+  if (!$ic['rules']) {
+    $L[] = '  нет';
+  }
   $L[] = '';
   $L[] = '== Профили (в порядке проверки) ==';
   foreach ($st['conf_profiles'] as $p) {
