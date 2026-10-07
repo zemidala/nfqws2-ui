@@ -316,7 +316,7 @@ const PAGES = {
   backup: ['#/settings/backup', 'Резервные копии'], hist: ['#/settings/hist', 'История изменений'], log: ['#/log', 'Журнал'],
   look: ['#/settings/look', 'Оформление'], about: ['#/settings/about', 'О программе'],
   // ещё не сделаны: в меню видны, но заблокированы и помечены «скоро»
-  diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], comm: ['#/tests/community', 'Стратегии сообщества'], auto: ['#/tests/auto', 'Автоподбор'], asn: ['#/asn', 'Список по ASN'], report: ['#/settings/report', 'Отчёт для помощи'],
+  diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], comm: ['#/tests/community', 'Стратегии сообщества'], frz: ['#/tests/freeze', 'Обрыв на 16 КБ'], auto: ['#/tests/auto', 'Автоподбор'], asn: ['#/asn', 'Список по ASN'], report: ['#/settings/report', 'Отчёт для помощи'],
 };
 // Новые функции — метка «новое». КАЖДАЯ новая функция интерфейса записывается сюда:
 // [страница из PAGES или «страница:функция», версия, в которой появилась, подпись для сообщения «Обновлено до…»].
@@ -327,6 +327,7 @@ const FEATURES = [
   ['pick:community', '1.9.0', 'стратегии сообщества в подборе'],
   ['pick:share', '1.9.0', '«Поделиться» и «Подтвердить» у найденной стратегии'],
   ['phist:share', '1.9.0', '«Поделиться» в истории подборов'],
+  ['frz', '1.10.0', 'проба «Обрыв на 16 КБ» — какое имя в фейке снимает обрыв у зарубежных хостингов'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 // на сколько минорных версий функция старше текущей (у сборки до выпуска — меньше нуля)
@@ -373,20 +374,20 @@ const SOON_HINT = 'Ещё в разработке — появится в одн
 const SYS_PAGES = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 const SYS_NAV = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 // Компоновка «Боковое меню»: группы и их страницы
-const MENU = [[null, ['over']], ['Проверка сайта', ['diag', 'pick', 'trace', 'phist', 'comm']], ['Наблюдение', ['mon', 'auto', 'tg']], ['Обход', ['prof', 'lists', 'asn']], ['Система', SYS_NAV]];
+const MENU = [[null, ['over']], ['Проверка сайта', ['diag', 'frz', 'pick', 'trace', 'phist', 'comm']], ['Наблюдение', ['mon', 'auto', 'tg']], ['Обход', ['prof', 'lists', 'asn']], ['Система', SYS_NAV]];
 // Упрощённый вид (галочка в «Оформлении»): шесть разделов, страницы раздела — вкладками над страницей (как в TOP_TABS)
-const MENU_SIMPLE = [['over', 'Обзор', 'home', ['over']], ['pick', 'Проверка сайта', 'tests', ['diag', 'pick', 'trace', 'phist', 'comm', 'site']], ['mon', 'Наблюдение', 'pulse', ['mon', 'auto', 'tg']],
+const MENU_SIMPLE = [['over', 'Обзор', 'home', ['over']], ['pick', 'Проверка сайта', 'tests', ['diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'site']], ['mon', 'Наблюдение', 'pulse', ['mon', 'auto', 'tg']],
   ['prof', 'Профили', 'layers', ['prof']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]];
 // Верхние вкладки компоновок: страница по клику, подпись, значок, страницы вкладки, «только на узком экране»
 const TOP_TABS = {
   menu: [],
-  tabs: [['over', 'Обзор', 'home', ['over'], true], ['pick', 'Проверка', 'tests', ['diag', 'pick', 'trace', 'phist', 'comm', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'auto', 'tg']],
+  tabs: [['over', 'Обзор', 'home', ['over'], true], ['pick', 'Проверка', 'tests', ['diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'auto', 'tg']],
     ['prof', 'Профили', 'layers', ['prof']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
-  site: [['over', 'Обзор', 'home', ['over']], ['mon', 'Сайты', 'pulse', ['mon', 'diag', 'pick', 'trace', 'phist', 'comm', 'auto', 'tg', 'site']],
+  site: [['over', 'Обзор', 'home', ['over']], ['mon', 'Сайты', 'pulse', ['mon', 'diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'auto', 'tg', 'site']],
     ['prof', 'Профили', 'layers', ['prof']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
 };
 // Нижняя панель телефона — одна для всех компоновок; остальное — в меню
-const BOTTOM = [['over', 'Обзор', 'home', ['over']], ['pick', 'Подбор', 'tests', ['diag', 'pick', 'trace', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'tg']], ['prof', 'Профили', 'layers', ['prof']]];
+const BOTTOM = [['over', 'Обзор', 'home', ['over']], ['pick', 'Подбор', 'tests', ['diag', 'frz', 'pick', 'trace', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'tg']], ['prof', 'Профили', 'layers', ['prof']]];
 
 const layout = () => document.documentElement.dataset.layout || 'menu';
 // Колонка обзора слева — только в компоновке «Вкладки» на широком экране
@@ -406,7 +407,7 @@ function pageOf(r = parseRoute()) {
   if (r.tab === 'site') return 'site';
   if (r.tab === 'diag') return 'diag';
   if (r.tab === 'asn') return 'asn';
-  if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace', history: 'phist', community: 'comm', auto: 'auto' }[r.arg] || 'pick';
+  if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace', history: 'phist', community: 'comm', freeze: 'frz', auto: 'auto' }[r.arg] || 'pick';
   if (r.tab === 'settings') return SYS_PAGES.includes(r.arg) ? r.arg : ['readme', 'changelog'].includes(r.arg) ? 'about' : 'prof';
   return 'over';
 }
@@ -811,7 +812,7 @@ function placeSide() {
 // Колонка состояния справа — на страницах-формах, проверках и таблицах, когда для неё хватает ширины
 // (показывает CSS по ширине области содержимого). Во «Вкладках» не нужна: обзор и так слева.
 // Списки, профили, конфиг, журнал и мониторинг отдают всю ширину своему содержимому, «Обзор» — карточкам.
-const RAIL_PAGES = ['diag', 'pick', 'trace', 'phist', 'comm', 'auto', 'tg', 'asn', 'basic', 'base', 'backup', 'hist', 'report', 'look', 'about', 'site'];
+const RAIL_PAGES = ['diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'auto', 'tg', 'asn', 'basic', 'base', 'backup', 'hist', 'report', 'look', 'about', 'site'];
 function placeRail(main, page) {
   main.classList.toggle('formy', RAIL_PAGES.includes(page));   // строки форм на широком экране — подсказки справа от поля
   if (!isWide() || overviewCol() || !RAIL_PAGES.includes(page)) return;
@@ -3508,6 +3509,7 @@ async function viewTests(main, r, bare = false) {
   if (r.arg === 'history') return viewPickHist(main, r);
   if (r.arg === 'auto') return viewAuto(main);
   if (r.arg === 'community') return viewCommunity(main);
+  if (r.arg === 'freeze') return viewFreeze(main);
   const tab = ['trace', 'monitor', 'notify'].includes(r.arg) ? r.arg : 'pick';
   if (tab === 'monitor') {
     main.append(h('div', { class: 'vh' }, h('h1', { text: layout() === 'site' ? 'Сайты' : 'Мониторинг' })));
@@ -3562,6 +3564,7 @@ async function viewTests(main, r, bare = false) {
       api('check', { host: s.host }).then((r) => { routeInfo = r; routeLoading = null; if (out.isConnected) drawStatus(lastStatus); }).catch(() => { routeLoading = null; });
     }
     if (s.state === 'idle') { out.replaceChildren(); return; }
+    if (s.type === 'freeze') { out.replaceChildren(running ? notice('info', 'Идёт проба «Обрыв на 16 КБ»', 'Подбор можно запустить, когда она закончится.', h('a', { class: 'btn small', href: PAGES.frz[0] }, 'Открыть')) : null); return; }
     if ((s.type === 'trace') !== (tab === 'trace') && !running) { out.replaceChildren(); return; }
     const head = running ? h('section', { class: 'panel' },
       h('div', { class: 'row' }, h('span', { class: 'spin' }), h('b', { text: `${s.type === 'trace' ? 'Трассировка' : 'Тест'} ${s.host}` }), h('span', { class: 'grow' }),
@@ -3860,7 +3863,8 @@ async function shareStrategy(x, s) {
   const body = h('div', { class: 'stack modal-b' }, spinner('Определяю провайдера и сеть сайта…'));
   const send = btn('Открыть форму на GitHub', null, 'primary', 'share', { disabled: true });
   const bg = modal(fail ? 'Стратегия не сработала' : x.community ? 'Подтвердить стратегию' : 'Поделиться стратегией', body, send);
-  const info = await api('share_info', { host: s.host }).catch((e) => ({ error: e.message }));
+  const info = await api('share_info', { host: s.host || '' }).catch((e) => ({ error: e.message }));
+  if (s.asn) info.target_asn = s.asn;   // находка для целой сети, без сайта
   const asn = h('input', { class: 'input mono', value: info.asn || '', placeholder: '12389', style: 'max-width:120px', 'aria-label': 'AS провайдера' });
   const prov = h('input', { class: 'input grow', value: info.provider || '', placeholder: 'название провайдера', 'aria-label': 'Провайдер' });
   const withHost = h('input', { type: 'checkbox', checked: true });
@@ -3892,7 +3896,7 @@ async function shareStrategy(x, s) {
     info.error ? notice('warn', 'Не всё удалось определить', info.error) : null,
     h('div', { class: 'row' }, h('span', { class: 'sm muted', text: 'Провайдер' }), asn, prov),
     !info.asn ? h('p', { class: 'sm muted', text: 'Номер AS провайдера определить не удалось — впишите его (узнать можно на bgp.he.net по своему адресу).' }) : null,
-    h('label', { class: 'row' }, withHost, `указать сайт ${s.host}`),
+    s.host ? h('label', { class: 'row' }, withHost, `указать сайт ${s.host}`) : null,
     pre,
     h('p', { class: 'sm faint' }, 'Откроется форма в ', h('a', { href: info.repo || '#', target: '_blank', rel: 'noopener', text: 'базе стратегий' }),
       ' на GitHub, уже заполненная, — проверьте и нажмите Create (нужен аккаунт GitHub). Issue публичный: в нём только то, что выше. Ваш IP-адрес не отправляется. ',
@@ -3957,6 +3961,97 @@ async function viewCommunity(main) {
         h('li', {}, 'База — открытый репозиторий ', h('a', { href: d.repo, target: '_blank', rel: 'noopener', text: 'zemidala/nfqws2-strategies' }), '. Присланное проверяет GitHub Action: принимаются только шаги --lua-desync без путей к файлам.'))));
   };
   await load();
+}
+
+// ============ Обрыв на 16 КБ: проба по сетям ============
+// Где провайдер замораживает соединение после ~16–20 КБ и какое имя в фейке это снимает — для сети целиком.
+
+async function viewFreeze(main) {
+  const sites = h('input', { class: 'input mono grow', placeholder: 'свои сайты через запятую, например king.hr (необязательно)', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Свои сайты' });
+  const out = h('div', { class: 'stack', style: 'gap:14px' }, spinner('Загрузка…'));
+  const startBtn = btn('Запустить пробу', start, 'primary', 'play');
+  main.append(
+    h('div', { class: 'vh' }, h('h1', { text: 'Обрыв на 16 КБ' })),
+    panel(null, null,
+      h('p', { text: 'Многие провайдеры пропускают начало соединения с зарубежными хостингами (Hetzner, OVH, Linode и др.) и замораживают его после 16–20 КБ: сайт начинает открываться и зависает. Обычные стратегии тут не помогают. Помогает фейк с именем сайта, который провайдер не трогает, — и подходящее имя обычно одно для всей сети хостинга, а не для отдельного сайта.' }),
+      h('p', { class: 'sm muted', text: 'Проба по очереди открывает опорные адреса в крупных сетях без обхода, а где есть обрыв — подбирает имя для фейка. Найденное ставится одним профилем на все адреса сети (список по ASN обновляется сам раз в сутки).' }),
+      h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Свои сайты' }), sites),
+      h('div', { class: 'row' }, startBtn, h('span', { class: 'sm muted grow note-wide', text: 'Занимает 2–10 минут. Работает отдельный nfqws2 на проверочных соединениях роутера — ваш трафик не затрагивается.' }))),
+    out);
+
+  async function start() {
+    const hosts = sites.value.split(/[\s,;]+/).map((x) => x.trim().replace(/^[a-z]+:\/\//i, '').replace(/[/?#].*$/, '')).filter(Boolean);
+    if (!await guarded(() => api('freeze_start', { hosts }))) return;
+    poll();
+  }
+  function poll() {
+    clearInterval(testPoll);
+    const tick = async () => {
+      if (!out.isConnected) { clearInterval(testPoll); return; }
+      const s = await api('freeze_get').catch(() => null);
+      if (!s) return;
+      draw(s);
+      if (!['running', 'starting'].includes(s.state)) clearInterval(testPoll);
+    };
+    tick();
+    testPoll = setInterval(tick, 2000);
+  }
+
+  function verdict(n) {
+    if (n.baseline?.ok) return [levelIcon('ok'), h('span', { text: 'обрыва нет' })];
+    if (!n.freeze) return [levelIcon('info'), h('span', { class: 'muted', text: 'не проверить: ' + (n.baseline?.reason || 'нет ответа') })];
+    const what = n.stall ? 'замирает ещё до ответа' : 'обрыв есть';
+    if (n.found) return [levelIcon('warning'), h('span', {}, what + ' · снимает имя ', h('b', { class: 'mono', text: n.found.name }), h('div', { class: 'sm muted', text: n.found.via ? `найдено на ${n.found.via} — та же сеть` : n.found.strategy + (n.found.ms ? `, ${n.found.ms} мс` : '') }))];
+    return [levelIcon('error'), h('span', { text: n.tried?.length ? `${what} · не снялся (проверено ${plural(n.tried.length, 'вариант', 'варианта', 'вариантов')})` : what })];
+  }
+
+  function draw(s) {
+    const running = ['running', 'starting'].includes(s.state);
+    startBtn.disabled = running;
+    if (s.state === 'idle') { out.replaceChildren(panel(null, null, h('p', { class: 'muted', text: 'Проба ещё не запускалась.' }))); return; }
+    if (s.state === 'error') { out.replaceChildren(notice('bad', 'Проба не удалась', s.error || '')); return; }
+    const nets = s.nets || [];
+    // итог — по сетям (AS), а не по адресам: у одной сети бывает несколько опорных адресов
+    const byAs = (list) => [...new Map(list.map((n) => [n.asn || n.host, n])).values()];
+    const frozen = byAs(nets.filter((n) => n.freeze));
+    const found = frozen.filter((n) => byAs(nets).length && nets.some((x) => (x.asn || x.host) === (n.asn || n.host) && x.found));
+    const total = byAs(nets).length;
+    out.replaceChildren(
+      running ? h('section', { class: 'panel' }, h('div', { class: 'row' }, h('span', { class: 'spin' }), h('b', { text: s.phase === 'names' ? 'Подбираю имена для сетей с обрывом' : 'Проверяю сети без обхода' }), h('span', { class: 'grow' }),
+        h('span', { class: 'sm muted num', text: s.total ? `${s.done} из ${s.total}` : 'запуск…' }), btn('Остановить', () => api('test_stop'), 'small danger', 'stop')),
+        s.current ? h('p', { class: 'sm muted', text: 'Сейчас: ' + s.current }) : null) : null,
+      !running && nets.length ? (frozen.length
+        ? notice(found.length === frozen.length ? 'ok' : 'warn', `Обрыв есть в ${plural(frozen.length, 'сети', 'сетях', 'сетях')} из ${total}`,
+          (found.length ? `Для ${found.length} из них имя нашлось — его можно применить для всей сети.` : 'Ни одно имя обрыв не сняло.')
+          + (found.length < frozen.length ? ' Где не снялось: опорные адреса самой компании-хостинга провайдер иногда режет строже, чем сайты её клиентов, — впишите в «Свои сайты» сайт, который живёт в этой сети и не открывается у вас, или запустите на нём подбор с уточнением.' : ''))
+        : notice('ok', 'Обрыва на 16 КБ не видно', 'Ни одна из проверенных сетей не замораживает соединение — значит, у вашего провайдера сейчас этого ограничения нет (или оно касается других сетей).')) : null,
+      !running && s.state === 'time' ? notice('warn', 'Проба остановлена по времени', 'На подбор имён отведено 10 минут; ниже — что успели проверить.') : null,
+      nets.length ? panel('Сети', h('span', { class: 'sm muted', text: s.finished ? fmtDate(s.finished) : '' }), h('div', { class: 'frz' },
+        nets.map((n) => h('div', { class: 'frz-row' },
+          h('div', {}, h('div', { text: n.label }), h('div', { class: 'sm muted mono', text: n.host })),
+          h('div', { class: 'mono sm', text: n.asn ? 'AS' + n.asn : '—' }),
+          h('div', { class: 'row', style: 'gap:6px;flex-wrap:nowrap;align-items:flex-start' }, ...verdict(n)),
+          // кнопки — один раз на сеть: у адреса, где имя нашлось
+          h('div', { class: 'row frz-act' }, n.found && n.asn && !n.found.via ? [
+            btn('Применить для сети', () => applyNet(n), 'small primary', 'ok', { title: `Список адресов AS${n.asn} и профиль с найденным именем — для всех сайтов этой сети` }),
+            shareBtn({ steps: n.found.steps, ok: 3, tries: 3, name: n.found.strategy }, { host: '', proto: 'https', asn: n.asn })] : null))))) : null);
+  }
+
+  // Профиль на всю сеть: список адресов по ASN (обновляется сам) + найденная стратегия, первым, с перезапуском и проверкой
+  async function applyNet(n) {
+    if (!confirm(`Применить для всей сети AS${n.asn} (${n.label})?\n\nБудет создан список адресов этой сети (по данным RIPEstat, обновляется раз в сутки) и профиль первым в «своих профилях»: TLS на 443 к адресам сети — стратегия ${n.found.strategy} с именем ${n.found.name}.\n\nnfqws2 перезапустится с проверкой: если сайты мониторинга перестанут открываться или вы не подтвердите за 3 минуты, всё вернётся как было.`)) return;
+    toast('Получаю адреса сети…');
+    const r = await guarded(() => api('asn_create', { asn: n.asn, auto: true }));
+    if (!r) return;
+    await loadConf();
+    const cur = S.conf.vars.NFQWS_ARGS_CUSTOM.trim() ? splitParts(tokensOf(S.conf.vars.NFQWS_ARGS_CUSTOM)) : [];
+    const part = ['--filter-tcp=443', '--filter-l7=tls', `--ipset=${r.path}`, '--payload=tls_client_hello', ...n.found.steps];
+    if (!await saveVars({ NFQWS_ARGS_CUSTOM: joinParts([part, ...cur]) }, `профиль для сети AS${n.asn}: обрыв на 16 КБ`)) return;
+    await safeRestart();
+    go('#/settings/p1');
+  }
+
+  poll();
 }
 
 // ============ История подборов: что и когда работало для каждого сайта ============

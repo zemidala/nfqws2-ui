@@ -692,6 +692,11 @@ a.over-row:hover { background: var(--soft); }
 .dstep.skip b { color: var(--faint); font-weight: 500; }
 @media (max-width: 759px) { .dstep { grid-template-columns: 22px minmax(0, 1fr); } .dstep > :last-child { grid-column: 2; } }
 .tag.new { border-color: var(--accent); color: var(--accent); }
+/* «Обрыв на 16 КБ»: строки сетей; на телефоне — карточки */
+.frz-row { display: grid; grid-template-columns: minmax(0, 1.3fr) 80px minmax(0, 2fr) 240px; gap: 6px 14px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.frz-row:first-child { border-top: 0; }
+.frz-act { flex-wrap: nowrap; justify-content: flex-end; }
+@media (max-width: 759px) { .frz-row { grid-template-columns: minmax(0, 1fr) auto; } .frz-row > :nth-child(3), .frz-row > .frz-act { grid-column: 1 / -1; } .frz-act { justify-content: flex-start; } .frz-act:empty { display: none; } }
 /* «новое»: точка на вкладках, разделах нижней панели, кнопках меню и у группы в свёрнутом меню */
 .tabs a.has-new, .bottom a.has-new, .bottom > button.has-new, #burger.has-new, .mgrp.has-new .nav-h { position: relative; }
 .tabs a.has-new::after, .bottom a.has-new::after, .bottom > button.has-new::after, #burger.has-new::after, :root[data-navmini] .mgrp.has-new .nav-h::after {
