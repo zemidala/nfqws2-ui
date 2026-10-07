@@ -3282,6 +3282,16 @@ function testRules(string $mode, string $iface, int $slots = 0): void
     $ipt . '-N nfqws_test_post', $ipt . '-N nfqws_test_pre',
     $ipt . '-I POSTROUTING 1 -j nfqws_test_post', $ipt . '-I PREROUTING 1 -j nfqws_test_pre',
   ];
+  // Только соединения самого роутера: проверочные порты — обычные порты источника, с такими же ходят и устройства
+  // сети (Linux, Android — примерно 3 соединения из 100). Чужое соединение сразу выходит из проверочных цепочек
+  // и идёт дальше как обычно, через основной nfqws2. Отличаем по адресу, с которого соединение началось.
+  $o = [];
+  exec('ip -4 -o addr show dev ' . $if . ' 2>/dev/null', $o);
+  if (preg_match('/inet (\d+\.\d+\.\d+\.\d+)/', implode(' ', $o), $m)) {
+    foreach (['nfqws_test_post', 'nfqws_test_pre'] as $chain) {
+      $cmds[] = $ipt . "-A $chain -m conntrack ! --ctorigsrc {$m[1]} -j RETURN";   // нет модуля — правило не встанет, будет как раньше
+    }
+  }
   if ($mode === 'queue') {
     for ($k = 0; $k < $slots; $k++) {
       [$lo, $hi] = parPorts($k);
