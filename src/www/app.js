@@ -3966,7 +3966,8 @@ async function viewCommunity(main) {
     body.replaceChildren(
       panel(null, null, head,
         d.error ? notice('warn', 'База не загрузилась', d.error + ' — попробуйте позже.') : null,
-        d.asn && !d.error ? h('div', { class: 'row' }, site, btn('Проверить все на сайте', () => test(null), d.items.length ? 'primary' : '', 'play', { disabled: !d.items.length }),
+        // проверять нечего — поле и кнопку не показываем: серая кнопка без объяснения выглядит как поломка
+        d.asn && !d.error && d.items.length ? h('div', { class: 'row' }, site, btn('Проверить все на сайте', () => test(null), 'primary', 'play'),
           h('span', { class: 'sm muted grow note-wide', text: 'Подбор только по стратегиям из базы — до восьми, сначала открывавшие этот сайт или его сеть. Ваш трафик не затрагивается.' })) : null,
         whole),
       d.asn && !d.error && !d.items.length ? panel(null, null, h('p', { class: 'muted', text: `Для AS${d.asn} в базе пока ничего нет${d.total ? ` (всего в базе ${plural(d.total, 'стратегия', 'стратегии', 'стратегий')})` : ''}. Станьте первым: после удачного подбора нажмите «Поделиться».` })) : null,

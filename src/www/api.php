@@ -1494,6 +1494,7 @@ function volumeFrozen(string $url): bool
   curl_setopt_array($ch, [
     CURLOPT_POST => true,
     CURLOPT_POSTFIELDS => random_bytes(VOLUME_BYTES),   // случайные данные — чтобы не сжимались
+    CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
     CURLOPT_HTTPHEADER => ['Expect:', 'Content-Type: application/octet-stream'],
     CURLOPT_RETURNTRANSFER => true,
     CURLOPT_FOLLOWLOCATION => false,
@@ -1518,6 +1519,9 @@ function probe(string $host): array
   $code = null;
   $got = 0;
   curl_setopt_array($ch, [
+    // по IPv4, как подбор и диагноз: маршрут через профили считается для IPv4, а при IPv6 от провайдера запрос ушёл бы
+    // по нему — мимо стратегии, если nfqws2 не настроен на IPv6 (в подборе сайт открывается, здесь — «тайм-аут»)
+    CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
     CURLOPT_RETURNTRANSFER => false,
     CURLOPT_FOLLOWLOCATION => false,
     CURLOPT_CONNECTTIMEOUT => 5,
@@ -5608,6 +5612,11 @@ function reportText(array $sites, bool $hide, string $build): string
     $L[] = "$v=" . ($v === 'NFQWS_EXTRA_ARGS' ? (confRawVars((string)file_get_contents(CONF_FILE))[$v] ?? '') : $exp[$v]);
   }
   $L[] = 'параметры запуска: ' . implode(' ', tokens($exp['NFQWS_BASE_ARGS']));
+  // для разбора «в подборе открывается, а в мониторинге нет»: есть ли IPv6 от провайдера и ловят ли правила пакеты
+  $v6 = [];
+  exec('ip -6 route show default 2>/dev/null', $v6);
+  $L[] = 'IPv6 от провайдера: ' . ($v6 ? 'есть (' . preg_replace('/\s+/', ' ', preg_replace('/[0-9a-f]*:[0-9a-f:]+/i', '…', $v6[0])) . ')' : 'нет');
+  $L[] = 'правила перехвата: ' . json_encode($st['iptables'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
   $L[] = '';
   $L[] = '== Профили (в порядке проверки) ==';
   foreach ($st['conf_profiles'] as $p) {
