@@ -3707,6 +3707,11 @@ function testJob(): void
     return;
   }
 
+  if ($job['type'] === 'wide') {
+    wideJob($job, $status, $nfq, $iface, $baseArgs);
+    return;
+  }
+
   // Подбор стратегии. Сначала — имеет ли он смысл: если имя не находится или адрес не отвечает вовсе,
   // перебор стратегий только зря займёт несколько минут.
   $dns = diagDns($job['host']);
@@ -3951,6 +3956,82 @@ function testJob(): void
   $status['current'] = null;
   testSaveStatus($status);
   picksAdd($status, $repeats);
+}
+
+// ----- одна стратегия на нескольких сайтах -----
+// Найденная подбором стратегия может открывать только свой сайт. Перед тем как ставить её на профиль со списком,
+// проверяем её на других сайтах этого списка: сначала без обхода (что открывается и так — не в счёт), потом через
+// отдельный nfqws2 с этой стратегией. Итог подбора, из которого запущена проверка, хранится в статусе (pick),
+// чтобы его таблица не пропала со страницы.
+function wideJob(array $job, array &$status, ?array &$nfq, string $iface, array $baseArgs): void
+{
+  $http = ($job['proto'] ?? 'https') === 'http';
+  $filter = $http ? ['--filter-tcp=80', '--filter-l7=http', '--payload=http_req'] : ['--filter-tcp=443', '--filter-l7=tls', '--payload=tls_client_hello'];
+  $repeats = max(1, min(5, (int)($job['repeats'] ?? 3)));
+  $status += ['pick' => $job['pick'] ?? null, 'steps' => $job['steps'], 'name' => strategyName($job['steps']), 'repeats' => $repeats, 'sites' => []];
+  $status['total'] = count($job['hosts']) * 2;
+  $status['phase'] = 'baseline';
+  testRules('bypass', $iface);
+  foreach ($job['hosts'] as $h) {
+    if (is_file(TEST_DIR . '/stop')) {
+      break;
+    }
+    $status['current'] = "$h без обхода";
+    testSaveStatus($status);
+    $row = ['host' => $h];
+    if (diagDns($h)['status'] === 'nxdomain') {
+      $row['skip'] = 'имя не находится';
+    } else {
+      $b = curlProbe($h, $http);
+      $row['baseline'] = ['ok' => $b['ok'], 'reason' => $b['reason'] ?? null];
+    }
+    $status['sites'][] = $row;
+    $status['done']++;
+  }
+  $status['phase'] = 'check';
+  testRules('queue', $iface);
+  $nfq = is_file(TEST_DIR . '/stop') ? null : testNfqwsStart(array_merge($baseArgs, $filter, $job['steps']));
+  if (!$nfq && !is_file(TEST_DIR . '/stop')) {
+    $status['state'] = 'error';
+    $status['error'] = 'nfqws2 не принял параметры: ' . trim((string)@file_get_contents(TEST_DIR . '/nfqws.out'));
+    testSaveStatus($status);
+    return;
+  }
+  foreach ($status['sites'] as &$row) {
+    if (is_file(TEST_DIR . '/stop')) {
+      $status['state'] = 'stopped';
+      break;
+    }
+    $status['done']++;
+    if (isset($row['skip'])) {
+      continue;
+    }
+    $status['current'] = $row['host'] . ' со стратегией';
+    testSaveStatus($status);
+    $ok = 0;
+    $times = [];
+    $reason = null;
+    for ($i = 0; $i < $repeats; $i++) {
+      $r = curlProbe($row['host'], $http);
+      if (!$r['ok']) {
+        $reason = $r['reason'];
+        break;   // как в подборе: первая же неудача — дальше не тратим время
+      }
+      $ok++;
+      $times[] = $r['ms'];
+    }
+    $row += ['ok' => $ok, 'tries' => min($i + 1, $repeats), 'ms' => $times ? (int)round(array_sum($times) / count($times)) : null, 'reason' => $reason];
+  }
+  unset($row);
+  testNfqwsStop($nfq);
+  $nfq = null;
+  testRules('off', $iface);
+  if ($status['state'] === 'running') {
+    $status['state'] = 'done';
+  }
+  $status['finished'] = time();
+  $status['current'] = null;
+  testSaveStatus($status);
 }
 
 // ----- обрыв на 16 КБ: проба по сетям -----
@@ -4412,7 +4493,7 @@ function testLaunch(array $job): void
   file_put_contents(TEST_DIR . '/job.json', json_encode($job));
   touch(TEST_DIR . '/trace.log');
   chmod(TEST_DIR . '/trace.log', 0666);
-  testSaveStatus(['state' => 'starting', 'type' => $job['type'], 'host' => $job['host'], 'started' => time()]);
+  testSaveStatus(['state' => 'starting', 'type' => $job['type'], 'host' => $job['host'], 'started' => time()] + (isset($job['pick']) ? ['pick' => $job['pick']] : []));
   // Чистое окружение: иначе php-cgi увидит CGI-переменные запроса и не перейдёт в режим задания
   exec('(env -i PATH=' . JOB_PATH . ' NFQWS_UI_CLI=test php-cgi -q -f ' . escapeshellarg(__FILE__) . ' >/dev/null 2>&1 &)');
 }
@@ -6534,6 +6615,36 @@ switch ($cmd) {
     $own = array_values(array_filter(is_array($in['steps'] ?? null) ? $in['steps'] : [], fn($t) => is_string($t) && preg_match('/^--lua-desync=[^\s"`$\\\\]+$/', $t)));
     testLaunch(['type' => $cmd === 'trace_start' ? 'trace' : 'pick', 'host' => $host,
       'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https', 'sets' => $own ? $sets : ($sets ?: ['config', 'std']), 'steps' => $own, 'repeats' => (int)($in['repeats'] ?? 3), 'refine' => !empty($in['refine'])]);
+    respond(['ok' => true]);
+
+  case 'wide_start':
+    // проверить найденную стратегию на других сайтах (до 10)
+    if (testRunning()) {
+      fail('Сейчас идёт подбор или другая проверка — дождитесь окончания');
+    }
+    if (diagBusy()) {
+      fail('Сейчас идёт диагноз сайта — он использует те же проверочные правила. Повторите через несколько секунд.');
+    }
+    $steps = array_values(array_filter(is_array($in['steps'] ?? null) ? $in['steps'] : [], fn($t) => is_string($t) && preg_match('/^--lua-desync=[^\s"`$\\\\]+$/', $t)));
+    if (!$steps) {
+      fail('Нет стратегии для проверки');
+    }
+    $hosts = [];
+    foreach (is_array($in['hosts'] ?? null) ? $in['hosts'] : [] as $h) {
+      $h = cleanHost((string)$h);
+      if (validHost($h) && !isIp($h)) {
+        $hosts[$h] = true;
+      }
+    }
+    $hosts = array_slice(array_keys($hosts), 0, 10);
+    if (!$hosts) {
+      fail('Укажите хотя бы один сайт, например rutracker.org');
+    }
+    // итог подбора, из которого запущена проверка, сохраняем — страница покажет его под новой проверкой
+    $prev = testStatus();
+    $pick = ($prev['type'] ?? '') === 'pick' ? $prev : (($prev['type'] ?? '') === 'wide' ? ($prev['pick'] ?? null) : null);
+    testLaunch(['type' => 'wide', 'host' => $pick['host'] ?? $hosts[0], 'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https',
+      'hosts' => $hosts, 'steps' => $steps, 'repeats' => (int)($in['repeats'] ?? ($pick['repeats'] ?? 3)), 'pick' => $pick]);
     respond(['ok' => true]);
 
   case 'freeze_start':

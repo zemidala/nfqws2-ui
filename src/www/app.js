@@ -330,6 +330,7 @@ const FEATURES = [
   ['phist:share', '1.9.0', '«Поделиться» в истории подборов'],
   ['frz', '1.10.0', 'проба «Обрыв на 16 КБ» — какое имя в фейке снимает обрыв у зарубежных хостингов'],
   ['pick:catalog', '1.10.0', 'каталог стратегий zapret2 в подборе (сотни и тысячи стратегий, параллельно)'],
+  ['pick:wide', '1.11.0', '«На других сайтах» у найденной стратегии — открывает ли она не только свой сайт'],
   ['tg:log', '1.11.0', 'уведомления не теряются, когда Telegram недоступен, и журнал последних сообщений'],
   ['about:session', '1.11.0', 'срок входа: сколько не выходить из интерфейса («О программе» → «Вход»)'],
 ];
@@ -3636,6 +3637,11 @@ async function viewTests(main, r, bare = false) {
         h('span', { class: 'sm muted num', text: s.total ? `${s.done} из ${s.total}` : 'запуск…' }), btn('Остановить', () => api('test_stop'), 'small danger', 'stop')),
       s.total ? h('div', { class: 'progress', style: 'height:6px;border-radius:99px;background:var(--soft);overflow:hidden' }, h('i', { style: `display:block;height:100%;width:${Math.round(s.done / s.total * 100)}%;background:var(--accent)` })) : null,
       s.current ? h('p', { class: 'sm muted', text: 'Сейчас: ' + s.current }) : null) : null;
+    if (s.type === 'wide') {
+      const p = s.pick;
+      out.replaceChildren(wideResult(s, running), p && (p.results?.length || p.baseline) ? pickResult(p, false) : null);
+      return;
+    }
     if (s.state === 'error') { out.replaceChildren(notice('bad', s.title || 'Тест не удался', s.error || '', s.host && s.title ? btn('Подробный диагноз', () => go(diagHref(s.host)), 'small', 'search') : null)); return; }
     if (s.type === 'trace') { out.replaceChildren(head, s.state === 'done' ? traceResult(s) : null); return; }
     out.replaceChildren(head, s.results?.length || s.baseline ? pickResult(s, running) : null);
@@ -3659,7 +3665,7 @@ async function viewTests(main, r, bare = false) {
         h('td', { class: 'sm muted' }, x.from, x.hist ? h('div', { class: 'nowrap' }, chip('работала ' + fmtDate(x.hist), 'ok')) : null, x.confirmed ? h('div', { class: 'nowrap' }, full ? chip('перепроверена', 'ok') : chip('в пачке открывала, по одной — нет')) : null),
         h('td', { class: 'sm', text: full ? `открылся ${x.ok} из ${x.ok}` : x.ok ? `${x.ok} из ${x.tries}` : x.reason || 'не открылся' }),
         h('td', { class: 'num', text: x.ms ? x.ms + ' мс' : '—' }),
-        h('td', {}, x.ok || x.community ? h('div', { class: 'row', style: 'flex-wrap:nowrap;justify-content:flex-end' }, x.ok ? applyMenu(x, s) : null, full || x.community ? shareBtn(x, s) : null) : null));
+        h('td', {}, x.ok || x.community ? h('div', { class: 'row', style: 'flex-wrap:nowrap;justify-content:flex-end' }, x.ok ? applyMenu(x, s) : null, full ? wideBtn(x, s) : null, full || x.community ? shareBtn(x, s) : null) : null));
     });
     return h('div', { class: 'stack', style: 'gap:14px' },
       flow(s, running, res, best),
@@ -3779,6 +3785,80 @@ async function viewTests(main, r, bare = false) {
       });
     }
     return opts;
+  }
+
+  // Проверить найденную стратегию на других сайтах: открывает ли она не только свой
+  function wideBtn(x, s) {
+    return btn('', () => wideDialog(x, s), 'small ghost icon', 'layers',
+      { title: 'Проверить эту стратегию на других сайтах — например, из списка профиля', 'aria-label': 'Проверить на других сайтах' });
+  }
+
+  // Сайты для проверки: из списка профиля, откуда стратегия (или из user.list), без самого сайта, до 8 случайных
+  async function wideSuggest(x, s) {
+    const nums = [...(x.from || '').matchAll(/#(\d+)/g)].map((m) => +m[1]);
+    const hostLists = S.state.lists.filter((l) => l.kind === 'host' && l.exists && l.used.some((u) => u.role === 'include'));
+    const list = hostLists.find((l) => l.used.some((u) => nums.includes(u.profile) && u.role === 'include'))
+      || hostLists.find((l) => l.name === 'user.list') || hostLists[0];
+    if (!list) return { list: null, hosts: [] };
+    const r = await api('list_get', { name: list.name }).catch(() => null);
+    const all = (r?.content || '').split('\n').map((l) => l.replace(/#.*/, '').trim().toLowerCase())
+      .filter((l) => l && !/[\^*/: ]/.test(l) && !/^[\d.]+$/.test(l) && l.includes('.') && l !== s.host && !s.host.endsWith('.' + l));
+    for (let i = all.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [all[i], all[j]] = [all[j], all[i]]; }
+    return { list, hosts: all.slice(0, 8) };
+  }
+
+  async function wideDialog(x, s) {
+    const ta = h('textarea', { class: 'input mono', rows: 8, placeholder: 'rutracker.org\nyoutube.com', 'aria-label': 'Сайты, по одному в строке', autocapitalize: 'off', spellcheck: 'false' });
+    const from = h('p', { class: 'sm muted', text: 'Подбираю сайты из списка…' });
+    const run = btn('Проверить', async () => {
+      const hosts = ta.value.split(/[\s,]+/).filter(Boolean);
+      if (!hosts.length) { toast('Укажите хотя бы один сайт', { err: true }); return; }
+      if (!await guarded(() => api('wide_start', { steps: x.steps, hosts, proto: s.proto, repeats: s.repeats }))) return;
+      bg.close();
+      window.scrollTo({ top: out.getBoundingClientRect().top + window.scrollY - 80, behavior: 'smooth' });
+      poll();
+    }, 'primary', 'play');
+    const bg = modal('Проверить на других сайтах', h('div', { class: 'stack modal-b' },
+      h('div', {}, h('b', { text: x.name }), h('code', { class: 'sm muted', style: 'display:block;word-break:break-all', text: x.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') })),
+      h('p', { class: 'sm', text: `Стратегия открыла ${s.host}. Откроет ли она другие сайты? Это стоит проверить, прежде чем ставить её на профиль со списком: если она работает только для одного сайта, остальные из списка перестанут открываться.` }),
+      h('label', { class: 'lbl', text: 'Сайты — до 10, по одному в строке' }), ta, from,
+      h('p', { class: 'sm muted', text: 'Сначала каждый сайт открывается без обхода: что открывается и так, в итог не входит. Потом — через отдельный nfqws2 с этой стратегией, как в подборе. Ваш трафик и основной nfqws2 не затрагиваются. Около 10–20 секунд на сайт.' })), run);
+    const sug = await wideSuggest(x, s);
+    ta.value = sug.hosts.join('\n');
+    from.textContent = sug.list ? (sug.hosts.length ? `Взяты случайные сайты из ${sug.list.name} — можно поменять.` : `В ${sug.list.name} нет других сайтов — впишите свои.`) : 'Списков сайтов нет — впишите сайты сами.';
+  }
+
+  function wideResult(s, running) {
+    const rows = s.sites || [];
+    const counted = rows.filter((r) => !r.skip && r.baseline && !r.baseline.ok && r.ok !== undefined);
+    const okN = counted.filter((r) => r.ok > 0 && r.ok === r.tries).length;
+    const n = counted.length;
+    const verdict = running || s.state === 'error' ? null : !n
+      ? notice('info', 'Проверять было не на чем', 'Все сайты открываются и без обхода (или их имена не находятся) — итог ничего не говорит о стратегии. Впишите сайты, которые у вас не открываются без обхода.')
+      : okN === n ? notice('ok', `Открыла все: ${okN} из ${n}`, 'Похоже, стратегия работает не только для одного сайта — её можно ставить на профиль со списком.')
+        : okN ? notice('warn', `Открыла ${okN} из ${n}`, `Для профиля со всем списком она не подойдёт: часть сайтов не откроется. ${s.pick ? `Лучше применить её только для ${s.pick.host} или подобрать стратегию для остальных.` : 'Для остальных сайтов нужна другая стратегия.'}`)
+          : notice('bad', `Не открыла ни один из ${n}`, s.pick ? `Похоже, стратегия работает только для ${s.pick.host} — ставьте её профилем только для него.` : 'Эти сайты она не открывает.');
+    return h('section', { class: 'panel' },
+      h('div', { class: 'row' }, running ? h('span', { class: 'spin' }) : null, h('h2', { text: 'На других сайтах: ' + s.name }), newTag('pick:wide'), h('span', { class: 'grow' }),
+        running ? h('span', { class: 'sm muted num', text: s.total ? `${s.done} из ${s.total}` : 'запуск…' }) : null,
+        running ? btn('Остановить', () => api('test_stop'), 'small danger', 'stop') : null),
+      h('code', { class: 'sm muted', style: 'word-break:break-all', text: (s.steps || []).map((t) => t.replace('--lua-desync=', '')).join('  ') }),
+      running && s.current ? h('p', { class: 'sm muted', text: 'Сейчас: ' + s.current }) : null,
+      s.state === 'error' ? notice('bad', 'Проверка не удалась', s.error || '') : verdict,
+      rows.length ? h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
+        h('thead', {}, h('tr', {}, h('th'), h('th', { class: 'wide', text: 'Сайт' }), h('th', { text: 'Без обхода' }), h('th', { text: 'Со стратегией' }), h('th', { class: 'num', text: 'Время' }))),
+        h('tbody', {}, rows.map((r) => {
+          const full = r.ok > 0 && r.ok === r.tries;
+          const free = r.baseline?.ok;
+          return h('tr', {},
+            h('td', {}, r.ok === undefined && !r.skip ? null : levelIcon(r.skip || free ? 'info' : full ? 'ok' : r.ok ? 'warning' : 'error')),
+            h('td', { class: 'mono', text: r.host }),
+            h('td', { class: 'sm', text: r.skip ? r.skip : free ? 'открывается — не в счёт' : r.baseline?.reason || '—' }),
+            h('td', { class: 'sm', text: r.skip ? '—' : r.ok === undefined ? (running ? 'ждёт' : 'не проверен') : full ? `открылся ${r.ok} из ${r.ok}` : r.ok ? `${r.ok} из ${r.tries}` : r.reason || 'не открылся' }),
+            h('td', { class: 'num', text: r.ms ? r.ms + ' мс' : '—' }));
+        })))) : null,
+      running ? null : h('div', { class: 'row' },
+        btn('Проверить на других сайтах', () => wideDialog({ name: s.name, steps: s.steps, from: '' }, { host: s.host, proto: s.proto, repeats: s.repeats }), 'small', 'refresh')));
   }
 
   function applyMenu(x, st, cls = '', label = 'Применить…') {
