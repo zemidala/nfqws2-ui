@@ -330,6 +330,7 @@ const FEATURES = [
   ['phist:share', '1.9.0', '«Поделиться» в истории подборов'],
   ['frz', '1.10.0', 'проба «Обрыв на 16 КБ» — какое имя в фейке снимает обрыв у зарубежных хостингов'],
   ['pick:catalog', '1.10.0', 'каталог стратегий zapret2 в подборе (сотни и тысячи стратегий, параллельно)'],
+  ['pick:multi', '1.11.0', 'подбор одной стратегии для нескольких сайтов или списка'],
   ['pick:wide', '1.11.0', '«На других сайтах» у найденной стратегии — открывает ли она не только свой сайт'],
   ['tg:log', '1.11.0', 'уведомления не теряются, когда Telegram недоступен, и журнал последних сообщений'],
   ['about:session', '1.11.0', 'срок входа: сколько не выходить из интерфейса («О программе» → «Вход»)'],
@@ -3592,6 +3593,33 @@ async function viewTests(main, r, bare = false) {
   proto.addEventListener('change', catCounts);
   const repeats = h('select', { class: 'select', 'aria-label': 'Повторов' }, [1, 2, 3, 5].map((n) => h('option', { value: n, text: plural(n, 'повтор', 'повтора', 'повторов'), selected: n === 3 })));
   const refine = h('input', { type: 'checkbox', id: 't-refine' });
+  // Подбор одной стратегии для нескольких сайтов (списка): поле «Сайт» меняется на список и сайты из него
+  const hostLists = S.state.lists.filter((l) => l.kind === 'host' && l.exists && l.entries > 0);
+  const mode = h('select', { class: 'select', 'aria-label': 'Что подбираем', onchange: () => drawMode() },
+    h('option', { value: 'one', text: 'один сайт' }), h('option', { value: 'multi', text: 'несколько сайтов' }));
+  const mList = h('select', { class: 'select', 'aria-label': 'Список', onchange: () => fillMulti() },
+    hostLists.map((l) => h('option', { value: l.name, text: `${l.name} — ${l.entries}`, selected: l.name === 'user.list' })), h('option', { value: '', text: 'свои сайты' }));
+  const mHosts = h('textarea', { class: 'input mono', rows: 6, placeholder: 'rutracker.org\nyoutube.com\ndiscord.com', 'aria-label': 'Сайты, по одному в строке', autocapitalize: 'off', spellcheck: 'false' });
+  const mNote = h('span', { class: 'sm muted' });
+  async function fillMulti() {
+    if (!mList.value) { mNote.textContent = 'Впишите от 2 до 10 сайтов. Найденную стратегию можно будет поставить профилем для этих сайтов.'; return; }
+    const r = await api('list_get', { name: mList.value }).catch(() => null);
+    const all = (r?.content || '').split('\n').map((l) => l.replace(/#.*/, '').trim().toLowerCase()).filter((l) => l && !/[\^*/: ]/.test(l) && !/^[\d.]+$/.test(l) && l.includes('.'));
+    for (let i = all.length - 1; i > 0; i--) { const j = Math.floor(Math.random() * (i + 1)); [all[i], all[j]] = [all[j], all[i]]; }
+    mHosts.value = all.slice(0, 10).join('\n');
+    mNote.textContent = `Случайные 10 из ${mList.value} — можно поменять. Найденную стратегию можно будет поставить профилем на весь ${mList.value}.`;
+  }
+  const oneRows = [];   // поля, которые есть только у подбора одного сайта (каталог, уточнение)
+  const multiRow = h('div', { class: 'frow', hidden: true }, h('span', { class: 'lbl', text: 'Сайты' }),
+    h('div', { class: 'stack', style: 'gap:6px' }, h('div', { class: 'row' }, mList, btn('Другие случайные', () => fillMulti(), 'small', 'refresh')), mHosts, mNote,
+      h('span', { class: 'sm muted', text: 'Сначала каждый сайт открывается без обхода: что открывается и так или закрыто по IP, в подборе не участвует. Потом каждая стратегия проверяется на всех оставшихся сайтах; пять лучших — перепроверяются по одной. Каталог zapret2 и уточнение здесь не участвуют — на десяти сайтах это заняло бы часы. Обычно 3–8 минут.' })));
+  function drawMode() {
+    const multi = mode.value === 'multi';
+    host.hidden = multi;
+    multiRow.hidden = !multi;
+    oneRows.forEach((el) => { el.hidden = multi; });
+    if (multi && !mHosts.value) fillMulti();
+  }
   const out = h('div', { class: 'stack', style: 'gap:14px' });
   const startBtn = btn(tab === 'trace' ? 'Запустить трассировку' : 'Запустить тест', start, 'primary', 'play');
   let routeInfo = null;
@@ -3602,6 +3630,12 @@ async function viewTests(main, r, bare = false) {
     const cmd = tab === 'trace' ? 'trace_start' : 'test_start';
     const sets = [setCfg.checked && 'config', setStd.checked && 'std', setHist.checked && 'hist', setHist.checked && 'other', setComm.checked && 'community', catSel.value].filter(Boolean);
     if (tab !== 'trace' && !sets.length) { toast('Выберите, что пробовать', { err: true }); return; }
+    if (tab === 'pick' && mode.value === 'multi') {
+      const hosts = mHosts.value.split(/[\s,]+/).filter(Boolean);
+      if (!await guarded(() => api('multi_start', { hosts, list: mList.value, proto: proto.value, sets: sets.filter((x) => ['config', 'std', 'hist', 'community'].includes(x)), repeats: Number(repeats.value) }))) return;
+      poll();
+      return;
+    }
     if (!await guarded(() => api(cmd, { host: host.value, proto: proto.value, sets, repeats: Number(repeats.value), refine: refine.checked }))) return;
     poll();
   }
@@ -3623,9 +3657,9 @@ async function viewTests(main, r, bare = false) {
     startBtn.disabled = running;
     lastStatus = s;
     // поле «Сайт» показывает сайт, для которого показаны результаты, пока его не начали править
-    if (s.host && !host.dataset.edited && host.value !== s.host) host.value = s.host;
+    if (s.host && s.type !== 'multi' && !host.dataset.edited && host.value !== s.host) host.value = s.host;
     // для рекомендации нужно знать, через какой профиль сайт идёт сейчас
-    if (!running && s.host && s.type !== 'trace' && (!routeInfo || routeInfo.host !== s.host) && routeLoading !== s.host) {
+    if (!running && s.host && s.type !== 'trace' && s.type !== 'multi' && (!routeInfo || routeInfo.host !== s.host) && routeLoading !== s.host) {
       routeLoading = s.host;
       api('check', { host: s.host }).then((r) => { routeInfo = r; routeLoading = null; if (out.isConnected) drawStatus(lastStatus); }).catch(() => { routeLoading = null; });
     }
@@ -3633,7 +3667,7 @@ async function viewTests(main, r, bare = false) {
     if (s.type === 'freeze') { out.replaceChildren(running ? notice('info', 'Идёт проба «Обрыв на 16 КБ»', 'Подбор можно запустить, когда она закончится.', h('a', { class: 'btn small', href: PAGES.frz[0] }, 'Открыть')) : null); return; }
     if ((s.type === 'trace') !== (tab === 'trace') && !running) { out.replaceChildren(); return; }
     const head = running ? h('section', { class: 'panel' },
-      h('div', { class: 'row' }, h('span', { class: 'spin' }), h('b', { text: `${s.type === 'trace' ? 'Трассировка' : 'Тест'} ${s.host}` }), h('span', { class: 'grow' }),
+      h('div', { class: 'row' }, h('span', { class: 'spin' }), h('b', { text: `${s.type === 'trace' ? 'Трассировка' : s.type === 'multi' ? 'Подбор для' : 'Тест'} ${s.host}` }), h('span', { class: 'grow' }),
         h('span', { class: 'sm muted num', text: s.total ? `${s.done} из ${s.total}` : 'запуск…' }), btn('Остановить', () => api('test_stop'), 'small danger', 'stop')),
       s.total ? h('div', { class: 'progress', style: 'height:6px;border-radius:99px;background:var(--soft);overflow:hidden' }, h('i', { style: `display:block;height:100%;width:${Math.round(s.done / s.total * 100)}%;background:var(--accent)` })) : null,
       s.current ? h('p', { class: 'sm muted', text: 'Сейчас: ' + s.current }) : null) : null;
@@ -3644,6 +3678,7 @@ async function viewTests(main, r, bare = false) {
     }
     if (s.state === 'error') { out.replaceChildren(notice('bad', s.title || 'Тест не удался', s.error || '', s.host && s.title ? btn('Подробный диагноз', () => go(diagHref(s.host)), 'small', 'search') : null)); return; }
     if (s.type === 'trace') { out.replaceChildren(head, s.state === 'done' ? traceResult(s) : null); return; }
+    if (s.type === 'multi') { out.replaceChildren(head, multiResult(s, running)); return; }
     out.replaceChildren(head, s.results?.length || s.baseline ? pickResult(s, running) : null);
   }
 
@@ -3785,6 +3820,68 @@ async function viewTests(main, r, bare = false) {
       });
     }
     return opts;
+  }
+
+  function oneRow(el) { oneRows.push(el); return el; }
+
+  // Итог подбора для нескольких сайтов
+  function multiResult(s, running) {
+    const hosts = s.hosts || [];
+    const M = hosts.length;
+    const skipped = (s.sites || []).filter((r) => r.skip);
+    const sitesBox = (s.sites || []).length ? h('div', { class: 'stack', style: 'gap:4px' },
+      h('div', { class: 'sm' }, h('b', { text: `Подбор для ${plural(M, 'сайта', 'сайтов', 'сайтов')}: ` }), h('span', { class: 'mono', style: 'white-space:normal;overflow-wrap:anywhere', text: hosts.join(', ') || '—' }), s.list ? h('span', { class: 'muted', text: ` (из ${s.list.name})` }) : null),
+      skipped.length ? h('div', { class: 'sm muted' }, 'Не участвуют: ', skipped.map((r, i) => [i ? '; ' : '', h('span', { class: 'mono', text: r.host }), ' — ' + r.skip])) : null) : null;
+    if (running || s.state === 'error') return panel(null, null, sitesBox);
+    const res = s.results || [];
+    const conf = res.filter((x) => x.confirmed && x.opened > 0);
+    const best = conf[0];
+    const missed = (x) => hosts.filter((hh) => !(x.per[hh]?.ok > 0 && x.per[hh].ok === x.per[hh].tries));
+    const target = s.list ? `весь ${s.list.name}` : 'эти сайты';
+    const actions = (x, primary) => h('div', primary ? { class: 'notice-actions' } : { class: 'row', style: 'flex-wrap:nowrap;justify-content:flex-end' },
+      btn(primary ? `Профилем на ${target}` : 'Применить…', () => addListProfile(x.steps, s), 'small' + (primary ? ' primary' : ''), primary ? 'ok' : null,
+        { title: `Новый профиль первым: эта стратегия для ${s.list ? 'всех сайтов из ' + s.list.name : 'этих сайтов'}; с проверкой и откатом` }),
+      btn(primary ? 'Скопировать' : '', () => copyText(x.steps.join('\n')), 'small' + (primary ? '' : ' ghost'), 'copy', { title: 'Скопировать', 'aria-label': 'Скопировать' }));
+    const verdict = !best
+      ? notice('bad', 'Ни одна стратегия не открыла эти сайты', 'Попробуйте обычный подбор для каждого сайта отдельно — с каталогом zapret2 и уточнением: возможно, сайтам нужны разные стратегии.')
+      : best.opened === M
+        ? notice('ok', `Открывает все ${plural(M, 'сайт', 'сайта', 'сайтов')}: ${best.name}${best.ms ? `, ${best.ms} мс` : ''}`, best.steps.map((t) => t.replace('--lua-desync=', '')).join('  '), actions(best, true))
+        : notice('warn', `Все сайты не открыла ни одна. Лучшая — ${best.opened} из ${M}: ${best.name}`,
+          `Не открыла: ${missed(best).join(', ')}. Если поставить её на ${target}, эти сайты не откроются — им нужна другая стратегия (обычный подбор для каждого).`, actions(best, true));
+    const shown = res.filter((x) => x.confirmed || x.scan > 0);
+    const none = res.length - shown.length;
+    const rows = shown.map((x) => {
+      const full = x.confirmed && x.opened === M;
+      return h('tr', {},
+        h('td', {}, levelIcon(full ? 'ok' : x.confirmed && x.opened ? 'warning' : x.confirmed ? 'error' : 'info')),
+        h('td', {}, h('div', { text: x.name }), h('code', { class: 'sm muted', style: 'word-break:break-all', text: x.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') })),
+        h('td', { class: 'sm muted' }, x.from, x.hist ? h('div', { class: 'nowrap' }, chip('работала ' + fmtDate(x.hist), 'ok')) : null),
+        h('td', { class: 'sm' }, x.confirmed
+          ? [h('b', { text: `${x.opened} из ${M}` }), x.opened < M ? h('div', { class: 'muted' }, 'не открыла: ', h('span', { class: 'mono', text: missed(x).join(', ') })) : null]
+          : h('span', { class: 'muted nowrap', title: 'Открыла столько сайтов в параллельной пачке; по одной не перепроверялась — применить нельзя', text: `пачка: ${x.scan} из ${M}` })),
+        h('td', { class: 'num', text: x.ms ? x.ms + ' мс' : '—' }),
+        h('td', {}, x.confirmed && x.opened ? actions(x, false) : null));
+    });
+    return h('div', { class: 'stack', style: 'gap:14px' }, panel(null, null, sitesBox), verdict,
+      panel(`Результаты: ${s.candidates || res.length} стратегий на ${plural(M, 'сайте', 'сайтах', 'сайтах')}`, h('span', { class: 'sm muted', text: `${s.repeats} повт. · ${s.finished - s.started >= 90 ? Math.round((s.finished - s.started) / 60) + ' мин' : (s.finished - s.started) + ' с'}` }),
+        rows.length ? h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
+          h('thead', {}, h('tr', {}, h('th'), h('th', { class: 'wide', text: 'Стратегия' }), h('th', { text: 'Откуда' }), h('th', { text: 'Открыла' }), h('th', { class: 'num', text: 'Время' }), h('th'))),
+          h('tbody', {}, rows))) : null,
+        h('p', { class: 'sm muted', text: (none ? `Не открыли ни одного сайта: ${plural(none, 'стратегия', 'стратегии', 'стратегий')}. ` : '') + 'Сначала все стратегии проверяются пачками, по одному запросу на сайт; пять лучших перепроверяются по одной — на каждом сайте до заданного числа повторов. Применить можно только перепроверенные; у остальных — сколько сайтов они открыли в пачке.' })));
+  }
+
+  // Профиль для списка (или этих сайтов) первым в своих профилях, затем перезапуск с проверкой
+  async function addListProfile(steps, s) {
+    const http = s.proto === 'http';
+    await loadConf();
+    const cur = S.conf.vars.NFQWS_ARGS_CUSTOM.trim() ? splitParts(tokensOf(S.conf.vars.NFQWS_ARGS_CUSTOM)) : [];
+    const who = s.list ? `--hostlist=${s.list.path}` : `--hostlist-domains=${s.hosts.join(',')}`;
+    const part = [`--filter-tcp=${http ? 80 : 443}`, `--filter-l7=${http ? 'http' : 'tls'}`, who, `--payload=${http ? 'http_req' : 'tls_client_hello'}`, ...steps];
+    const what = s.list ? `всех сайтов из ${s.list.name}` : s.hosts.join(', ');
+    if (!confirm(`Создать профиль для ${what}?\n\nОн встанет первым (#1), остальные профили сдвинутся на один номер и не изменятся. Сайты из ${s.list ? 'списка' : 'этого перечня'} пойдут через новую стратегию.\n\nПосле сохранения nfqws2 перезапустится с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, всё вернётся как было.`)) return;
+    if (!await saveVars({ NFQWS_ARGS_CUSTOM: joinParts([part, ...cur]) }, `профиль для ${s.list ? s.list.name : 'нескольких сайтов'} из подбора`)) return;
+    await safeRestart();
+    go('#/settings/p1');
   }
 
   // Проверить найденную стратегию на других сайтах: открывает ли она не только свой
@@ -3956,19 +4053,19 @@ async function viewTests(main, r, bare = false) {
   main.append(
     bare ? null : h('div', { class: 'vh' }, h('h1', { text: tab === 'trace' ? 'Трассировка' : 'Подбор стратегии' })),
     panel(null, null,
-      h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 't-host', text: 'Сайт' }), h('div', { class: 'row' }, host, proto)),
-      tab === 'pick' ? [
+      h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 't-host', text: 'Сайт' }), h('div', { class: 'row' }, host, tab === 'pick' ? mode : null, proto, tab === 'pick' ? newTag('pick:multi') : null)),
+      tab === 'pick' ? [multiRow,
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Что пробовать' }), h('div', { class: 'row' },
           h('label', { class: 'row' }, setCfg, 'стратегии из вашего конфига'), h('label', { class: 'row' }, setStd, 'стандартный набор'),
           h('label', { class: 'row', title: 'Стратегии из истории подборов: сначала работавшие для этого сайта, затем до пяти помогавших другим сайтам' }, setHist, 'что работало раньше'),
           h('label', { class: 'row', title: 'До восьми стратегий, которые сработали у абонентов вашего провайдера (база на GitHub, раз в сутки). Сначала — открывавшие этот сайт или его сеть.' }, setComm, 'стратегии сообщества', newTag('pick:community')))),
-        h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Каталог zapret2' }), h('div', { class: 'stack', style: 'gap:2px' },
+        oneRow(h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Каталог zapret2' }), h('div', { class: 'stack', style: 'gap:2px' },
           h('div', { class: 'row' }, catSel, newTag('pick:catalog')),
-          h('span', { class: 'sm muted', text: 'Те же функции, позиции разреза и способы испортить фейк, что перебирает blockcheck2 из zapret2. Большой набор проверяется параллельно, по 15 стратегий сразу; лучшие находки потом перепроверяются по одной.' }))),
+          h('span', { class: 'sm muted', text: 'Те же функции, позиции разреза и способы испортить фейк, что перебирает blockcheck2 из zapret2. Большой набор проверяется параллельно, по 15 стратегий сразу; лучшие находки потом перепроверяются по одной.' })))),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Повторов' }), h('div', { class: 'row' }, repeats, h('span', { class: 'sm muted', text: 'Стратегия засчитывается, если сайт открылся каждый раз.' }))),
-        h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Уточнение' }), h('div', { class: 'stack', style: 'gap:2px' },
+        oneRow(h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Уточнение' }), h('div', { class: 'stack', style: 'gap:2px' },
           h('label', { class: 'row' }, refine, 'искать вариант полегче, даже если рабочая стратегия найдена'),
-          h('span', { class: 'sm muted', text: 'Если рабочих стратегий нет, подбор сам пробует довести лучшую: меняет число фейков (до 20), способ их порчи и имя в фейке. Это ещё 2–5 минут.' })))] :
+          h('span', { class: 'sm muted', text: 'Если рабочих стратегий нет, подбор сам пробует довести лучшую: меняет число фейков (до 20), способ их порчи и имя в фейке. Это ещё 2–5 минут.' }))))] :
         h('p', { class: 'sm muted', text: 'Трассировка открывает сайт через копию текущей конфигурации с подробным журналом nfqws2 — видно, какой профиль сработал и что сделали стратегии.' }),
       h('div', { class: 'row' }, startBtn, h('span', { class: 'sm muted grow note-wide', text: 'Работает отдельный процесс nfqws2 на очереди 301 только для проверочных соединений роутера. Ваш трафик и основной nfqws2 не затрагиваются.' }))),
     out,
