@@ -1,6 +1,6 @@
 # nfqws2-ui
 
-Веб-интерфейс для **nfqws2** (пакет [nfqws2-keenetic](https://github.com/nfqws/nfqws2-keenetic)) на роутерах с **OpenWrt** и, экспериментально, на **Keenetic** (Entware).
+Веб-интерфейс для **nfqws2** (пакет [nfqws2-keenetic](https://github.com/nfqws/nfqws2-keenetic)) на роутерах с **OpenWrt** и **Keenetic** (Entware).
 
 Интерфейс нужен, чтобы настраивать обход блокировок без SSH и без ручной правки конфига:
 - видно, каким профилем пойдёт конкретный сайт и открывается ли он;
@@ -118,7 +118,7 @@
 
 | | |
 |---|---|
-| Система | **OpenWrt 24.10** (opkg). Проверено на 24.10.6, aarch64 (GL.iNet GL-MT6000).<br>**Keenetic с Entware** — экспериментально, см. [Keenetic](#keenetic-entware) |
+| Система | **OpenWrt 24.10** (opkg). Проверено на 24.10.6, aarch64 (GL.iNet GL-MT6000).<br>**Keenetic с Entware** — проверено на Keenetic Viva (KN-1910, KeeneticOS 5.0–5.1, mipsel), см. [Keenetic](#keenetic-entware) |
 | nfqws2 | пакет **nfqws2-keenetic ≥ 1.3** уже установлен и работает (`/etc/nfqws2/nfqws2.conf`, на Keenetic — `/opt/etc/nfqws2/nfqws2.conf`) |
 | Зависимости | ставятся сами: `lighttpd` (+ `mod-cgi`, `mod-rewrite`, `mod-setenv`), `php8-cgi`, `php8-mod-session`, `php8-mod-curl`, `curl`; на Keenetic ещё `cron` |
 | Место | ~0,3 МБ сам интерфейс; lighttpd + PHP ≈ 4–5 МБ, если их ещё нет |
@@ -184,7 +184,7 @@ lighttpd и PHP не удаляются: ими может пользовать�
 
 ### Keenetic (Entware)
 
-> Поддержка Keenetic **экспериментальная**. Установка, вход, обновление, HTTPS, редактор, списки, снимки и безопасный перезапуск проверены на стенде с Entware, но не на настоящем роутере. Перехват трафика и тесты стратегий на прошивке Keenetic не проверялись. Если вы поставили интерфейс на Keenetic, напишите, что получилось, в [Обсуждениях](https://github.com/zemidala/nfqws2-ui/discussions).
+> Интерфейс проверяется на настоящем роутере — **Keenetic Viva (KN-1910)**, KeeneticOS 5.0 и 5.1, mipsel, Entware во встроенной памяти: установка и обновление (кнопкой и командой), вход, редактор и списки, перезапуск с проверкой, обход блокировок через nfqws2 и политика доступа «только для выбранных устройств». У пользователей работает и на других моделях, в том числе aarch64. Если на вашем Keenetic что-то не так, напишите в [Обсуждениях](https://github.com/zemidala/nfqws2-ui/discussions) или в [чате](https://t.me/nfqws2_ui).
 
 Нужны Entware и уже работающий nfqws2-keenetic. Команда установки та же, выполняется в консоли Entware (SSH, обычно порт 222).
 
@@ -231,7 +231,7 @@ nfqws-ui-setup remove               убрать конфиг lighttpd и зад
 
 ### Ограничения
 - **Только nfqws2** и только формат конфига **nfqws2-keenetic** (`NFQWS_ARGS`, `NFQWS_ARGS_CUSTOM`, `NFQWS_ARGS_UDP` и т.д.). zapret с `config` от bol-van, nfqws первой версии и другие сборки не поддерживаются.
-- **Keenetic (Entware) — экспериментально**: проверено на стенде с Entware, но не на настоящем роутере, см. [Keenetic](#keenetic-entware). Прошивка Keenetic время от времени пересобирает правила iptables и может стереть временные правила теста стратегий посреди прогона — тогда тест нужно повторить.
+- **Keenetic (Entware)**: проверено на Keenetic Viva (KN-1910), см. [Keenetic](#keenetic-entware). Прошивка Keenetic время от времени пересобирает правила iptables и может стереть временные правила теста стратегий посреди прогона — тогда тест нужно повторить.
 - **OpenWrt 25.x (apk) не проверялся.** Установщик ставит файлы без пакета, удаление — `nfqws-ui-setup uninstall`.
 - Проверялось на iptables (nfqws2-keenetic использует iptables-legacy). С nftables-вариантами может не работать.
 - **Тесты стратегий проверяют только TCP** (HTTPS и HTTP). QUIC/UDP не тестируется: это видно только в браузере.

@@ -41,7 +41,7 @@ jobs:
 
           ## Установка
 
-          На роутере с OpenWrt 24.10 или на Keenetic с Entware (экспериментально), где уже установлен nfqws2-keenetic:
+          На роутере с OpenWrt 24.10 или на Keenetic с Entware, где уже установлен nfqws2-keenetic:
 
           \`\`\`sh
           wget -qO- https://github.com/${GITHUB_REPOSITORY}/releases/download/${GITHUB_REF_NAME}/install.sh | sh
