@@ -266,7 +266,7 @@ nfqws-ui-setup remove               убрать конфиг lighttpd и зад
 | Настройки интерфейса | `/etc/nfqws-ui/settings.json` (снимки, мониторинг, автоподбор, подписки, списки по ASN, токен Telegram) |
 | Сертификат HTTPS | `/etc/nfqws-ui/https.crt`, `https.key` |
 | Копии на NAS | `/etc/nfqws-ui/remote_key` (ключ роутера, в снимки не попадает), `remote.json` (последняя отправка); на NAS — `~/.nfqws-ui-store.sh` и строка в `~/.ssh/authorized_keys` |
-| Мониторинг, история подборов, автоподбор | `/etc/nfqws-ui/monitor.json`, `picks.json`, `auto.json` |
+| Мониторинг, история подборов, автоподбор | `/etc/nfqws-ui/monitor.json`, `picks.json`, `auto.json`, `notify.json` (очередь и журнал уведомлений) |
 | Снимки | `/etc/nfqws2/.snapshots/` |
 | История изменений | `/etc/nfqws2/.history/` |
 | Временное | `/tmp/nfqws-ui-*` (в том числе `nfqws-ui-community.json` — скачанные стратегии сообщества для вашего провайдера) |

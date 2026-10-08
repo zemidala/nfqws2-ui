@@ -2936,14 +2936,73 @@ function monitorRun(bool $force, ?array $only = null): ?array
   return $data;
 }
 
-function notifyTelegram(string $text): ?string
+// Неотправленные уведомления и журнал отправок. Telegram бывает недоступен (туннель упал, адрес закрыт) —
+// тогда сообщение ждёт в очереди и уходит со следующим проходом cron, но не позже чем через сутки
+define('NOTIFY_FILE', UI_CONF_DIR . '/notify.json');
+define('NOTIFY_KEEP', 86400);
+
+function notifyData(): array
+{
+  $d = json_decode((string)@file_get_contents(NOTIFY_FILE), true);
+  return (is_array($d) ? $d : []) + ['queue' => [], 'log' => []];
+}
+
+// $queue = false — только сейчас и без журнала (проверочное сообщение: ошибку сразу видит человек)
+function notifyTelegram(string $text, bool $queue = true): ?string
 {
   $t = uiSettings()['notify'];
   if (empty($t['tg_token']) || empty($t['tg_chat'])) {
     return 'не настроено';
   }
-  $r = tgCall($t, 'sendMessage', ['chat_id' => $t['tg_chat'], 'text' => $text]);
-  return $r['ok'] ? null : $r['error'];
+  if (!$queue) {
+    $r = tgCall($t, 'sendMessage', ['chat_id' => $t['tg_chat'], 'text' => $text]);
+    return $r['ok'] ? null : $r['error'];
+  }
+  $d = notifyData();
+  $d['queue'][] = ['ts' => time(), 'text' => $text];
+  return notifyFlush($d);
+}
+
+// Отправляет очередь по порядку. На сетевой ошибке останавливается — остальное ждёт следующего прохода;
+// отказ самого Telegram (неверный токен, чат) повтором не лечится — такое сообщение снимается
+function notifyFlush(?array $d = null): ?string
+{
+  $d = $d ?? notifyData();
+  if (!$d['queue']) {
+    return null;
+  }
+  $t = uiSettings()['notify'];
+  $err = null;
+  while ($d['queue']) {
+    $m = $d['queue'][0];
+    if (time() - $m['ts'] > NOTIFY_KEEP) {
+      array_shift($d['queue']);
+      $d['log'][] = ['ts' => time(), 'at' => $m['ts'], 'text' => $m['text'], 'ok' => false, 'error' => 'не ушло за сутки: ' . ($m['error'] ?? 'нет связи')];
+      continue;
+    }
+    if (empty($t['tg_token']) || empty($t['tg_chat'])) {
+      $err = 'не настроено';
+      break;
+    }
+    $late = time() - $m['ts'] > 120;
+    $text = $m['text'] . ($late ? "\n(событие в " . ldate('d.m H:i', $m['ts']) . ', сообщение задержалось: Telegram был недоступен)' : '');
+    $r = tgCall($t, 'sendMessage', ['chat_id' => $t['tg_chat'], 'text' => $text]);
+    if (!$r['ok'] && ($r['code'] === null || $r['code'] === 429)) {
+      $err = $r['error'];
+      $d['queue'][0]['error'] = $err;
+      $d['queue'][0]['tries'] = ($m['tries'] ?? 0) + 1;
+      break;
+    }
+    array_shift($d['queue']);
+    $d['log'][] = ['ts' => time(), 'at' => $m['ts'], 'text' => $m['text'], 'ok' => $r['ok']] + ($r['ok'] ? [] : ['error' => $r['error']]);
+    if (!$r['ok']) {
+      $err = $r['error'];
+    }
+  }
+  $d['log'] = array_slice($d['log'], -30);
+  @mkdir(UI_CONF_DIR, 0755, true);
+  putSafe(NOTIFY_FILE, json_encode($d, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+  return $err;
 }
 
 // Запрос к Bot API тем путём, что выбран в настройках. ok, result — ответ Telegram; иначе error словами
@@ -5939,6 +5998,7 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
   nfqLogsTrim();
   monitorRun(false);
   autoTick();
+  notifyFlush();   // то, что не ушло в прошлые проходы
   if ($cli === 'daily') {
     snapshotCreate('ежедневный', true);
     remotePush();   // раз в сутки — дослать то, что не ушло (NAS был выключен)
@@ -6662,7 +6722,8 @@ switch ($cmd) {
   case 'monitor_get':
     $s = uiSettings();
     respond(['settings' => $s['monitor'], 'data' => monitorData(), 'tg' => ['token_set' => $s['notify']['tg_token'] !== '', 'chat' => $s['notify']['tg_chat'],
-      'via' => $s['notify']['via'], 'iface' => $s['notify']['iface'], 'proxy' => maskProxy($s['notify']['proxy'])]]
+      'via' => $s['notify']['via'], 'iface' => $s['notify']['iface'], 'proxy' => maskProxy($s['notify']['proxy'])],
+      'sent' => (function () { $d = notifyData(); return ['queue' => $d['queue'], 'log' => array_reverse($d['log'])]; })()]
       // список интерфейсов нужен только странице «Уведомления»
       + (empty($in['ifaces']) ? [] : ['ifaces' => array_values(array_filter(netIfaces(), fn($x) => $x['ips'] && $x['kind'] !== 'bridge' && $x['kind'] !== 'wifi'))]));
 
@@ -6891,7 +6952,10 @@ switch ($cmd) {
     respond(tgInfo());
 
   case 'notify_test':
-    $err = notifyTelegram('Проверка уведомлений nfqws2: всё работает.');
+    $err = notifyTelegram('Проверка уведомлений nfqws2: всё работает.', false);
+    if (!$err) {
+      notifyFlush();   // связь есть — заодно дослать то, что ждёт
+    }
     if ($err) {
       fail('Telegram: ' . $err);
     }

@@ -330,6 +330,7 @@ const FEATURES = [
   ['phist:share', '1.9.0', '«Поделиться» в истории подборов'],
   ['frz', '1.10.0', 'проба «Обрыв на 16 КБ» — какое имя в фейке снимает обрыв у зарубежных хостингов'],
   ['pick:catalog', '1.10.0', 'каталог стратегий zapret2 в подборе (сотни и тысячи стратегий, параллельно)'],
+  ['tg:log', '1.11.0', 'уведомления не теряются, когда Telegram недоступен, и журнал последних сообщений'],
   ['about:session', '1.11.0', 'срок входа: сколько не выходить из интерфейса («О программе» → «Вход»)'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
@@ -3530,9 +3531,30 @@ async function viewNotify(main) {
           drawWho();
           const r = await guarded(() => api('notify_test'));
           if (r) toast('Сообщение отправлено ' + r.via);
-        }))));
+          route();
+        }))),
+    sentPanel(m.sent));
   // не ждём Telegram, чтобы страница открылась сразу
   if (m.tg.token_set) drawWho();
+}
+
+// Что ушло в Telegram и что ждёт: сообщение, которое не удалось отправить, повторяется в каждом проходе cron (до суток)
+function sentPanel(sent) {
+  if (!sent || (!sent.queue.length && !sent.log.length)) return null;
+  // первая строка у всех одна («nfqws2 на роутере:») — показываем суть
+  const body = (t) => t.replace(/^nfqws2 на роутере:\n/, '');
+  const rows = [
+    ...sent.queue.map((m) => h('tr', {}, h('td', { class: 'nowrap', text: fmtDate(m.ts) }),
+      h('td', {}, h('span', { class: 'chip warn', text: 'ждёт' })),
+      h('td', { style: 'white-space:pre-line' }, body(m.text), h('div', { class: 'sm muted', text: `не ушло${m.tries ? ` (попыток: ${m.tries})` : ''}: ${m.error || 'ещё не пробовали'} — повтор в следующем проходе, не дольше суток` })))),
+    ...sent.log.slice(0, 20).map((m) => h('tr', {}, h('td', { class: 'nowrap', text: fmtDate(m.at) }),
+      h('td', {}, h('span', { class: 'chip ' + (m.ok ? 'ok' : 'bad'), text: m.ok ? 'ушло' : 'не ушло' })),
+      h('td', { style: 'white-space:pre-line' }, body(m.text),
+        m.ok && m.ts - m.at > 120 ? h('div', { class: 'sm muted', text: `отправлено в ${fmtDate(m.ts)}, с опозданием` }) : null,
+        m.ok ? null : h('div', { class: 'sm', style: 'color:var(--bad)', text: m.error }))))];
+  return panel('Последние сообщения', newTag('tg:log'),
+    h('div', { class: 'scroll' }, h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, h('th', { text: 'Когда' }), h('th'), h('th', { class: 'wide', text: 'Сообщение' }))), h('tbody', {}, rows))),
+    h('p', { class: 'sm muted', text: 'Если Telegram недоступен, сообщение не теряется: оно ждёт и уходит, как только связь появится, с пометкой о времени события.' }));
 }
 
 // bare — без заголовка: страница встроена в карточку сайта
