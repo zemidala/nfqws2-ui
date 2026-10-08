@@ -3595,8 +3595,14 @@ async function viewTests(main, r, bare = false) {
   const refine = h('input', { type: 'checkbox', id: 't-refine' });
   // Подбор одной стратегии для нескольких сайтов (списка): поле «Сайт» меняется на список и сайты из него
   const hostLists = S.state.lists.filter((l) => l.kind === 'host' && l.exists && l.entries > 0);
-  const mode = h('select', { class: 'select', 'aria-label': 'Что подбираем', onchange: () => drawMode() },
-    h('option', { value: 'one', text: 'один сайт' }), h('option', { value: 'multi', text: 'несколько сайтов' }));
+  let modeVal = 'one';
+  const modeSeg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Что подбираем' }, [['one', 'Один сайт'], ['multi', 'Несколько сайтов или список']].map(([v, t]) =>
+    h('button', { type: 'button', role: 'radio', class: v === modeVal ? 'on' : '', 'aria-checked': String(v === modeVal), 'data-v': v, text: t, onclick: () => {
+      modeVal = v;
+      modeSeg.querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b.dataset.v === v); b.setAttribute('aria-checked', String(b.dataset.v === v)); });
+      drawMode();
+    } })));
+  const mode = { get value() { return modeVal; } };
   const mList = h('select', { class: 'select', 'aria-label': 'Список', onchange: () => fillMulti() },
     hostLists.map((l) => h('option', { value: l.name, text: `${l.name} — ${l.entries}`, selected: l.name === 'user.list' })), h('option', { value: '', text: 'свои сайты' }));
   const mHosts = h('textarea', { class: 'input mono', rows: 6, placeholder: 'rutracker.org\nyoutube.com\ndiscord.com', 'aria-label': 'Сайты, по одному в строке', autocapitalize: 'off', spellcheck: 'false' });
@@ -3613,8 +3619,10 @@ async function viewTests(main, r, bare = false) {
   const multiRow = h('div', { class: 'frow', hidden: true }, h('span', { class: 'lbl', text: 'Сайты' }),
     h('div', { class: 'stack', style: 'gap:6px' }, h('div', { class: 'row' }, mList, btn('Другие случайные', () => fillMulti(), 'small', 'refresh')), mHosts, mNote,
       h('span', { class: 'sm muted', text: 'Сначала каждый сайт открывается без обхода: что открывается и так или закрыто по IP, в подборе не участвует. Потом каждая стратегия проверяется на всех оставшихся сайтах; пять лучших — перепроверяются по одной. Каталог zapret2 и уточнение здесь не участвуют — на десяти сайтах это заняло бы часы. Обычно 3–8 минут.' })));
+  const hostLbl = h('label', { class: 'lbl', for: 't-host', text: 'Сайт' });
   function drawMode() {
     const multi = mode.value === 'multi';
+    hostLbl.textContent = multi ? 'Протокол' : 'Сайт';
     host.hidden = multi;
     multiRow.hidden = !multi;
     oneRows.forEach((el) => { el.hidden = multi; });
@@ -4053,7 +4061,8 @@ async function viewTests(main, r, bare = false) {
   main.append(
     bare ? null : h('div', { class: 'vh' }, h('h1', { text: tab === 'trace' ? 'Трассировка' : 'Подбор стратегии' })),
     panel(null, null,
-      h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 't-host', text: 'Сайт' }), h('div', { class: 'row' }, host, tab === 'pick' ? mode : null, proto, tab === 'pick' ? newTag('pick:multi') : null)),
+      tab === 'pick' ? h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Подбирать' }), h('div', { class: 'row' }, modeSeg, newTag('pick:multi'))) : null,
+      h('div', { class: 'frow' }, hostLbl, h('div', { class: 'row' }, host, proto)),
       tab === 'pick' ? [multiRow,
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Что пробовать' }), h('div', { class: 'row' },
           h('label', { class: 'row' }, setCfg, 'стратегии из вашего конфига'), h('label', { class: 'row' }, setStd, 'стандартный набор'),
