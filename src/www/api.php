@@ -94,6 +94,16 @@ function authEnabled(): bool
   return uiWeb()['auth'] !== false;
 }
 
+// Сколько держать вход без действий (выбор в «О программе»)
+define('SESSION_LIVES', [3600, 86400, 604800, 2592000]);
+define('SESS_DIR', '/tmp/nfqws-ui-sess');
+
+function sessionLife(): int
+{
+  $v = (int)uiSettings()['session'];
+  return in_array($v, SESSION_LIVES, true) ? $v : 604800;
+}
+
 // Вход только под root и только с паролем: без пароля у root интерфейс не пускает
 function authenticate(string $username, string $password): bool
 {
@@ -165,6 +175,7 @@ function uiSettings(): array
     // via — каким путём слать в Telegram: '' — как обычно, iface — через интерфейс (туннель), proxy — через прокси
     'notify' => ['tg_token' => '', 'tg_chat' => '', 'via' => '', 'iface' => '', 'proxy' => ''],
     'auto' => ['enabled' => false, 'apply' => false, 'fails' => 2, 'pause' => 12],
+    'session' => 604800,   // сколько не выходить из интерфейса без действий, секунды: см. SESSION_LIVES
     'provider' => '',
     'provider_asn' => 0,   // номер AS провайдера: по нему берутся стратегии сообщества
     'seen' => null,        // метки «новое»: см. seenInfo()
@@ -5481,7 +5492,7 @@ function state(): array
     'subs' => uiSettings()['subs'],
     'ui' => (function () use ($seen) {
       $w = uiWeb();
-      return ['version' => UI_VERSION, 'seen' => $seen, 'conf_file' => CONF_FILE, 'https_port' => $w['https_port'], 'legacy_port' => $w['legacy_port'], 'auth' => authEnabled(),
+      return ['version' => UI_VERSION, 'seen' => $seen, 'conf_file' => CONF_FILE, 'https_port' => $w['https_port'], 'legacy_port' => $w['legacy_port'], 'auth' => authEnabled(), 'session' => sessionLife(),
         'provider' => uiSettings()['provider'], 'platform' => ROOT ? 'Keenetic' : 'OpenWrt', 'repo' => REPO_URL, 'update' => updateInfo() + ['running' => updateRunning()]];
     })(),
     'undo' => (function () {
@@ -5942,9 +5953,20 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
 
 // ================= команды =================
 
-session_set_cookie_params(['httponly' => true, 'samesite' => 'Strict']);
+// Сессии — в своей папке: уборка сессий любого другого PHP в общей /tmp (на Keenetic — nfqws-keenetic-web)
+// удаляет файлы старше СВОЕГО срока и выкидывала бы из интерфейса раньше нашего
+$life = sessionLife();
+@mkdir(SESS_DIR, 0700, true);
+ini_set('session.save_path', SESS_DIR);
+ini_set('session.gc_maxlifetime', (string)$life);
+session_set_cookie_params(['lifetime' => $life, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict']);
 session_start();
 $authed = !authEnabled() || !empty($_SESSION['auth']);
+// cookie продлеваем, пока интерфейсом пользуются: иначе он истёк бы через срок от входа, а не от последнего действия
+if ($authed && authEnabled() && time() - ($_SESSION['ck'] ?? 0) > min(3600, intdiv($life, 10))) {
+  $_SESSION['ck'] = time();
+  setcookie(session_name(), session_id(), ['expires' => time() + $life, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict']);
+}
 
 // Скачивание архива: GET api.php?download=current|<id снимка>
 if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && isset($_GET['download'])) {
@@ -6014,6 +6036,7 @@ if ($cmd === 'login') {
   }
   session_regenerate_id(true);
   $_SESSION['auth'] = true;
+  $_SESSION['ck'] = time();
   respond(['ok' => true]);
 }
 if ($cmd === 'logout') {
@@ -6897,6 +6920,12 @@ switch ($cmd) {
     if (is_array($in['snapshots'] ?? null)) {
       $s['snapshots']['max_count'] = max(5, min(500, (int)($in['snapshots']['max_count'] ?? 50)));
       $s['snapshots']['max_days'] = max(1, min(3650, (int)($in['snapshots']['max_days'] ?? 30)));
+    }
+    if (isset($in['session'])) {
+      if (!in_array((int)$in['session'], SESSION_LIVES, true)) {
+        fail('Недопустимый срок');
+      }
+      $s['session'] = (int)$in['session'];
     }
     saveUiSettings($s);
     respond($s);

@@ -330,6 +330,7 @@ const FEATURES = [
   ['phist:share', '1.9.0', '«Поделиться» в истории подборов'],
   ['frz', '1.10.0', 'проба «Обрыв на 16 КБ» — какое имя в фейке снимает обрыв у зарубежных хостингов'],
   ['pick:catalog', '1.10.0', 'каталог стратегий zapret2 в подборе (сотни и тысячи стратегий, параллельно)'],
+  ['about:session', '1.11.0', 'срок входа: сколько не выходить из интерфейса («О программе» → «Вход»)'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 // на сколько минорных версий функция старше текущей (у сборки до выпуска — меньше нуля)
@@ -3323,6 +3324,11 @@ async function paneAbout(content) {
       row('Исходный код', link(REPO, REPO.replace('https://', ''))),
       row('Описание и помощь', h('a', { href: '#/settings/readme', text: 'справка (README)' }), ' · ', h('a', { href: '#/settings/changelog', text: 'изменения по версиям' }), ' · ', link(REPO + '/discussions/categories/q-a', 'задать вопрос'), ' · ', link(REPO + '/issues/new/choose', 'сообщить о проблеме'), ' · ', link('https://t.me/nfqws2_ui', 'чат в Telegram')),
       row('Лицензия', 'MIT')),
+    S.authEnabled ? panel('Вход', newTag('about:session'),
+      row('Не выходить', h('select', { class: 'select', 'aria-label': 'Сколько не выходить без действий', onchange: async (e) => {
+        if (await guarded(() => api('settings_set', { session: Number(e.target.value) }), 'Сохранено')) S.state.ui.session = Number(e.target.value);
+      } }, [[3600, '1 час'], [86400, '1 день'], [604800, '7 дней'], [2592000, '30 дней']].map(([v, t]) => h('option', { value: v, text: t, selected: (st.ui?.session || 604800) === v })))),
+      h('p', { class: 'sm muted', text: 'Сколько интерфейс помнит вход, если им не пользоваться. Пока вкладка открыта или вы заходите хотя бы раз за этот срок, входить заново не нужно. После перезагрузки роутера вход нужен всегда.' })) : null,
     panel('Обновления', null,
       u.available
         ? notice('info', `Доступна версия ${u.latest}`, 'Обновление ставит пакет с GitHub с проверкой контрольной суммы. nfqws2, конфиг и списки не затрагиваются.',

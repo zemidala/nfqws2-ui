@@ -562,7 +562,7 @@ uninstall)
 		die "интерфейс установлен пакетом, удаляйте так: opkg remove nfqws2-ui"
 	fi
 	"$0" remove
-	rm -rf "$WWW" /tmp/nfqws-ui-cache /tmp/nfqws-ui-test /tmp/nfqws-ui-pending.json /tmp/nfqws-ui-login.json
+	rm -rf "$WWW" /tmp/nfqws-ui-cache /tmp/nfqws-ui-test /tmp/nfqws-ui-sess /tmp/nfqws-ui-pending.json /tmp/nfqws-ui-login.json
 	rm -f "$CONF_DIR/.manual" $SBIN/nfqws-ui-setup $SBIN/nfqws-ui
 	say "nfqws2-ui удалён. Настройки, снимки и история остались в $CONF_DIR, $R/etc/nfqws2/.snapshots, $R/etc/nfqws2/.history"
 	;;
