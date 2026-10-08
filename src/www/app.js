@@ -3644,8 +3644,11 @@ async function viewTests(main, r, bare = false) {
   function pickResult(s, running) {
     const rep = s.repeats || Number(repeats.value);
     const res = [...(s.results || [])];
-    // после параллельного прогона надёжны перепроверенные по одной — они первыми и в рекомендации
-    const good = res.filter((x) => x.ok > 0 && x.ok === x.tries && x.tries >= Math.min(rep, x.tries)).sort((a, b) => (s.parallel ? (b.confirmed ? 1 : 0) - (a.confirmed ? 1 : 0) : 0) || b.ok - a.ok || a.ms - b.ms);
+    // рабочими считаются только проверенные по одной: то, что после параллельного прогона перепроверку не прошло
+    // или не дошло до неё, сервер помечает unsure с ok = 0. Поэтому «перепроверенные первыми» не нужно — иначе
+    // работавшая раньше стратегия (её проверяют по одной сразу, без отметки) уходила вниз, и «быстрее всех»
+    // показывало не самую быструю
+    const good = res.filter((x) => x.ok > 0 && x.ok === x.tries).sort((a, b) => b.ok - a.ok || a.ms - b.ms);
     const best = good[0];
     const baseline = s.baseline;
     const rows = res.sort((a, b) => (b.ok / Math.max(1, b.tries)) - (a.ok / Math.max(1, a.tries)) || (b.unsure ? 1 : 0) - (a.unsure ? 1 : 0) || (a.ms ?? 1e9) - (b.ms ?? 1e9)).map((x) => {
