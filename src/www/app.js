@@ -723,6 +723,8 @@ function renderLogin(error) {
     try {
       await api('login', { user: user.value, password: pass.value });
       S.auth = true;
+      // вход мог понадобиться после обновления: тогда в браузере прежний код — загружаем новый
+      if (await reloadIfStale()) return;
       start();
     } catch (x) {
       err.textContent = x.message;
@@ -4830,6 +4832,21 @@ const BUILD = (() => { try { return new URL(document.currentScript.src).searchPa
 // Браузер может держать в кеше старую страницу. Сверяемся с роутером: если там уже другая сборка —
 // предлагаем перезагрузить (при открытии и при возврате на вкладку, не чаще раза в 5 минут).
 let freshChecked = 0;
+async function routerBuild() {
+  const text = await (await fetch('index.html?_=' + Date.now(), { cache: 'no-store', credentials: 'same-origin' })).text();
+  return text.match(/app\.js\?v=([^"]+)/)?.[1];
+}
+async function reloadStale() {
+  // обновляем запись в кеше браузера и только потом перезагружаем страницу
+  await fetch('index.html', { cache: 'reload', credentials: 'same-origin' }).catch(() => {});
+  location.reload();
+}
+async function reloadIfStale() {
+  const onRouter = BUILD ? await routerBuild().catch(() => null) : null;
+  if (!onRouter || onRouter === BUILD) return false;
+  await reloadStale();
+  return true;
+}
 // Один раз после обновления до 1.5: разделы переехали из вкладок сверху в меню. Тем, кто компоновку уже выбрал, не показываем.
 function layoutNote() {
   let seen = true;
@@ -4845,16 +4862,10 @@ async function checkFresh() {
   if (!BUILD || Date.now() - freshChecked < 300000) return;
   freshChecked = Date.now();
   try {
-    const text = await (await fetch('index.html?_=' + Date.now(), { cache: 'no-store', credentials: 'same-origin' })).text();
-    const onRouter = text.match(/app\.js\?v=([^"]+)/)?.[1];
+    const onRouter = await routerBuild();
     if (!onRouter || onRouter === BUILD || document.getElementById('stale')) return;
-    const reload = async () => {
-      // обновляем запись в кеше браузера и только потом перезагружаем страницу
-      await fetch('index.html', { cache: 'reload', credentials: 'same-origin' }).catch(() => {});
-      location.reload();
-    };
     document.getElementById('upd-banner')?.before(h('div', { id: 'stale', class: 'banner info' }, h('div', { class: 'banner-in' },
-      h('span', { text: 'Интерфейс на роутере обновился, а в браузере открыта прежняя сборка.' }), btn('Перезагрузить', reload, 'small primary', 'refresh'))));
+      h('span', { text: 'Интерфейс на роутере обновился, а в браузере открыта прежняя сборка.' }), btn('Перезагрузить', reloadStale, 'small primary', 'refresh'))));
   } catch { /* роутер недоступен — проверим в следующий раз */ }
 }
 document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.auth) checkFresh(); });
@@ -4885,6 +4896,9 @@ function openUpdate(u, run = false) {
   const poll = async () => {
     const r = await api('update_status').catch(() => null);   // пока lighttpd перезапускается, ответа нет — ждём
     if (!dlg.isConnected) return;
+    // новая версия не приняла вход: журнал без входа не прочитать, а под окном уже форма входа прежнего кода —
+    // перезагружаем страницу, войти можно будет уже в новой версии
+    if (!S.auth && started) { status.replaceChildren(notice('ok', 'Интерфейс обновился', 'Нужно войти заново — страница перезагрузится.')); setTimeout(reloadStale, 2000); return; }
     // журнал пуст и установка не идёт — запуск не состоялся (раньше окно ждало бесконечно)
     if (r && !r.log.trim() && !r.running && started && Date.now() - started > 20000) {
       status.replaceChildren(notice('bad', 'Обновление не запустилось', 'Интерфейс не смог запустить установку на роутере. Обновите из консоли роутера командой ниже и напишите нам, на каком роутере это случилось.',

@@ -6288,6 +6288,12 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
 // удаляет файлы старше СВОЕГО срока и выкидывала бы из интерфейса раньше нашего
 $life = sessionLife();
 @mkdir(SESS_DIR, 0700, true);
+// До 1.11 сессии лежали в общей /tmp: переносим вход оттуда, иначе обновление выкидывает из интерфейса
+$sid = (string)($_COOKIE[session_name()] ?? '');
+if (preg_match('/^[a-zA-Z0-9,-]{20,128}$/', $sid) && !is_file(SESS_DIR . "/sess_$sid") && is_file("/tmp/sess_$sid")
+  && strpos((string)@file_get_contents("/tmp/sess_$sid"), 'auth|b:1;') !== false && @copy("/tmp/sess_$sid", SESS_DIR . "/sess_$sid")) {
+  @chmod(SESS_DIR . "/sess_$sid", 0600);
+}
 ini_set('session.save_path', SESS_DIR);
 ini_set('session.gc_maxlifetime', (string)$life);
 session_set_cookie_params(['lifetime' => $life, 'path' => '/', 'httponly' => true, 'samesite' => 'Strict']);
