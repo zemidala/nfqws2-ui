@@ -2109,6 +2109,14 @@ function lintConf(array $raw, string $text): array
       $blobs[$m[1]] = $m[2];
     }
   }
+  // tls_client_hello_clone:blob=ИМЯ сам создаёт блоб — копию приветствия устройства (для fake:blob=ИМЯ в том же профиле)
+  foreach (ARG_VARS as $v) {
+    foreach (tokens($exp[$v] ?? '') as $t) {
+      if (preg_match('/^--lua-desync=tls_client_hello_clone:(?:.*:)?blob=([^:]+)/', $t, $m)) {
+        $blobs[$m[1]] ??= 'clone';
+      }
+    }
+  }
 
   if (trim($exp['ISP_INTERFACE']) === '') {
     $add('ISP_INTERFACE', null, 'error', 'Не задан интерфейс провайдера');
@@ -2480,6 +2488,9 @@ function blobIsTls(string $ref, array $blobs): ?bool
   $src = str_starts_with($ref, '0x') ? $ref : ($blobs[$ref] ?? null);
   if (!is_string($src)) {
     return null;
+  }
+  if ($src === 'clone') {
+    return true;   // копия настоящего ClientHello
   }
   if (str_starts_with($src, '0x')) {
     $hex = substr($src, 2);
@@ -5167,6 +5178,22 @@ const REFINE_FOOL = [
 const REFINE_REPEATS = [1, 2, 4, 6, 8, 12, 16, 20];
 const REFINE_NAMES = ['ya.ru', 'www.google.com', ''];   // пустое — случайное имя
 const REFINE_LIMIT = 300;   // секунд на всю фазу
+// Фейк — копия настоящего ClientHello устройства (tls_client_hello_clone) вместо заготовки: отпечаток фейка
+// совпадает с отпечатком настоящего трафика, и DPI не отличит его по телу. Помогает там, где заготовки «спалились»
+// (замер z2k); приветствие браузера ~1900 байт nfqws2 сам режет на пакеты (проверено с Chrome 2026-10-09)
+const CLONE_BLOB = 'tls_clone';
+const CLONE_STEP = '--lua-desync=tls_client_hello_clone:blob=' . CLONE_BLOB . ':fallback=fake_default_tls';
+
+// Стратегия с заменённым шагом фейка; фейку-копии нужен шаг копирования перед ним
+function stepsWith(array $steps, int $fi, array $s): array
+{
+  $steps[$fi] = stepBuild($s);
+  $steps = array_values(array_filter($steps, fn($t) => $t !== CLONE_STEP));
+  if (($s['p']['blob'] ?? null) === CLONE_BLOB) {
+    array_splice($steps, array_search(stepBuild($s), $steps, true), 0, [CLONE_STEP]);
+  }
+  return $steps;
+}
 
 // «--lua-desync=fake:blob=x:repeats=6:tcp_md5» → функция и параметры по порядку
 function stepParse(string $tok): array
@@ -5205,13 +5232,13 @@ function strategyName(array $steps): string
 {
   return implode(' + ', array_map(function ($t) {
     $s = stepParse($t);
-    $name = $s['fn'];
+    $name = $s['fn'] . (($s['p']['blob'] ?? null) === CLONE_BLOB ? ' (копия)' : '');
     if (isset($s['p']['repeats']) && (int)$s['p']['repeats'] > 1) {
       $name .= ' ×' . (int)$s['p']['repeats'];
     }
     $fool = array_values(array_intersect(array_keys($s['p']), FOOL_KEYS));
     return $name . ($fool && in_array($s['fn'], FAKE_FUNCS, true) ? ' ' . implode(',', array_map(fn($k) => $k === 'ip_autottl' ? 'autottl' : $k, $fool)) : '');
-  }, $steps));
+  }, array_values(array_filter($steps, fn($t) => $t !== CLONE_STEP))));
 }
 
 // Порядок перебора — по тому, как соединение рвётся без обхода: при сбросе чаще помогают фейки,
@@ -5294,6 +5321,14 @@ function testRefine(array &$status, callable $try, int $repeats, bool $http, boo
     if (!$http && ($st['fn'] === 'hostfakesplit' || ($st['fn'] === 'fake' && str_contains((string)($st['p']['blob'] ?? ''), 'tls')))) {
       $axes[] = ['name', 'Имя в фейке', array_map(fn($n) => [$n === '' ? 'случайное' : $n, fn($s) => $withName($s, $n)], REFINE_NAMES)];
     }
+    // заготовка или копия приветствия устройства — когда заготовки у провайдера «спалились»
+    if (!$http && $st['fn'] === 'fake' && str_contains((string)($st['p']['blob'] ?? ''), 'tls')) {
+      $blob0 = $st['p']['blob'] === CLONE_BLOB ? 'fake_default_tls' : $st['p']['blob'];
+      $axes[] = ['blob', 'Чем фейк', [
+        ['заготовка', fn($s) => array_replace_recursive($s, ['p' => ['blob' => $blob0]])],
+        ['копия приветствия', fn($s) => array_replace_recursive($s, ['p' => ['blob' => CLONE_BLOB]])],
+      ]];
+    }
     $status['refine'] = ['base' => $base['name'], 'from' => $base['from'], 'axes' => [], 'state' => 'running', 'tried' => $tried];
     $status['total'] += array_sum(array_map(fn($a) => count($a[2]), $axes));
     $improved = false;
@@ -5317,9 +5352,7 @@ function testRefine(array &$status, callable $try, int $repeats, bool $http, boo
           }
           $status['current'] = "уточнение · $title: $label";
           testSaveStatus($status);
-          $t = $steps;
-          $t[$fi] = stepBuild($s2);
-          $res = $try($t);
+          $res = $try(stepsWith($steps, $fi, $s2));
           $status['done']++;
         }
         $mut[] = $s2;
@@ -5344,7 +5377,7 @@ function testRefine(array &$status, callable $try, int $repeats, bool $http, boo
     }
     $status['refine']['state'] = 'done';
     if ($improved && $cur['ok'] >= $base['ok'] && $cur['ok'] > 0) {
-      $steps[$fi] = stepBuild($st);
+      $steps = stepsWith($steps, $fi, $st);
       $name = strategyName($steps);
       $status['results'][] = ['name' => $name, 'from' => 'уточнение: ' . $base['name'], 'steps' => $steps, 'profile' => array_merge($filter, $steps), 'refined' => true] + $cur;
       $status['refine']['final'] = $name;
