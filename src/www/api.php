@@ -3542,6 +3542,59 @@ function curlProbe(string $host, bool $http, string $path = '/'): array
   return ['ok' => $ok, 'code' => (int)$code, 'ms' => (int)round((float)$time * 1000), 'reason' => $reason];
 }
 
+// Обрыв на объёме по адресу — без сайта и без большого файла (приём runnin4ik/dpi-detector, tcp16): PAD_REQS запросов
+// HEAD по одному соединению, к каждому заголовок на PAD_BYTES байт — к серверу уходит ~48 КБ. Первые ответы пришли,
+// потом тишина — обрыв. Если сервер не держит соединение (переподключения), итог не показателен.
+// $sni — имя в приветствии: от него не зависит обрыв (он по адресу), но без имени не сработает hostfakesplit
+const PAD_REQS = 12;
+const PAD_BYTES = 4000;
+
+function padProbe(string $ip, int $port, string $sni): array
+{
+  [$lo, $hi] = array_map('intval', explode(':', TEST_PORTS));
+  $url = ($port === 80 ? 'http://' : 'https://') . $sni . ($port === 80 || $port === 443 ? '' : ":$port") . '/';
+  // -m — на каждый запрос, а не на все: без --fail-early после обрыва curl открывал бы новые соединения
+  // и ждал на каждом (до PAD_REQS × 8 с)
+  $cmd = 'curl -4 -sk -I --fail-early --local-port ' . mt_rand($lo, $hi - 50) . '-' . $hi . ' --connect-timeout 4 -m 8'
+    . ' --connect-to ' . escapeshellarg("$sni:$port:$ip:$port")
+    . ' -A ' . escapeshellarg('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130 Safari/537.36')
+    . ' -H ' . escapeshellarg('X-Pad: ' . str_repeat('a', PAD_BYTES))
+    . ' -w ' . escapeshellarg('%{http_code} %{num_connects} %{time_total}\n');
+  for ($i = 0; $i < PAD_REQS; $i++) {
+    $cmd .= ' -o /dev/null ' . escapeshellarg("$url?n=$i");
+  }
+  $out = [];
+  exec($cmd . ' 2>/dev/null', $out, $rc);
+  $got = 0;
+  $reconnect = false;
+  $ms = 0;
+  foreach ($out as $k => $line) {
+    [$code, $conn, $time] = array_pad(explode(' ', trim($line)), 3, '0');
+    if ((int)$code > 0) {
+      $got++;
+      $ms += (int)round((float)$time * 1000);
+      $reconnect = $reconnect || ($k > 0 && (int)$conn > 0);
+    }
+  }
+  // сервер закрывал соединение (переподключения или ответы без кода) — объём в одном соединении не набрался
+  if ($reconnect || ($rc === 0 && $got < PAD_REQS)) {
+    return ['ok' => false, 'code' => 0, 'ms' => $ms, 'reason' => 'сервер не держит соединение — объём не проверить', 'got' => $got];
+  }
+  if ($rc === 0) {
+    return ['ok' => true, 'code' => 0, 'ms' => $ms, 'reason' => null];
+  }
+  $reason = match (true) {
+    $rc === 28 && $got > 0 => REASON_FREEZE,
+    $rc === 28 => 'тайм-аут',
+    $rc === 7 => 'не удалось подключиться',
+    $rc === 35 => 'обрыв TLS',
+    $rc === 52 => 'пустой ответ',
+    $rc === 56 => 'соединение сброшено',
+    default => "ошибка curl $rc",
+  };
+  return ['ok' => false, 'code' => 0, 'ms' => $ms, 'reason' => $reason, 'got' => $got];
+}
+
 // ----- параллельный прогон: много стратегий в одном nfqws2, по дорожке на стратегию -----
 // Дорожка — свой кусок проверочных портов; iptables метит её пакеты (биты 0x0F000000 свободны: podkop занимает
 // 0x00100000/0x00200000, nfqws2 — 0x40000000), nfqws2 выбирает профиль по метке. curl SO_MARK ставить не умеет —
@@ -4291,8 +4344,6 @@ function wideJob(array $job, array &$status, ?array &$nfq, string $iface, array 
 
 // [подпись, адрес, путь]: файлы больше 64 КБ, которые отдаются по HTTPS кусками (проверено с роутера)
 const FREEZE_REFS = [
-  ['Hetzner, Германия', 'fsn1-speed.hetzner.com', '/100MB.bin'],
-  ['Hetzner, Финляндия', 'hel1-speed.hetzner.com', '/100MB.bin'],
   ['OVH', 'proof.ovh.net', '/files/1Mb.dat'],
   ['Linode (Akamai)', 'speedtest.frankfurt.linode.com', '/100MB-frankfurt.bin'],
   ['Vultr', 'fra-de-ping.vultr.com', '/vultr.com.100MB.bin'],
@@ -4301,8 +4352,28 @@ const FREEZE_REFS = [
   ['Cloudflare', 'speed.cloudflare.com', '/__down?bytes=200000'],
   ['Selectel — Россия, для сравнения', 'speedtest.selectel.ru', '/10MB'],
 ];
-// имена для фейка: сайты, которые провайдеры обычно не трогают
-const FREEZE_NAMES = ['ya.ru', 'vk.com', 'gosuslugi.ru', 'ozon.ru', 'www.google.com'];
+// Сети без своего сайта с большим файлом — по адресу (padProbe): [подпись, адрес, порт, AS, имя в приветствии].
+// Адреса — из runnin4ik/dpi-detector, tcp16.json (MIT), по одному на сеть; у Hetzner собственные адреса
+// (fsn1/hel1-speed.hetzner.com) у части провайдеров не соединяются вовсе, поэтому и они здесь
+const FREEZE_IPS = [
+  ['Hetzner', '91.98.156.82', 443, 24940, null],
+  ['Hetzner Cloud', '5.161.249.234', 443, 213230, null],
+  ['DigitalOcean', '157.230.91.62', 443, 14061, null],
+  ['Contabo', '173.249.28.198', 443, 51167, null],
+  ['Scaleway', '62.4.10.75', 443, 12876, null],
+  ['Oracle Cloud', '132.145.253.77', 443, 31898, null],
+  ['Google Cloud', '35.227.66.60', 443, 396982, null],
+  ['Akamai', '23.222.76.4', 443, 20940, null],
+  ['Fastly (GitHub)', '185.199.108.133', 443, 54113, 'release-assets.githubusercontent.com'],
+  ['Gcore', '62.112.221.146', 443, 199524, null],
+  ['Melbicom', '109.122.201.147', 443, 8849, null],
+  ['M247', '146.70.158.22', 443, 9009, null],
+  ['FranTech (BuyVM)', '107.189.29.143', 443, 53667, null],
+];
+const FREEZE_SNI = 'example.com';   // имя в приветствии, когда у адреса своего нет
+// Имена для фейка — сайты, которые провайдеры обычно не трогают. Первыми — те, что снимали обрыв у многих
+// (ya.ru — у автора; 300.ya.ru, hcaptcha.com, ad.adriver.ru — замеры z2k и dpi-detector, whitelist_sni.txt)
+const FREEZE_NAMES = ['ya.ru', '300.ya.ru', 'hcaptcha.com', 'ad.adriver.ru', 'vk.com', 'gosuslugi.ru', 'ozon.ru', 'www.google.com'];
 // приёмы, в которые подставляется имя (NAME). Первый снимает и замирание до ответа (опорные адреса Hetzner),
 // второй — обрыв на объёме (king.hr, Linode, Vultr); проверено у провайдера с обоими видами
 const FREEZE_TEMPLATES = [
@@ -4310,15 +4381,21 @@ const FREEZE_TEMPLATES = [
   ['--lua-desync=hostfakesplit:tcp_md5:tcp_ts_up:repeats=16:host=NAME'],
   ['--lua-desync=fake:blob=fake_default_tls:tls_mod=rnd,dupsid,sni=NAME:tcp_md5:tcp_ts=-600000:repeats=16'],
 ];
-const FREEZE_LIMIT = 600;   // секунд на всю пробу
+const FREEZE_LIMIT = 900;   // секунд на подбор имён всех сетей
+const FREEZE_NET_LIMIT = 150;   // и на одну сеть
 define('FREEZE_FILE', UI_CONF_DIR . '/freeze.json');
 
 function freezeJob(array $job, array &$status, ?array &$nfq, string $iface, array $baseArgs): void
 {
-  $refs = FREEZE_REFS;
-  foreach ($job['extra'] ?? [] as $h) {
-    array_unshift($refs, [$h, $h, '/']);
+  // сеть — по имени с большим файлом (curlProbe) или по адресу (padProbe); свои сайты — первыми
+  $refs = array_map(fn($r) => ['label' => $r[0], 'host' => $r[1], 'path' => $r[2]], FREEZE_REFS);
+  foreach (FREEZE_IPS as [$label, $ip, $port, $asn, $sni]) {
+    $refs[] = ['label' => $label, 'host' => $ip, 'path' => null, 'pad' => ['ip' => $ip, 'port' => $port, 'sni' => $sni ?? FREEZE_SNI], 'asn' => $asn];
   }
+  foreach ($job['extra'] ?? [] as $h) {
+    array_unshift($refs, ['label' => $h, 'host' => $h, 'path' => '/']);
+  }
+  $probeNet = fn(array $n): array => isset($n['pad']) ? padProbe($n['pad']['ip'], $n['pad']['port'], $n['pad']['sni']) : curlProbe($n['host'], false, $n['path']);
   $funcs = luaCatalog()['functions'];
   $templates = array_values(array_filter(FREEZE_TEMPLATES, fn($t) => isset($funcs[explode(':', substr($t[0], 13))[0]])));
   $filter = ['--filter-tcp=443', '--filter-l7=tls', '--payload=tls_client_hello'];
@@ -4326,7 +4403,7 @@ function freezeJob(array $job, array &$status, ?array &$nfq, string $iface, arra
   $status['total'] = count($refs);
   $status['phase'] = 'baseline';
   testSaveStatus($status);
-  $try = function (string $host, string $path, array $steps) use (&$nfq, $baseArgs, $filter): array {
+  $try = function (array $n, array $steps) use (&$nfq, $baseArgs, $filter, $probeNet): array {
     $nfq = testNfqwsStart(array_merge($baseArgs, $filter, $steps));
     if (!$nfq) {
       return ['ok' => 0, 'tries' => 0, 'ms' => null, 'reason' => 'nfqws2 не принял параметры'];
@@ -4339,11 +4416,11 @@ function freezeJob(array $job, array &$status, ?array &$nfq, string $iface, arra
     // с этим адресом (у Hetzner так) — одна повторная через 3 секунды; засчитывается только три подряд
     for ($i = 0; $i < 3; $i++) {
       $tries++;
-      $r = curlProbe($host, false, $path);
+      $r = $probeNet($n);
       if (!$r['ok'] && $tries === 1) {
         sleep(3);
         $tries++;
-        $r = curlProbe($host, false, $path);
+        $r = $probeNet($n);
       }
       if (!$r['ok']) {
         $reason = $r['reason'];
@@ -4358,19 +4435,23 @@ function freezeJob(array $job, array &$status, ?array &$nfq, string $iface, arra
   };
   // сначала все сети без обхода: где обрыв есть
   testRules('bypass', $iface);
-  foreach ($refs as [$label, $host, $path]) {
+  foreach ($refs as $ref) {
     if (is_file(TEST_DIR . '/stop')) {
       break;
     }
-    $status['current'] = $label;
+    $status['current'] = $ref['label'];
     testSaveStatus($status);
-    $dns = diagDns($host);
-    $ip = $dns['ips'][0] ?? null;
-    $asn = $ip && !(isIp4($ip) && ipReserved($ip)) ? (int)(ripe('network-info', $ip)['asns'][0] ?? 0) : 0;
-    $b = $ip ? curlProbe($host, false, $path) : ['ok' => false, 'code' => 0, 'ms' => 0, 'reason' => 'имя не разрешается'];
+    if (isset($ref['pad'])) {
+      $ip = $ref['pad']['ip'];
+      $asn = $ref['asn'];
+    } else {
+      $ip = diagDns($ref['host'])['ips'][0] ?? null;
+      $asn = $ip && !(isIp4($ip) && ipReserved($ip)) ? (int)(ripe('network-info', $ip)['asns'][0] ?? 0) : 0;
+    }
+    $b = $ip ? $probeNet($ref) : ['ok' => false, 'code' => 0, 'ms' => 0, 'reason' => 'имя не разрешается'];
     // замирает и раньше, до ответа сервера (у Hetzner так): соединение с адресом есть, дальше тишина — лечится тем же
-    $stall = !$b['ok'] && $b['reason'] === 'тайм-аут' && array_filter(diagTcp([$ip], 443), fn($x) => $x['ok']);
-    $status['nets'][] = ['label' => $label, 'host' => $host, 'path' => $path, 'ip' => $ip, 'asn' => $asn ?: null, 'baseline' => $b,
+    $stall = !$b['ok'] && $b['reason'] === 'тайм-аут' && array_filter(diagTcp([$ip], $ref['pad']['port'] ?? 443), fn($x) => $x['ok']);
+    $status['nets'][] = $ref + ['ip' => $ip, 'asn' => $asn ?: null, 'baseline' => $b,
       'freeze' => (!$b['ok'] && $b['reason'] === REASON_FREEZE) || $stall, 'stall' => (bool)$stall, 'found' => null, 'tried' => []];
     $status['done']++;
     testSaveStatus($status);
@@ -4391,16 +4472,23 @@ function freezeJob(array $job, array &$status, ?array &$nfq, string $iface, arra
         break;
       }
     }
-    foreach ($n['found'] ? [] : FREEZE_NAMES as $name) {
-      foreach ($templates as $t) {
+    // у части сетей обрыв не снимает ни одно имя — не тратим на такую всё время пробы
+    // сети различаются прежде всего именем: сначала все имена с первым приёмом, потом остальные приёмы
+    $netStarted = time();
+    foreach ($n['found'] ? [] : $templates as $t) {
+      foreach (FREEZE_NAMES as $name) {
         if (is_file(TEST_DIR . '/stop') || time() - $started > FREEZE_LIMIT) {
           $status['state'] = is_file(TEST_DIR . '/stop') ? 'stopped' : 'time';
           break 3;
         }
+        if (time() - $netStarted > FREEZE_NET_LIMIT) {
+          $n['gave_up'] = true;
+          break 2;
+        }
         $steps = array_map(fn($x) => str_replace('NAME', $name, $x), $t);
         $status['current'] = "{$n['label']}: " . strategyName($steps) . " с именем $name";
         testSaveStatus($status);
-        $r = $try($n['host'], $n['path'], $steps);
+        $r = $try($n, $steps);
         $n['tried'][] = ['name' => $name, 'steps' => $steps] + $r;
         if ($r['ok'] === 3) {
           $n['found'] = ['name' => $name, 'steps' => $steps, 'strategy' => strategyName($steps), 'ms' => $r['ms']];
