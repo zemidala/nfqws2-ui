@@ -2353,6 +2353,13 @@ function lintConf(array $raw, string $text): array
     }
   }
 
+  // IPv6 от провайдера есть, а nfqws2 его не перехватывает: сайты с IPv6-адресом (YouTube, Cloudflare…) идут мимо обхода
+  $v6on = !in_array(strtolower(trim($exp['IPV6_ENABLED'] ?? '')), ['', '0', 'false', 'no'], true);
+  if (!$v6on && ($dev = ispIpv6Route(preg_split('/\s+/', trim($exp['ISP_INTERFACE'] ?? ''), -1, PREG_SPLIT_NO_EMPTY)))) {
+    $add('IPV6_ENABLED', null, 'warning', "У провайдера есть IPv6 (маршрут через $dev), а IPV6_ENABLED выключен — сайты, которые открываются по IPv6, идут мимо nfqws2, и обход для них не работает",
+      ['op' => 'set_var', 'var' => 'IPV6_ENABLED', 'value' => '1', 'label' => 'Включить IPv6']);
+  }
+
   // Окончательная проверка — самим nfqws2
   $dry = dryRun($exp);
   if (!$dry['ok']) {
@@ -2440,6 +2447,26 @@ function lintDesync(string $var, int $i, string $val, array $funcs, array $lua, 
       $add($var, $i, 'error', "Функции {$fn} нужен параметр «{$r}» — без него она завершится ошибкой на каждом пакете", ['op' => 'add_param', 'key' => $r, 'choices' => $r === 'blob' ? array_values(array_unique(array_merge(array_keys($blobs), BUILTIN_BLOBS, array_values(array_filter($lua['globals'], fn($g) => preg_match('/^fake_default_/', $g)))))) : [], 'label' => "Добавить $r"]);
     }
   }
+}
+
+// Интерфейс провайдера, через который есть маршрут IPv6 по умолчанию, или null. Маршрут через туннель
+// (не из ISP_INTERFACE) не считается: такой трафик nfqws2 и не должен видеть.
+// $routes — строки «ip -6 route show default» (для проверки без роутера)
+function ispIpv6Route(array $ifaces, ?array $routes = null): ?string
+{
+  if (!$ifaces) {
+    return null;
+  }
+  if ($routes === null) {
+    $routes = [];
+    exec('ip -6 route show default 2>/dev/null', $routes);
+  }
+  foreach ($routes as $r) {
+    if (preg_match('/^default\b.*\bdev\s+(\S+)/', trim($r), $m) && in_array($m[1], $ifaces, true)) {
+      return $m[1];
+    }
+  }
+  return null;
 }
 
 // Похож ли блоб на TLS ClientHello: запись handshake (0x16), версия 3.x, сообщение ClientHello (0x01).
