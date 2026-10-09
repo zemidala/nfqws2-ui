@@ -1762,7 +1762,7 @@ function luaCatalog(): array
           continue;
         }
         if (preg_match('/^function ([a-z_][a-z0-9_]*)\(ctx,\s*desync\)/', $line, $m)) {
-          $f = ['file' => $base, 'doc' => [], 'std' => [], 'args' => [], 'required' => [], 'nfqws1' => null];
+          $f = ['file' => $base, 'doc' => [], 'std' => [], 'args' => [], 'required' => [], 'nfqws1' => null, 'payload_def' => null];
           foreach ($doc as $d) {
             if (preg_match('/^standard args\s*:\s*(.+)$/', $d, $x)) {
               // «direction, payload, reconstruct. FOOLING AND REPEATS ...» — берём только имена групп
@@ -1782,6 +1782,10 @@ function luaCatalog(): array
           for ($j = $i + 1; $j < count($lines) && $lines[$j] !== 'end'; $j++) {
             if (preg_match_all("/'([a-z0-9_]+)' arg required/", $lines[$j], $x)) {
               array_push($f['required'], ...$x[1]);
+            }
+            // Какую нагрузку функция берёт без своего payload=: payload_check(desync) — только известную (known)
+            if ($f['payload_def'] === null && preg_match('/payload_check\(desync\s*(?:,\s*"([a-z_,]+)")?\)/', $lines[$j], $x)) {
+              $f['payload_def'] = ($x[1] ?? '') ?: 'known';
             }
           }
           $f['required'] = array_values(array_unique($f['required']));
@@ -2284,6 +2288,34 @@ function lintConf(array $raw, string $text): array
       } elseif ($u !== range(1, count($u))) {
         $add($var, $tok, 'error', "$label: номера strategy должны идти подряд с 1 (сейчас: " . implode(', ', $u) . ')');
       }
+    }
+
+    // --payload=unknown у профиля, а функция без своего payload= берёт только известную нагрузку (known):
+    // nfqws2 запускается без ошибок, а функция не срабатывает ни разу («does not pass 'known' filter» в журнале)
+    $pl = null;
+    foreach ($e['tokens'] as $t) {
+      if (str_starts_with($t, '--payload=')) {
+        $pl = explode(',', substr($t, 10));
+        continue;
+      }
+      if ($pl === null || array_diff($pl, ['unknown', 'empty']) || !str_starts_with($t, '--lua-desync=')) {
+        continue;
+      }
+      $parts = explode(':', substr($t, 13));
+      $def = $funcs[$parts[0]]['payload_def'] ?? null;
+      if ($def === null || array_intersect(explode(',', $def), ['all', 'unknown', 'empty'])
+        || array_filter($parts, fn($p) => str_starts_with($p, 'payload='))) {
+        continue;
+      }
+      $ti = null;
+      foreach (tokens($raw[$var] ?? '') as $i => $rt) {
+        if ($rt === $t && ($tok === null || $i >= $tok)) {
+          $ti = $i;
+          break;
+        }
+      }
+      $add($var, $ti ?? $tok, 'warning', "$label: {$parts[0]} не сработает — у профиля --payload=" . implode(',', $pl) . ", а функция без своего payload= берёт только известные протоколы",
+        $ti !== null ? ['op' => 'replace', 'to' => "$t:payload=all", 'label' => 'Добавить payload=all'] : null);
     }
 
     // Порты профиля должны попадать в правила iptables (TCP_PORTS / UDP_PORTS), иначе пакеты до nfqws2 не дойдут
