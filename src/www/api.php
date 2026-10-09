@@ -5500,6 +5500,37 @@ function diagDns(string $host): array
     'ips' => array_slice($useRef ? $ref : $system, 0, 3), 'alt' => $status === 'differs' ? array_slice($ref, 0, 2) : []];
 }
 
+// Адреса сайта не соединяются: не выдаёт ли другой DNS адрес, по которому сайт открывается. У больших сетей
+// (Meta, Google, CDN) разные DNS отдают разные адреса, и закрытым по IP бывает только часть — тогда дело в DNS,
+// а не в блокировке сайта. $tried — адреса, уже проверенные. Запрос к сайту — мимо nfqws2, как ступень 3
+const DIAG_DOH_MORE = [['Cloudflare', 'cloudflare-dns.com', '1.1.1.1'], ['Quad9', 'dns.quad9.net', '9.9.9.9']];
+
+function diagOther(string $host, array $tried): array
+{
+  $cand = [];
+  foreach (array_merge(DIAG_DOH, DIAG_DOH_MORE) as [$name, $server, $ip]) {
+    $r = dohResolve($server, $ip, $host);
+    foreach ($r['ok'] ? $r['ips'] : [] as $a) {
+      if (isIp4($a) && !in_array($a, $tried, true) && !ipReserved($a)) {
+        $cand[$a] ??= $name;
+      }
+    }
+  }
+  // Признак — соединение с адресом: блокировку по имени (DPI) на нём снимет nfqws2, а закрытый по IP адрес — нет.
+  // Открылся ли сайт мимо nfqws2 — только для пояснения
+  $checked = [];
+  foreach (array_slice(array_keys($cand), 0, 4) as $a) {
+    $up = diagTcp([$a])[0]['ok'];
+    $r = $up ? diagBypass(fn() => diagDirect($host, $a)) : null;
+    $checked[] = ['ip' => $a, 'from' => $cand[$a], 'tcp' => $up, 'open' => $r && $r['ok'] && !$r['isp_page']];
+    if ($up) {
+      break;
+    }
+  }
+  $good = array_values(array_filter($checked, fn($c) => $c['tcp']));
+  return ['checked' => $checked, 'ok' => (bool)$good, 'ip' => $good[0]['ip'] ?? null, 'from' => $good[0]['from'] ?? null, 'open' => $good[0]['open'] ?? false];
+}
+
 // Ступень 2: устанавливается ли соединение с адресами сайта
 function diagTcp(array $ips, int $port = 443): array
 {
@@ -5704,6 +5735,10 @@ function diagVerdict(array $r): array
     return $v('freeze', true);   // подбор с уточнением иногда снимает и заморозку
   }
   if (!$tcpOk) {
+    // адрес от своего DNS закрыт, а по адресу от другого DNS сайт открывается
+    if (!empty($r['other']['ok'])) {
+      return $v('dns_other', empty($r['other']['open']));   // и по другому адресу мимо nfqws2 не открылся — нужен и обход
+    }
     return $v(!empty($r['http']['ok']) ? 'port_block' : 'ip_block');
   }
   if (!empty($r['sni']['by_name'])) {
@@ -6598,6 +6633,8 @@ switch ($cmd) {
         respond(diagBypass(fn() => diagHttp($host, $ip)));
       case 'via':
         respond(diagVia($host));
+      case 'other':
+        respond(diagOther($host, array_values(array_filter(is_array($in['tried'] ?? null) ? $in['tried'] : [], fn($x) => is_string($x) && isIp4($x)))));
       case 'verdict':
         respond(diagVerdict(is_array($in['r'] ?? null) ? $in['r'] : []));
     }
