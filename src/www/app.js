@@ -3594,7 +3594,8 @@ async function viewTests(main, r, bare = false) {
   const setHist = h('input', { type: 'checkbox', id: 't-hist', checked: true });
   const setComm = h('input', { type: 'checkbox', id: 't-comm', checked: true });
   // каталог по правилам blockcheck2: большой набор проверяется параллельно
-  const catSel = h('select', { class: 'select', 'aria-label': 'Каталог zapret2' },
+  // пункты длинные («полный — 3111 стратегий, 15–30 минут»): без min-width:0 список не сужается и на телефоне вылезает за край
+  const catSel = h('select', { class: 'select', style: 'min-width:0;max-width:100%', 'aria-label': 'Каталог zapret2' },
     h('option', { value: '', text: 'не брать' }), h('option', { value: 'ext', text: 'расширенный' }), h('option', { value: 'full', text: 'полный — долго' }));
   const catNote = h('span', { class: 'sm muted' });
   const catCounts = () => api('test_candidates', { proto: proto.value }).then((r) => {
@@ -4081,7 +4082,7 @@ async function viewTests(main, r, bare = false) {
           h('label', { class: 'row', title: 'Стратегии из истории подборов: сначала работавшие для этого сайта, затем до пяти помогавших другим сайтам' }, setHist, 'что работало раньше'),
           h('label', { class: 'row', title: 'До восьми стратегий, которые сработали у абонентов вашего провайдера (база на GitHub, раз в сутки). Сначала — открывавшие этот сайт или его сеть.' }, setComm, 'стратегии сообщества', newTag('pick:community')))),
         oneRow(h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Каталог zapret2' }), h('div', { class: 'stack', style: 'gap:2px' },
-          h('div', { class: 'row' }, catSel, newTag('pick:catalog')),
+          h('div', { class: 'row', style: 'min-width:0' }, catSel, newTag('pick:catalog')),
           h('span', { class: 'sm muted', text: 'Те же функции, позиции разреза и способы испортить фейк, что перебирает blockcheck2 из zapret2. Большой набор проверяется параллельно, по 15 стратегий сразу; лучшие находки потом перепроверяются по одной.' })))),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Повторов' }), h('div', { class: 'row' }, repeats, h('span', { class: 'sm muted', text: 'Стратегия засчитывается, если сайт открылся каждый раз.' }))),
         oneRow(h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Уточнение' }), h('div', { class: 'stack', style: 'gap:2px' },
