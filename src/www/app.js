@@ -3814,7 +3814,8 @@ async function viewTests(main, r, bare = false) {
     });
     return h('div', { class: 'stack', style: 'gap:14px' },
       flow(s, running, res, best),
-      baseline ? (baseline.ok ? notice('info', 'Без обхода сайт открывается', `HTTP ${baseline.code}, ${baseline.ms} мс — блокировки нет, стратегия не нужна.`)
+      baseline ? (baseline.ok ? (s.proto === 'quic' ? notice('info', 'Без обхода по QUIC сайт отвечает', `Ответ за ${baseline.ms} мс — QUIC этого сайта не режут, стратегия не нужна.`)
+        : notice('info', 'Без обхода сайт открывается', `HTTP ${baseline.code}, ${baseline.ms} мс — блокировки нет, стратегия не нужна.`))
         : s.proto === 'quic' ? notice('warn', 'Без обхода по QUIC сайт не отвечает', 'QUIC (HTTP/3) этого сайта режут. Сам сайт при этом может открываться: браузер ждёт ответа по QUIC и только потом переходит на обычное соединение — страницы и видео стартуют с задержкой.')
         : notice('warn', 'Без обхода сайт не открывается: ' + baseline.reason, baseline.reason === 'соединение сброшено' || baseline.reason === 'обрыв TLS' ? 'Похоже на блокировку по SNI (DPI) — обход поможет.' : isFreeze(baseline.reason) ? (best ? 'Это ограничение ТСПУ «16–20 КБ» для зарубежных хостингов. Ниже — стратегия, которая его снимает.' : FREEZE_HINT) : 'Похоже на блокировку по DPI или IP.')) : null,
       !running ? recommendation(s, good, best) : null,
