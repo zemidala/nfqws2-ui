@@ -20,24 +20,56 @@ fetch() { # url [файл]
 	fi
 }
 
-# Необязательный пакет — не дольше минуты: wget внутри opkg ждёт недоступный источник бесконечно, и установка
-# (или обновление), которой этот пакет не нужен, повисла бы на нём
-opt_install() {
-	opkg list-installed 2>/dev/null | grep -q "^$1 " && return 0
-	opkg install "$1" >/dev/null 2>&1 &
+# opkg с ограничением времени: wget внутри opkg ждёт недоступный источник бесконечно, а следующий запуск
+# упирается в «Could not lock opkg.lock». $1 — секунд, $2 — файл для вывода («-» — на экран), дальше — аргументы
+# opkg. Код 124 — не дождались
+opkg_limited() {
+	s=$1 log=$2
+	shift 2
+	if [ "$log" = - ]; then opkg "$@" & else opkg "$@" >"$log" 2>&1 & fi
 	p=$! i=0
 	while kill -0 $p 2>/dev/null; do
-		if [ $i -ge 60 ]; then
-			# сначала wget, который качает пакет, потом сам opkg — иначе wget останется висеть
-			for w in $(ps w 2>/dev/null | grep "[w]get.*$1" | awk '{print $1}'); do kill $w 2>/dev/null; done
-			kill $p 2>/dev/null
-			wait $p 2>/dev/null
-			return 1
+		if [ $i -ge "$s" ]; then
+			kill_tree $p
+			wait $p 2>/dev/null || :   # set -e: код убитого процесса не должен завершить установщик
+			return 124
 		fi
 		sleep 1
 		i=$((i + 1))
 	done
 	wait $p
+}
+
+# Процесс и всех его потомков (opkg запускает wget, который иначе остался бы висеть). Потомков — по номеру
+# родителя в /proc: сначала список, потом kill, иначе осиротевшие перейдут к init
+kill_tree() {
+	kids=$(awk -v p="$1" '$4 == p { print $1 }' /proc/[0-9]*/stat 2>/dev/null)
+	kill "$1" 2>/dev/null
+	for c in $kids; do kill_tree "$c"; done
+}
+
+# Необязательный пакет — не дольше минуты: установка, которой он не нужен, не должна на нём повиснуть
+opt_install() {
+	opkg list-installed 2>/dev/null | grep -q "^$1 " && return 0
+	opkg_limited 60 /dev/null install "$1"
+}
+
+# Источники пакетов, которые не отвечают
+dead_feeds() {
+	cat $R/etc/opkg.conf $R/etc/opkg/*.conf 2>/dev/null | awk '$1 ~ /^src/ { print $3 }' | sort -u | while read -r u; do
+		wget -q -T 10 -O /dev/null "$u/Packages.gz" 2>/dev/null || say "  $u"
+	done
+}
+
+feed_hint() {
+	d=$(dead_feeds)
+	[ -n "$d" ] && say "Не отвечают источники пакетов:" && say "$d"
+	if [ -n "$R" ] && cat $R/etc/opkg.conf $R/etc/opkg/*.conf 2>/dev/null | grep -q '^src.*bin\.entware\.net'; then
+		say "Сервер Entware (bin.entware.net) бывает недоступен. Можно перейти на зеркало и повторить установку:"
+		say "  sed -i 's#http://bin.entware.net/#http://mirrors.bfsu.edu.cn/entware/#' $R/etc/opkg.conf"
+	fi
+	[ -n "$d" ] && say "Ненужный источник можно убрать из ${R:-}/etc/opkg/ или /etc/opkg/customfeeds.conf."
+	return 0
 }
 
 [ "$(id -u)" = 0 ] || die "запускайте от root"
@@ -103,19 +135,40 @@ fetch "$BASE/sha256sums.txt" "$TMP/sha256sums.txt" || die "не удалось �
 
 # --- установка ---
 if [ "$PM" = opkg ]; then
-	say "Обновляю список пакетов и ставлю зависимости (lighttpd, php8)…"
+	# Другой opkg (часто — повисший от прошлой попытки) держит блокировку: наш упал бы с «Could not lock opkg.lock»
+	if busy=$(ps w 2>/dev/null | grep -E '[o]pkg .*(install|update|upgrade|remove)|[w]get.*opkg'); then
+		say "$busy"
+		die "уже работает другой opkg (выше). Дождитесь, пока он закончит, или остановите его: kill <число из первой колонки> — и запустите установку снова"
+	fi
+	say "Обновляю список пакетов…"
 	# Один недоступный источник (часто — от удалённого пакета) даёт ошибку всего opkg update, хотя нужные списки
 	# скачались. Не останавливаемся: если зависимостей действительно не найти, остановит opkg install ниже.
-	if ! opkg update >"$TMP/opkg-update.log" 2>&1; then
+	rc=0
+	opkg_limited 120 "$TMP/opkg-update.log" update || rc=$?   # set -e: ненулевой код разбираем сами
+	case $rc in
+	0) ;;
+	124)
+		say "Внимание: список пакетов не обновился за 2 минуты — продолжаю с тем, что уже скачано."
+		feed_hint ;;
+	*)
 		say "Внимание: часть источников пакетов недоступна — продолжаю с тем, что скачалось:"
 		grep -o 'https\{0,1\}://[^ ,]*Packages\.gz' "$TMP/opkg-update.log" | sort -u | sed 's/^/  /'
-		say "  (ненужный источник можно убрать из /opt/etc/opkg/ или /etc/opkg/customfeeds.conf)"
-	fi
+		say "  (ненужный источник можно убрать из ${R:-}/etc/opkg/ или /etc/opkg/customfeeds.conf)" ;;
+	esac
 	# Кеш PHP — не обязателен: без него интерфейс просто медленнее на слабых роутерах. Ставится до пакета,
 	# чтобы nfqws-ui-setup apply из postinst его уже увидел
 	opt_install php8-mod-opcache || say "Кеш PHP (php8-mod-opcache) не поставился — интерфейс будет работать, но медленнее."
+	say "Ставлю nfqws2-ui и зависимости (lighttpd, php8)…"
 	# NFQWS_UI_FORCE=1 (nfqws-ui update --force) — поставить заново ту же версию
-	opkg install ${NFQWS_UI_FORCE:+--force-reinstall} "$TMP/$FILE" || die "opkg install не прошёл (см. выше)"
+	rc=0
+	opkg_limited 600 - install ${NFQWS_UI_FORCE:+--force-reinstall} "$TMP/$FILE" || rc=$?
+	case $rc in
+	0) ;;
+	124)
+		feed_hint
+		die "установка не закончилась за 10 минут и остановлена — скорее всего, не отвечает источник пакетов (см. выше)" ;;
+	*) die "opkg install не прошёл (см. выше)" ;;
+	esac
 else
 	apk update >/dev/null || die "apk update не прошёл"
 	apk add lighttpd lighttpd-mod-cgi lighttpd-mod-rewrite lighttpd-mod-setenv php8-cgi php8-mod-session php8-mod-curl curl || die "не удалось поставить зависимости"

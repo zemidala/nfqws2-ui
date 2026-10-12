@@ -539,6 +539,15 @@ apply)
 		# Первая установка: если порт по умолчанию занят, берём следующий свободный
 		while port_busy "$PORT" && [ "$PORT" -lt $((DEF_PORT + 20)) ]; do PORT=$((PORT + 1)); done
 		port_busy "$PORT" && die "не нашёл свободный порт в $DEF_PORT–$PORT, задайте свой: nfqws-ui-setup port N"
+		if [ "$PORT" != "$DEF_PORT" ]; then
+			# В инструкциях везде 8090 — без этого человек открывает 8090 и попадает в чужую программу
+			# (на Keenetic там бывает Transmission с окном входа прошивки)
+			who=$(netstat -ltnp 2>/dev/null | awk -v p=":$DEF_PORT" '$4 ~ p"$" { sub(/^[0-9]+\//, "", $7); print $7; exit }')
+			say ""
+			say "ВНИМАНИЕ: порт $DEF_PORT занят$([ -n "$who" ] && [ "$who" != - ] && echo " другой программой ($who)") — интерфейс nfqws2-ui будет на порту $PORT."
+			say "Открывайте адрес из списка ниже, а не :$DEF_PORT. Сменить порт: nfqws-ui-setup port N"
+			say ""
+		fi
 	fi
 	opcache_apply
 	[ "$MANAGED" = true ] && apply_web
