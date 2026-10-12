@@ -294,6 +294,26 @@ cron_apply() {
 	svc cron restart >/dev/null 2>&1
 }
 
+# ---------- кеш PHP ----------
+
+# php-cgi запускается заново на каждый запрос и каждый раз разбирает api.php; на MIPS (Keenetic) это
+# ~0,2 с из каждого запроса. OPcache с кешем в файлах сохраняет разобранное между запусками; общая память
+# ему при этом не нужна. Пакет php8-mod-opcache не обязателен: ставит его install.sh, если получится
+OPCACHE_INI=$R/etc/php8/30_nfqws-ui-opcache.ini
+
+opcache_apply() {
+	if ls "$R"/etc/php8/*opcache*.ini 2>/dev/null | grep -qv "$OPCACHE_INI"; then
+		cat > "$OPCACHE_INI" <<-EOF
+		$MARK
+		opcache.enable=1
+		opcache.file_cache=/tmp
+		opcache.file_cache_only=1
+		EOF
+	else
+		rm -f "$OPCACHE_INI"
+	fi
+}
+
 # ---------- HTTPS ----------
 
 https_on() {
@@ -520,6 +540,7 @@ apply)
 		while port_busy "$PORT" && [ "$PORT" -lt $((DEF_PORT + 20)) ]; do PORT=$((PORT + 1)); done
 		port_busy "$PORT" && die "не нашёл свободный порт в $DEF_PORT–$PORT, задайте свой: nfqws-ui-setup port N"
 	fi
+	opcache_apply
 	[ "$MANAGED" = true ] && apply_web
 	cron_apply; save
 	status
@@ -541,6 +562,7 @@ remove)
 	while iptables -w -t mangle -D OUTPUT -j nfqws_ui_out 2>/dev/null; do :; done
 	iptables -w -t mangle -F nfqws_ui_out 2>/dev/null
 	iptables -w -t mangle -X nfqws_ui_out 2>/dev/null
+	rm -f "$OPCACHE_INI"
 	if [ "$MANAGED" = true ] && [ -f "$LCONF" ]; then
 		standalone=
 		grep -q '^server\.port :=' "$LCONF" && standalone=1

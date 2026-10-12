@@ -20,6 +20,26 @@ fetch() { # url [файл]
 	fi
 }
 
+# Необязательный пакет — не дольше минуты: wget внутри opkg ждёт недоступный источник бесконечно, и установка
+# (или обновление), которой этот пакет не нужен, повисла бы на нём
+opt_install() {
+	opkg list-installed 2>/dev/null | grep -q "^$1 " && return 0
+	opkg install "$1" >/dev/null 2>&1 &
+	p=$! i=0
+	while kill -0 $p 2>/dev/null; do
+		if [ $i -ge 60 ]; then
+			# сначала wget, который качает пакет, потом сам opkg — иначе wget останется висеть
+			for w in $(ps w 2>/dev/null | grep "[w]get.*$1" | awk '{print $1}'); do kill $w 2>/dev/null; done
+			kill $p 2>/dev/null
+			wait $p 2>/dev/null
+			return 1
+		fi
+		sleep 1
+		i=$((i + 1))
+	done
+	wait $p
+}
+
 [ "$(id -u)" = 0 ] || die "запускайте от root"
 
 # --- где запускаемся ---
@@ -91,6 +111,9 @@ if [ "$PM" = opkg ]; then
 		grep -o 'https\{0,1\}://[^ ,]*Packages\.gz' "$TMP/opkg-update.log" | sort -u | sed 's/^/  /'
 		say "  (ненужный источник можно убрать из /opt/etc/opkg/ или /etc/opkg/customfeeds.conf)"
 	fi
+	# Кеш PHP — не обязателен: без него интерфейс просто медленнее на слабых роутерах. Ставится до пакета,
+	# чтобы nfqws-ui-setup apply из postinst его уже увидел
+	opt_install php8-mod-opcache || say "Кеш PHP (php8-mod-opcache) не поставился — интерфейс будет работать, но медленнее."
 	# NFQWS_UI_FORCE=1 (nfqws-ui update --force) — поставить заново ту же версию
 	opkg install ${NFQWS_UI_FORCE:+--force-reinstall} "$TMP/$FILE" || die "opkg install не прошёл (см. выше)"
 else

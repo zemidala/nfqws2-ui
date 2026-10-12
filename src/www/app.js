@@ -645,7 +645,12 @@ function renderPending() {
     const timer = h('b', { class: 'num' });
     const tick = () => { const s = left(); timer.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
     tick();
-    pendingTimer = setInterval(() => { tick(); if (left() % 3 === 0) loadState().catch(() => {}); }, 1000);
+    // новый запрос — только когда прошлый вернулся: на слабом роутере state идёт дольше секунды
+    let busy = false;
+    pendingTimer = setInterval(() => {
+      tick();
+      if (left() % 3 === 0 && !busy) { busy = true; loadState().catch(() => {}).finally(() => { busy = false; }); }
+    }, 1000);
     const checks = p.checks || [];
     const regressed = checks.filter((c) => c.regressed);
     box.replaceChildren(h('div', { class: 'pending ' + (regressed.length ? 'bad' : 'warn') }, h('div', { class: 'pending-in' },
@@ -3401,6 +3406,25 @@ async function paneLook(content) {
 // ============ Тесты ============
 
 let testPoll = null;
+let testPollGen = 0;
+// Опрос хода проверки: следующий запрос — только после ответа на предыдущий и тем реже, чем дольше отвечает роутер.
+// На слабом роутере (MIPS) запрос идёт около секунды, под нагрузкой подбора — дольше; с setInterval запросы
+// накладывались, php-cgi запускались один поверх другого, и роутер переставал отвечать. tick() → false — хватит
+function pollTest(tick, base) {
+  stopTestPoll();
+  const gen = testPollGen;
+  const run = async () => {
+    const t0 = performance.now();
+    const more = await tick();
+    if (more === false || gen !== testPollGen) return;
+    testPoll = setTimeout(run, Math.max(base, 3 * (performance.now() - t0)));
+  };
+  run();
+}
+function stopTestPoll() {
+  testPollGen++;
+  clearTimeout(testPoll);
+}
 async function viewMonitor(main) {
   const m = await api('monitor_get');
   const cfg = m.settings;
@@ -3574,7 +3598,7 @@ function sentPanel(sent) {
 // bare — без заголовка: страница встроена в карточку сайта
 async function viewTests(main, r, bare = false) {
   await loadCatalog();
-  clearInterval(testPoll);
+  stopTestPoll();
   if (r.arg === 'history') return viewPickHist(main, r);
   if (r.arg === 'auto') return viewAuto(main);
   if (r.arg === 'community') return viewCommunity(main);
@@ -3661,16 +3685,13 @@ async function viewTests(main, r, bare = false) {
     poll();
   }
   function poll() {
-    clearInterval(testPoll);
-    const tick = async () => {
-      if (!out.isConnected) { clearInterval(testPoll); return; }
+    pollTest(async () => {
+      if (!out.isConnected) return false;
       const s = await api('test_status').catch(() => null);
-      if (!s) return;
+      if (!s) return true;
       drawStatus(s);
-      if (!['running', 'starting'].includes(s.state)) clearInterval(testPoll);
-    };
-    tick();
-    testPoll = setInterval(tick, 1500);
+      return ['running', 'starting'].includes(s.state);
+    }, 1500);
   }
 
   function drawStatus(s) {
@@ -3737,7 +3758,8 @@ async function viewTests(main, r, bare = false) {
       refinePanel(s, rep),
       s.failed && Object.keys(s.failed).length ? h('p', { class: 'sm muted' }, `Из каталога не помогли ${plural(Object.values(s.failed).reduce((a, b) => a + b, 0), 'стратегия', 'стратегии', 'стратегий')}: `
         + Object.entries(s.failed).sort((a, b) => b[1] - a[1]).map(([w, n]) => `${w} — ${n}`).join(', ') + '. В таблице — только то, что открыло сайт хоть раз.') : null,
-      s.parallel && !running ? h('p', { class: 'sm muted', text: 'Большой набор проверялся параллельно, по 15 стратегий сразу. Когда к одному сайту идёт много разных соединений одновременно, оборудование провайдера иногда путается, и такой итог может разойтись с проверкой по одной. Поэтому находки перепроверяются по одной, начиная с быстрых, пока не наберётся 8 подтверждённых (отметка «перепроверена»). Рабочими считаются только они; открывшие сайт лишь в пачке показаны в таблице, но применить их отсюда нельзя.' }) : null,
+      s.parallel && !running ? h('p', { class: 'sm muted', text: `Большой набор проверялся параллельно, по ${plural(s.parallel, 'стратегии', 'стратегии', 'стратегий')} сразу`
+        + (s.parallel_max && s.parallel < s.parallel_max ? ` (а не по ${s.parallel_max}: пачка подстраивается под память роутера, чтобы он не начал тормозить)` : '') + '. Когда к одному сайту идёт много разных соединений одновременно, оборудование провайдера иногда путается, и такой итог может разойтись с проверкой по одной. Поэтому находки перепроверяются по одной, начиная с быстрых, пока не наберётся 8 подтверждённых (отметка «перепроверена»). Рабочими считаются только они; открывшие сайт лишь в пачке показаны в таблице, но применить их отсюда нельзя.' }) : null,
       panel(`Результаты для ${s.host}`, h('span', { class: 'sm muted num', text: `${res.length} стратегий · ${rep} повт.` + (s.finished ? ` · ${Math.round((s.finished - s.started))} с` : '') }),
         h('div', { class: 'scroll' }, h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, h('th'), h('th', { text: 'Стратегия' }), h('th', { text: 'Откуда' }), h('th', { text: 'Результат' }), h('th', { class: 'num', text: 'Время' }), h('th'))), h('tbody', {}, rows)))));
   }
@@ -4261,16 +4283,13 @@ async function viewFreeze(main) {
     poll();
   }
   function poll() {
-    clearInterval(testPoll);
-    const tick = async () => {
-      if (!out.isConnected) { clearInterval(testPoll); return; }
+    pollTest(async () => {
+      if (!out.isConnected) return false;
       const s = await api('freeze_get').catch(() => null);
-      if (!s) return;
+      if (!s) return true;
       draw(s);
-      if (!['running', 'starting'].includes(s.state)) clearInterval(testPoll);
-    };
-    tick();
-    testPoll = setInterval(tick, 2000);
+      return ['running', 'starting'].includes(s.state);
+    }, 2000);
   }
 
   function verdict(n) {

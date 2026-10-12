@@ -3616,6 +3616,24 @@ const PAR_MIN = 24;       // меньше кандидатов — провер�
 const PAR_CONFIRM = 8;    // сколько подтверждённых по одной находок набрать: 15 соединений к одному сайту разом
                           // иногда путают оборудование провайдера, и параллельный итог расходится с проверкой по одной
 const PAR_CONFIRM_TRIES = 24;   // и сколько всего перепроверок, если находки пачки не подтверждаются
+const PAR_SLOT_MB = 1.5;  // память на дорожку: curl с TLS и оболочка
+const PAR_RESERVE_MB = 15;      // столько памяти остаётся системе и прошивке
+const PAR_RAM_PER_SLOT_MB = 24; // и не больше дорожки на столько памяти всего: 128 МБ → 5, 256 → 10, от 384 — 15
+
+// Сколько дорожек роутер выдержит сейчас: на Keenetic со 128 МБ 15 дорожек разом уводили память в swap, и роутер
+// (вместе с веб-интерфейсом прошивки) переставал отвечать. Одной свободной памяти мало: swap у Keenetic — zram,
+// система выгружает в него лишнее, «свободно» снова выглядит хорошо, а процессор занят сжатием. Поэтому ещё и
+// потолок по объёму памяти. Считается перед каждой пачкой; 1 — по одной стратегии
+function parSlots(): int
+{
+  $mem = (string)@file_get_contents('/proc/meminfo');
+  if (!preg_match('/^MemAvailable:\s+(\d+)/m', $mem, $a) || !preg_match('/^MemTotal:\s+(\d+)/m', $mem, $t)) {
+    return PAR_SLOTS;
+  }
+  $byFree = (int)floor(((int)$a[1] / 1024 - PAR_RESERVE_MB) / PAR_SLOT_MB);
+  $byTotal = (int)floor((int)$t[1] / 1024 / PAR_RAM_PER_SLOT_MB);
+  return max(1, min(PAR_SLOTS, $byFree, $byTotal));
+}
 
 function parMark(int $k): string
 {
@@ -3997,7 +4015,8 @@ function testJob(): void
   if (!$auto && count($cands) > PAR_MIN) {
     // большой набор — параллельно, пачками по PAR_SLOTS; из каталога в результатах остаётся только то, что хоть раз открыло
     // сайт (иначе статус разрастается до мегабайта), остальное — счётчиком причин
-    $status['parallel'] = PAR_SLOTS;
+    $status['parallel'] = parSlots();
+    $status['parallel_max'] = PAR_SLOTS;
     $status['failed'] = [];
     // работавшее раньше, находки пробы обрыва и сообщества — по одной и первыми: их мало, и именно они вероятнее всего
     // рабочие, а итог пачки ненадёжен (провайдер судит по адресу сайта в целом, соединения пачки влияют друг на друга:
@@ -4016,13 +4035,17 @@ function testJob(): void
       testSaveStatus($status);
     }
     testRules('queue', $iface, PAR_SLOTS);
-    $chunks = $status['state'] === 'running' ? array_chunk($rest, PAR_SLOTS) : [];
-    foreach ($chunks as $n => $chunk) {
+    $left = $status['state'] === 'running' ? $rest : [];
+    for ($n = 0; $left; $n++) {
       if (is_file(TEST_DIR . '/stop')) {
         $status['state'] = 'stopped';
         break;
       }
-      $status['current'] = 'пачка ' . ($n + 1) . ' из ' . count($chunks) . ': ' . implode(', ', array_slice(array_column($chunk, 'name'), 0, 3)) . (count($chunk) > 3 ? '…' : '');
+      // размер пачки — по свободной памяти перед каждой: её съедают и другие программы роутера
+      $slots = parSlots();
+      $status['parallel'] = $slots;
+      $chunk = array_splice($left, 0, $slots);
+      $status['current'] = 'пачка ' . ($n + 1) . ' из ' . ($n + 1 + (int)ceil(count($left) / $slots)) . ': ' . implode(', ', array_slice(array_column($chunk, 'name'), 0, 3)) . (count($chunk) > 3 ? '…' : '');
       testSaveStatus($status);
       foreach (parTry($chunk, $nfq, $baseArgs, $filter, $repeats, $job['host'], $http) as $k => $r) {
         $c = $chunk[$k];
@@ -4196,9 +4219,11 @@ function multiJob(array $job, array &$status, ?array &$nfq, string $iface, array
   }
 
   // 2. Перебор: на каждом сайте все кандидаты пачками, по одному запросу
-  $chunks = array_chunk(array_keys($cands), PAR_SLOTS);
+  $slots = parSlots();
+  $chunks = array_chunk(array_keys($cands), $slots);
   $status['phase'] = 'scan';
-  $status['parallel'] = PAR_SLOTS;
+  $status['parallel'] = $slots;
+  $status['parallel_max'] = PAR_SLOTS;
   $status['candidates'] = count($cands);
   $status['total'] = $status['done'] + count($blocked) * count($chunks) + min(MULTI_CONFIRM, count($cands));
   $scan = array_fill(0, count($cands), []);
