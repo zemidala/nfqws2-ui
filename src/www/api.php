@@ -1021,6 +1021,22 @@ function optName(string $arg): string
   return preg_replace('/^--([^=]+).*$/', '$1', $arg);
 }
 
+const WIN_TS_HINT = 'Включить в Windows — командная строка от имени администратора: netsh interface tcp set global timestamps=enabled';
+
+// Шаг --lua-desync, у которого из маскировок (fooling) только tcp_ts=N
+function tsOnlyFooling(string $step): bool
+{
+  $parts = explode(':', preg_replace('/^--lua-desync=/', '', $step));
+  $ts = false;
+  foreach ($parts as $p) {
+    if (preg_match('/^(tcp_md5|badsum|tcp_seq=|tcp_ack=|ip_ttl=|ip6_ttl=|ip_autottl=|ip6_autottl=|tcp_flags_(set|unset)=|ip6_(hopbyhop|destopt|routing|ah)|fool=)/', $p)) {
+      return false;
+    }
+    $ts = $ts || str_starts_with($p, 'tcp_ts=');
+  }
+  return $ts;
+}
+
 // Повторяет _startup_args() init-скрипта
 function expectedProfiles(array $raw): array
 {
@@ -2403,6 +2419,25 @@ function lintConf(array $raw, string $text): array
       }
       $add($var, $ti ?? $tok, 'warning', "$label: {$parts[0]} не сработает — у профиля --payload=" . implode(',', $pl) . ", а функция без своего payload= берёт только известные протоколы",
         $ti !== null ? ['op' => 'replace', 'to' => "$t:payload=all", 'label' => 'Добавить payload=all'] : null);
+    }
+
+    // tcp_ts=N — единственная маскировка шага: без временной метки TCP в пакете nfqws2 её пропускает
+    // («timestamp tcp option not present»), фейк уходит как настоящий. Подбор идёт с роутера (Linux, метки есть)
+    // и этого не видит, а Windows меток по умолчанию не шлёт
+    foreach ($e['tokens'] as $t) {
+      if (!tsOnlyFooling($t)) {
+        continue;
+      }
+      $ti = null;
+      foreach (tokens($raw[$var] ?? '') as $i => $rt) {
+        if ($rt === $t && ($tok === null || $i >= $tok)) {
+          $ti = $i;
+          break;
+        }
+      }
+      $add($var, $ti ?? $tok, 'info', "$label: " . explode(':', substr($t, 13))[0] . ' маскируется только через tcp_ts — это действует на устройствах с временными метками TCP. '
+        . 'В Windows они по умолчанию выключены: там такой шаг не сработает, хотя подбор с роутера показывает, что сайт открывается. ' . WIN_TS_HINT);
+      break;
     }
 
     // Порты профиля должны попадать в правила iptables (TCP_PORTS / UDP_PORTS), иначе пакеты до nfqws2 не дойдут

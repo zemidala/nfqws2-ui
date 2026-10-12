@@ -143,6 +143,17 @@ function logo(size) {
 const btn = (label, onclick, cls = '', ic = null, attrs = {}) =>
   h('button', { class: 'btn ' + cls, type: 'button', onclick, ...attrs }, ic && icon(ic), label);
 const chip = (text, cls = '') => h('span', { class: 'chip ' + cls, text });
+// Подбор идёт с роутера, а у него временные метки TCP есть; Windows по умолчанию их не шлёт
+const WIN_TS_CMD = 'netsh interface tcp set global timestamps=enabled';
+const WIN_TS_HINT = `включите в Windows временные метки TCP — командная строка от имени администратора: ${WIN_TS_CMD}`;
+// шаг, у которого из маскировок только tcp_ts=N: без меток в пакете nfqws2 её пропускает, фейк уходит как настоящий
+const tsOnlyStep = (step) => {
+  const parts = step.replace(/^--lua-desync=/, '').split(':');
+  if (parts.some((x) => /^(tcp_md5|badsum|tcp_seq=|tcp_ack=|ip_ttl=|ip6_ttl=|ip_autottl=|ip6_autottl=|tcp_flags_(set|unset)=|ip6_(hopbyhop|destopt|routing|ah)|fool=)/.test(x))) return false;
+  return parts.some((x) => x.startsWith('tcp_ts='));
+};
+const needsTs = (steps) => (steps || []).some(tsOnlyStep);
+const tsChip = () => h('span', { class: 'chip', text: 'нужны метки TCP', title: `Маскировка только через tcp_ts: работает на устройствах с временными метками TCP (Linux, Android, macOS, iOS). На Windows — ${WIN_TS_HINT}` });
 const spinner = (text) => h('div', { class: 'skeleton' }, h('span', { class: 'spin' }), text);
 const levelIcon = (lvl) => h('span', { class: 'lvl ' + lvl }, icon({ error: 'bad', warning: 'alert', info: 'info', ok: 'ok' }[lvl]));
 const notice = (kind, title, text, ...extra) => h('div', { class: 'notice ' + kind },
@@ -3762,7 +3773,7 @@ async function viewTests(main, r, bare = false) {
       const full = x.ok && x.ok === x.tries;
       return h('tr', {},
         h('td', {}, levelIcon(full ? 'ok' : x.ok || x.unsure ? 'warning' : 'error')),
-        h('td', {}, h('div', { text: x.name }), h('code', { class: 'sm muted', style: 'word-break:break-all', text: x.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') })),
+        h('td', {}, h('div', {}, x.name, needsTs(x.steps) ? ' ' : null, needsTs(x.steps) ? tsChip() : null), h('code', { class: 'sm muted', style: 'word-break:break-all', text: x.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') })),
         h('td', { class: 'sm muted' }, x.from, x.hist ? h('div', { class: 'nowrap' }, chip('работала ' + fmtDate(x.hist), 'ok')) : null, x.confirmed ? h('div', { class: 'nowrap' }, full ? chip('перепроверена', 'ok') : chip('в пачке открывала, по одной — нет')) : null),
         h('td', { class: 'sm', text: full ? `открылся ${x.ok} из ${x.ok}` : x.ok ? `${x.ok} из ${x.tries}` : x.reason || 'не открылся' }),
         h('td', { class: 'num', text: x.ms ? x.ms + ' мс' : '—' }),
@@ -3775,7 +3786,8 @@ async function viewTests(main, r, bare = false) {
       !running ? recommendation(s, good, best) : null,
       !running && best ? h('div', { class: 'notice ok' }, icon('ok'), h('div', { class: 'grow' },
         h('b', { text: `Работают ${good.length} из ${res.length}. Быстрее всех — ${best.name}, ${best.ms} мс.` }),
-        h('div', { class: 't', text: best.from }), h('code', { class: 'sm', style: 'word-break:break-all', text: best.steps.join(' ') })),
+        h('div', { class: 't', text: best.from }), h('code', { class: 'sm', style: 'word-break:break-all', text: best.steps.join(' ') }),
+        needsTs(best.steps) ? h('div', { class: 't', text: `На компьютерах с Windows эта стратегия сработает, только если включены временные метки TCP: ${WIN_TS_HINT}.` }) : null),
         h('div', { class: 'notice-actions' }, applyMenu(best, s, 'primary'), btn('Скопировать', () => copyText(best.steps.join('\n')), 'small', 'copy'), shareBtn(best, s, true), newTag('pick:share'))) : null,
       communityNote(s, best),
       !running && !best && res.length ? notice('bad', 'Ни одна стратегия не помогла', isFreeze(baseline?.reason) ? FREEZE_HINT : 'Попробуйте больше повторов, протокол HTTP или другой сайт. Если без обхода соединение не устанавливается вовсе — возможно, заблокирован IP, тогда nfqws2 не поможет.') : null,
@@ -3921,7 +3933,7 @@ async function viewTests(main, r, bare = false) {
       const full = x.confirmed && x.opened === M;
       return h('tr', {},
         h('td', {}, levelIcon(full ? 'ok' : x.confirmed && x.opened ? 'warning' : x.confirmed ? 'error' : 'info')),
-        h('td', {}, h('div', { text: x.name }), h('code', { class: 'sm muted', style: 'word-break:break-all', text: x.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') })),
+        h('td', {}, h('div', {}, x.name, needsTs(x.steps) ? ' ' : null, needsTs(x.steps) ? tsChip() : null), h('code', { class: 'sm muted', style: 'word-break:break-all', text: x.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') })),
         h('td', { class: 'sm muted' }, x.from, x.hist ? h('div', { class: 'nowrap' }, chip('работала ' + fmtDate(x.hist), 'ok')) : null),
         h('td', { class: 'sm' }, x.confirmed
           ? [h('b', { text: `${x.opened} из ${M}` }), x.opened < M ? h('div', { class: 'muted' }, 'не открыла: ', h('span', { class: 'mono', text: missed(x).join(', ') })) : null]
@@ -4097,7 +4109,7 @@ async function viewTests(main, r, bare = false) {
     const p = rp ? confProf(rp) : null;
     const currentWorks = rp && good.some((x) => x.from.includes(`#${rp}`));
     if (currentWorks) {
-      return notice('ok', 'Менять ничего не нужно', `Сейчас ${s.host} идёт через профиль #${rp} ${p ? profName(p) : ''}, и его стратегия в тесте сработала. Если у вас сайт всё равно не открывается, причина скорее в браузере (HTTP/3 — QUIC), DNS или в том, что сайт идёт через podkop.`);
+      return notice('ok', 'Менять ничего не нужно', `Сейчас ${s.host} идёт через профиль #${rp} ${p ? profName(p) : ''}, и его стратегия в тесте сработала. Если у вас сайт всё равно не открывается, причина скорее в браузере (HTTP/3 — QUIC), DNS или в том, что сайт идёт через podkop. Если не открывается только на компьютере с Windows — ${WIN_TS_HINT}; подбор идёт с роутера, а у него метки есть.`);
     }
     // стратегия уже есть в одном из профилей — проще добавить сайт в его список, чем заводить профиль
     for (const x of good) {
