@@ -48,12 +48,6 @@ kill_tree() {
 	for c in $kids; do kill_tree "$c"; done
 }
 
-# Необязательный пакет — не дольше минуты: установка, которой он не нужен, не должна на нём повиснуть
-opt_install() {
-	opkg list-installed 2>/dev/null | grep -q "^$1 " && return 0
-	opkg_limited 60 /dev/null install "$1"
-}
-
 # Источники пакетов, которые не отвечают
 dead_feeds() {
 	cat $R/etc/opkg.conf $R/etc/opkg/*.conf 2>/dev/null | awk '$1 ~ /^src/ { print $3 }' | sort -u | while read -r u; do
@@ -155,9 +149,6 @@ if [ "$PM" = opkg ]; then
 		grep -o 'https\{0,1\}://[^ ,]*Packages\.gz' "$TMP/opkg-update.log" | sort -u | sed 's/^/  /'
 		say "  (ненужный источник можно убрать из ${R:-}/etc/opkg/ или /etc/opkg/customfeeds.conf)" ;;
 	esac
-	# Кеш PHP — не обязателен: без него интерфейс просто медленнее на слабых роутерах. Ставится до пакета,
-	# чтобы nfqws-ui-setup apply из postinst его уже увидел
-	opt_install php8-mod-opcache || say "Кеш PHP (php8-mod-opcache) не поставился — интерфейс будет работать, но медленнее."
 	say "Ставлю nfqws2-ui и зависимости (lighttpd, php8)…"
 	# NFQWS_UI_FORCE=1 (nfqws-ui update --force) — поставить заново ту же версию
 	rc=0
