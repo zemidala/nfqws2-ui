@@ -345,6 +345,7 @@ const FEATURES = [
   ['pick:wide', '1.11.0', '«На других сайтах» у найденной стратегии — открывает ли она не только свой сайт'],
   ['tg:log', '1.11.0', 'уведомления не теряются, когда Telegram недоступен, и журнал последних сообщений'],
   ['about:session', '1.11.0', 'срок входа: сколько не выходить из интерфейса («О программе» → «Вход»)'],
+  ['pick:quic', '1.13.0', 'подбор стратегии для QUIC (HTTP/3, UDP 443) и проверка QUIC в диагнозе'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 // на сколько минорных версий функция старше текущей (у сборки до выпуска — меньше нуля)
@@ -1487,6 +1488,7 @@ async function viewDiag(main, r, bare = false) {
       const prof = R.verdict.profile;
       verdictBox.replaceChildren(notice(lvl, title, text, h('div', { class: 'notice-actions' },
         R.verdict.pick ? btn('Подобрать стратегию', () => go(pickHref(host)), 'small primary', 'tests') : null,
+        R.quic?.blocked ? btn('Подобрать для QUIC', () => go('#/tests?host=' + encodeURIComponent(host) + '&proto=quic'), 'small', 'tests', { title: 'По QUIC (HTTP/3) сайт не отвечает ни без обхода, ни через nfqws2 — подобрать стратегию для UDP 443' }) : null,
         prof && ['broken_by_nfqws', 'sni_block', 'tls_block', 'fixed'].includes(R.verdict.code) ? h('a', { class: 'btn small', href: `#/settings/p${prof}`, text: `Профиль #${prof}` }) : null,
         btn('Ещё раз', () => run(host), 'small ghost', 'refresh'))));
       try { localStorage.setItem(KEY, JSON.stringify([host, ...recentGet().filter((x) => x !== host)].slice(0, 8))); } catch { /* нет хранилища */ }
@@ -3670,7 +3672,13 @@ async function viewTests(main, r, bare = false) {
   const host = h('input', { class: 'input mono grow', id: 't-host', value: r.q.get('host') || S.check?.input.value || '', placeholder: 'rutracker.org', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Сайт для теста' });
   host.addEventListener('input', () => { host.dataset.edited = '1'; });
   if (r.q.get('host')) host.dataset.edited = '1';
-  const proto = h('select', { class: 'select', 'aria-label': 'Протокол' }, h('option', { value: 'https', text: 'HTTPS (TLS, TCP 443)' }), h('option', { value: 'http', text: 'HTTP (TCP 80)' }));
+  const proto = h('select', { class: 'select', 'aria-label': 'Протокол' }, h('option', { value: 'https', text: 'HTTPS (TLS, TCP 443)' }), h('option', { value: 'http', text: 'HTTP (TCP 80)' }),
+    tab === 'pick' ? h('option', { value: 'quic', text: 'QUIC (HTTP/3, UDP 443)', selected: r.q.get('proto') === 'quic' }) : null);
+  const isQuic = () => proto.value === 'quic';
+  // через какой профиль сайт идёт по этому протоколу и какие порты профиля смотреть
+  const routeKey = (s) => s.proto === 'http' ? 'http' : s.proto === 'quic' ? 'quic' : 'https';
+  const quicNote = h('div', { class: 'frow', hidden: true }, h('span', { class: 'lbl', text: 'QUIC' }), h('div', { class: 'row' },
+    h('span', { class: 'sm muted', text: 'Проверка — настоящим первым пакетом HTTP/3 на имя сайта: ответил сервер — QUIC проходит. Каталог zapret2, уточнение и подбор для нескольких сайтов рассчитаны на TLS и здесь не участвуют. Обычно до минуты.' })));
   const setCfg = h('input', { type: 'checkbox', id: 't-cfg', checked: true });
   const setStd = h('input', { type: 'checkbox', id: 't-std', checked: true });
   const setHist = h('input', { type: 'checkbox', id: 't-hist', checked: true });
@@ -3685,7 +3693,7 @@ async function viewTests(main, r, bare = false) {
     catSel.options[2].text = `полный — ${r.catalog.full} стратегий, 15–30 минут`;
   }).catch(() => {});
   catCounts();
-  proto.addEventListener('change', catCounts);
+  proto.addEventListener('change', () => { if (isQuic()) drawMode(); else { catCounts(); drawMode(); } });
   const repeats = h('select', { class: 'select', 'aria-label': 'Повторов' }, [1, 2, 3, 5].map((n) => h('option', { value: n, text: plural(n, 'повтор', 'повтора', 'повторов'), selected: n === 3 })));
   const refine = h('input', { type: 'checkbox', id: 't-refine' });
   // Подбор одной стратегии для нескольких сайтов (списка): поле «Сайт» меняется на список и сайты из него
@@ -3720,7 +3728,8 @@ async function viewTests(main, r, bare = false) {
     hostLbl.textContent = multi ? 'Протокол' : 'Сайт';
     host.hidden = multi;
     multiRow.hidden = !multi;
-    oneRows.forEach((el) => { el.hidden = multi; });
+    oneRows.forEach((el) => { el.hidden = multi || isQuic(); });
+    quicNote.hidden = !isQuic() || multi;
     if (multi && !mHosts.value) fillMulti();
   }
   const out = h('div', { class: 'stack', style: 'gap:14px' });
@@ -3734,12 +3743,13 @@ async function viewTests(main, r, bare = false) {
     const sets = [setCfg.checked && 'config', setStd.checked && 'std', setHist.checked && 'hist', setHist.checked && 'other', setComm.checked && 'community', catSel.value].filter(Boolean);
     if (tab !== 'trace' && !sets.length) { toast('Выберите, что пробовать', { err: true }); return; }
     if (tab === 'pick' && mode.value === 'multi') {
+      if (isQuic()) { toast('Подбор для QUIC — пока только для одного сайта', { err: true }); return; }
       const hosts = mHosts.value.split(/[\s,]+/).filter(Boolean);
       if (!await guarded(() => api('multi_start', { hosts, list: mList.value, proto: proto.value, sets: sets.filter((x) => ['config', 'std', 'hist', 'community'].includes(x)), repeats: Number(repeats.value) }))) return;
       poll();
       return;
     }
-    if (!await guarded(() => api(cmd, { host: host.value, proto: proto.value, sets, repeats: Number(repeats.value), refine: refine.checked }))) return;
+    if (!await guarded(() => api(cmd, { host: host.value, proto: proto.value, sets: isQuic() ? sets.filter((x) => !['ext', 'full'].includes(x)) : sets, repeats: Number(repeats.value), refine: !isQuic() && refine.checked }))) return;
     poll();
   }
   function poll() {
@@ -3805,6 +3815,7 @@ async function viewTests(main, r, bare = false) {
     return h('div', { class: 'stack', style: 'gap:14px' },
       flow(s, running, res, best),
       baseline ? (baseline.ok ? notice('info', 'Без обхода сайт открывается', `HTTP ${baseline.code}, ${baseline.ms} мс — блокировки нет, стратегия не нужна.`)
+        : s.proto === 'quic' ? notice('warn', 'Без обхода по QUIC сайт не отвечает', 'QUIC (HTTP/3) этого сайта режут. Сам сайт при этом может открываться: браузер ждёт ответа по QUIC и только потом переходит на обычное соединение — страницы и видео стартуют с задержкой.')
         : notice('warn', 'Без обхода сайт не открывается: ' + baseline.reason, baseline.reason === 'соединение сброшено' || baseline.reason === 'обрыв TLS' ? 'Похоже на блокировку по SNI (DPI) — обход поможет.' : isFreeze(baseline.reason) ? (best ? 'Это ограничение ТСПУ «16–20 КБ» для зарубежных хостингов. Ниже — стратегия, которая его снимает.' : FREEZE_HINT) : 'Похоже на блокировку по DPI или IP.')) : null,
       !running ? recommendation(s, good, best) : null,
       !running && best ? h('div', { class: 'notice ok' }, icon('ok'), h('div', { class: 'grow' },
@@ -3819,7 +3830,7 @@ async function viewTests(main, r, bare = false) {
         + Object.entries(s.failed).sort((a, b) => b[1] - a[1]).map(([w, n]) => `${w} — ${n}`).join(', ') + '. В таблице — только то, что открыло сайт хоть раз.') : null,
       s.parallel && !running ? h('p', { class: 'sm muted', text: `Большой набор проверялся параллельно, по ${plural(s.parallel, 'стратегии', 'стратегии', 'стратегий')} сразу`
         + (s.parallel_max && s.parallel < s.parallel_max ? ` (а не по ${s.parallel_max}: пачка подстраивается под память роутера, чтобы он не начал тормозить)` : '') + '. Когда к одному сайту идёт много разных соединений одновременно, оборудование провайдера иногда путается, и такой итог может разойтись с проверкой по одной. Поэтому находки перепроверяются по одной, начиная с быстрых, пока не наберётся 8 подтверждённых (отметка «перепроверена»). Рабочими считаются только они; открывшие сайт лишь в пачке показаны в таблице, но применить их отсюда нельзя.' }) : null,
-      panel(`Результаты для ${s.host}`, h('span', { class: 'sm muted num', text: `${res.length} стратегий · ${rep} повт.` + (s.finished ? ` · ${Math.round((s.finished - s.started))} с` : '') }),
+      panel(`Результаты для ${s.host}` + (s.proto === 'quic' ? ' · QUIC' : ''), h('span', { class: 'sm muted num', text: `${res.length} стратегий · ${rep} повт.` + (s.finished ? ` · ${Math.round((s.finished - s.started))} с` : '') }),
         h('div', { class: 'scroll' }, h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, h('th'), h('th', { text: 'Стратегия' }), h('th', { text: 'Откуда' }), h('th', { text: 'Результат' }), h('th', { class: 'num', text: 'Время' }), h('th'))), h('tbody', {}, rows)))));
   }
 
@@ -3895,7 +3906,7 @@ async function viewTests(main, r, bare = false) {
     const steps = x.steps;
     const port = s.proto === 'http' ? 80 : 443;
     const rp = routeProfile(s);
-    const covers = (p) => (p.ports.tcp || '').split(',').some((x) => { const [a, b] = x.split('-').map(Number); return port >= a && port <= (b || a); });
+    const covers = (p) => (p.ports[s.proto === 'quic' ? 'udp' : 'tcp'] || '').split(',').some((x) => { const [a, b] = x.split('-').map(Number); return port >= a && port <= (b || a); });
     const lt = listTarget(x, s);
     const opts = [{
       title: `Только для ${s.host}`, recommended: !lt,
@@ -3988,6 +3999,7 @@ async function viewTests(main, r, bare = false) {
 
   // Проверить найденную стратегию на других сайтах: открывает ли она не только свой
   function wideBtn(x, s) {
+    if (s.proto === 'quic') return null;   // проверка на других сайтах идёт через curl, по TCP
     return btn('', () => wideDialog(x, s), 'small ghost icon', 'layers',
       { title: 'Проверить эту стратегию на других сайтах — например, из списка профиля', 'aria-label': 'Проверить на других сайтах' });
   }
@@ -4076,7 +4088,7 @@ async function viewTests(main, r, bare = false) {
   // Тогда достаточно записи в списке. Профили с circular не предлагаем: какая из стратегий включится, там не угадать.
   function listTarget(x, s) {
     if (!routeInfo || routeInfo.host !== s.host) return null;
-    const route = routeInfo.routes[s.proto === 'http' ? 'http' : 'https'].steps;
+    const route = routeInfo.routes[routeKey(s)].steps;
     for (const m of (x.from || '').matchAll(/#(\d+)(?=,|$)/g)) {
       const n = +m[1];
       if (route.find((r) => r.profile === n)?.miss !== 'hostlist') continue;
@@ -4098,7 +4110,7 @@ async function viewTests(main, r, bare = false) {
     const undo = { undo: () => undoLast(false) };
     if (now === lt.profile) toast(`${s.host} добавлен в ${lt.list.name} и теперь идёт через профиль #${lt.profile}`, undo);
     else {
-      const st = routeInfo.routes[s.proto === 'http' ? 'http' : 'https'].steps.find((r) => r.profile === lt.profile);
+      const st = routeInfo.routes[routeKey(s)].steps.find((r) => r.profile === lt.profile);
       toast(`${s.host} добавлен в ${lt.list.name}, но через профиль #${lt.profile} не пошёл: ` + (now ? `его перехватывает профиль #${now}` : st?.why || 'причина не определена'), { err: true, ...undo });
     }
     if (out.isConnected) drawStatus(lastStatus);
@@ -4109,9 +4121,15 @@ async function viewTests(main, r, bare = false) {
     const http = s.proto === 'http';
     await loadConf();
     const cur = S.conf.vars.NFQWS_ARGS_CUSTOM.trim() ? splitParts(tokensOf(S.conf.vars.NFQWS_ARGS_CUSTOM)) : [];
-    const part = [`--filter-tcp=${http ? 80 : 443}`, `--filter-l7=${http ? 'http' : 'tls'}`, `--hostlist-domains=${s.host}`, `--payload=${http ? 'http_req' : 'tls_client_hello'}`, ...steps];
-    if (!confirm(`Создать профиль только для ${s.host}?\n\nОн встанет первым (#1), остальные профили сдвинутся на один номер. Другие сайты не затронет.\n\nПосле сохранения nfqws2 перезапустится с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, всё вернётся как было.`)) return;
-    if (!await saveVars({ NFQWS_ARGS_CUSTOM: joinParts([part, ...cur]) }, `профиль только для ${s.host}`)) return;
+    const quic = s.proto === 'quic';
+    const part = quic ? ['--filter-udp=443', '--filter-l7=quic', `--hostlist-domains=${s.host}`, '--payload=quic_initial', ...steps]
+      : [`--filter-tcp=${http ? 80 : 443}`, `--filter-l7=${http ? 'http' : 'tls'}`, `--hostlist-domains=${s.host}`, `--payload=${http ? 'http_req' : 'tls_client_hello'}`, ...steps];
+    // UDP 443 должен доходить до nfqws2: иначе профиль есть, а пакеты в него не попадают
+    const udpPorts = (S.conf.vars.UDP_PORTS || '').split(',').map((x) => x.trim()).filter(Boolean);
+    const udpHas = udpPorts.some((x) => { const [a, b] = x.split(/[:-]/).map(Number); return 443 >= a && 443 <= (b || a); });
+    const extra = quic && !udpHas ? { UDP_PORTS: [...udpPorts, '443'].join(',') } : {};
+    if (!confirm(`Создать профиль только для ${s.host}${quic ? ' (QUIC, UDP 443)' : ''}?\n\nОн встанет первым (#1), остальные профили сдвинутся на один номер. Другие сайты не затронет.\n\nПосле сохранения nfqws2 перезапустится с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, всё вернётся как было.`)) return;
+    if (!await saveVars({ NFQWS_ARGS_CUSTOM: joinParts([part, ...cur]), ...extra }, `профиль только для ${s.host}${quic ? ' (QUIC)' : ''}`)) return;
     api('pick_applied', { host: s.host, steps, target: `отдельный профиль для ${s.host}` }).catch(() => {});
     await safeRestart();
     go('#/settings/p1');
@@ -4120,7 +4138,7 @@ async function viewTests(main, r, bare = false) {
   // Через какой профиль тестовый сайт идёт сейчас (по проверке сайта)
   function routeProfile(s) {
     if (!routeInfo || routeInfo.host !== s.host) return null;
-    return routeInfo.routes[s.proto === 'http' ? 'http' : 'https'].profile;
+    return routeInfo.routes[routeKey(s)].profile;
   }
 
   // Рекомендация по итогам теста — простыми словами
@@ -4131,6 +4149,9 @@ async function viewTests(main, r, bare = false) {
     const rp = routeProfile(s);
     const p = rp ? confProf(rp) : null;
     const currentWorks = rp && good.some((x) => x.from.includes(`#${rp}`));
+    if (currentWorks && s.proto === 'quic') {
+      return notice('ok', 'Менять ничего не нужно', `Сейчас QUIC для ${s.host} идёт через профиль #${rp} ${p ? profName(p) : ''}, и его стратегия в тесте сработала.`);
+    }
     if (currentWorks) {
       return notice('ok', 'Менять ничего не нужно', `Сейчас ${s.host} идёт через профиль #${rp} ${p ? profName(p) : ''}, и его стратегия в тесте сработала. Если у вас сайт всё равно не открывается, причина скорее в браузере (HTTP/3 — QUIC), DNS или в том, что сайт идёт через podkop. Если не открывается только на компьютере с Windows — ${WIN_TS_HINT}; подбор идёт с роутера, а у него метки есть.`);
     }
@@ -4156,8 +4177,8 @@ async function viewTests(main, r, bare = false) {
     bare ? null : h('div', { class: 'vh' }, h('h1', { text: tab === 'trace' ? 'Трассировка' : 'Подбор стратегии' })),
     panel(null, null,
       tab === 'pick' ? h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Подбирать' }), h('div', { class: 'row' }, modeSeg, newTag('pick:multi'))) : null,
-      h('div', { class: 'frow' }, hostLbl, h('div', { class: 'row' }, host, proto)),
-      tab === 'pick' ? [multiRow,
+      h('div', { class: 'frow' }, hostLbl, h('div', { class: 'row' }, host, proto, tab === 'pick' ? newTag('pick:quic') : null)),
+      tab === 'pick' ? [multiRow, quicNote,
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Что пробовать' }), h('div', { class: 'row' },
           h('label', { class: 'row' }, setCfg, 'стратегии из вашего конфига'), h('label', { class: 'row' }, setStd, 'стандартный набор'),
           h('label', { class: 'row', title: 'Стратегии из истории подборов: сначала работавшие для этого сайта, затем до пяти помогавших другим сайтам' }, setHist, 'что работало раньше'),
@@ -4176,6 +4197,7 @@ async function viewTests(main, r, bare = false) {
       h('thead', {}, h('tr', {}, h('th', { text: 'Когда' }), h('th', { text: 'Сайт' }), h('th', { text: 'Без обхода' }), h('th', { class: 'num', text: 'Сработало' }), h('th', { text: 'Лучшая' }))),
       h('tbody', {}, hist.items.slice(0, 5).map((x) => h('tr', {}, h('td', { class: 'date', text: fmtDate(x.ts) }), h('td', { class: 'mono' }, h('a', { href: pickHistHref(x.host), text: x.host })),
         h('td', { text: x.baseline?.ok ? 'открывается' : x.baseline?.reason || '—' }), h('td', { class: 'num', text: `${x.ok} из ${x.total}` }), h('td', { class: 'mono sm', text: x.best || '—' }))))))) : null);
+  if (isQuic()) drawMode();   // пришли из диагноза с ?proto=quic
   poll();
 }
 
@@ -4188,6 +4210,7 @@ const pickFull = (x) => x.ok > 0 && x.ok === (x.tries ?? x.ok);
 
 // «Поделиться» у стратегии, открывшей сайт каждый раз; у взятой из базы — «Подтвердить» или «Не сработала»
 function shareBtn(x, s, labelled = false) {
+  if (s.proto === 'quic') return null;   // база сообщества пока принимает только TLS и HTTP
   const mode = !x.community ? 'share' : pickFull(x) ? 'confirm' : 'fail';
   const [text, ic, title] = {
     share: ['Поделиться', 'share', 'Отправить стратегию в базу сообщества: её будут пробовать абоненты вашего провайдера'],

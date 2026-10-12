@@ -3432,6 +3432,20 @@ const STD_HTTP = [
   ['multisplit pos=method+2', ['--lua-desync=multisplit:pos=method+2']],
   ['fake badsum + multisplit', ['--lua-desync=fake:blob=0x00000000:badsum', '--lua-desync=multisplit:pos=method+2']],
 ];
+// QUIC (UDP 443): фейки первого пакета и изменение длины дейтаграммы. Блоб fake_default_quic встроен в nfqws2 —
+// набор не зависит от того, какие блобы объявлены в конфиге
+const STD_QUIC = [
+  ['fake QUIC ×2', ['--lua-desync=fake:blob=fake_default_quic:repeats=2']],
+  ['fake QUIC ×4', ['--lua-desync=fake:blob=fake_default_quic:repeats=4']],
+  ['fake QUIC ×6', ['--lua-desync=fake:blob=fake_default_quic:repeats=6']],
+  ['fake QUIC ×11', ['--lua-desync=fake:blob=fake_default_quic:repeats=11']],
+  ['fake QUIC ×16', ['--lua-desync=fake:blob=fake_default_quic:repeats=16']],
+  ['fake QUIC ×6 autottl', ['--lua-desync=fake:blob=fake_default_quic:repeats=6:ip_autottl=-2,3-20']],
+  ['fake нули ×6', ['--lua-desync=fake:blob=0x00000000000000000000000000000000:repeats=6']],
+  ['udplen +2', ['--lua-desync=udplen:increment=2']],
+  ['udplen +8', ['--lua-desync=udplen:increment=8']],
+  ['fake QUIC ×6 + udplen +2', ['--lua-desync=fake:blob=fake_default_quic:repeats=6', '--lua-desync=udplen:increment=2']],
+];
 
 // ----- каталог стратегий по правилам blockcheck2 (zapret2, blockcheck2.d/standard) -----
 // Те же функции, позиции разреза и способы испортить фейк, что перебирает blockcheck2. Взяты только варианты
@@ -3534,12 +3548,17 @@ function catalogCandidates(string $level, bool $http): array
 // Стратегии из конфига: шаги профилей, которые могут обработать это соединение; circular раскладывается на стратегии
 function configCandidates(string $proto): array
 {
-  $wantPayload = $proto === 'http' ? 'http_req' : 'tls_client_hello';
+  $quic = $proto === 'quic';
+  $wantPayload = $proto === 'http' ? 'http_req' : ($quic ? 'quic_initial' : 'tls_client_hello');
   $port = $proto === 'http' ? 80 : 443;
   $out = [];
   foreach (expectedProfiles(confValues()) as $n => $e) {
     $p = buildProfile($n + 1, $e['tokens']);
-    if (!inRanges($port, protoPorts($p)['tcp'])) {
+    if (!inRanges($port, protoPorts($p)[$quic ? 'udp' : 'tcp'])) {
+      continue;
+    }
+    // UDP-профиль под другой протокол (discord, stun, wireguard) к QUIC не относится
+    if ($quic && ($l7 = current(preg_grep('/^--filter-l7=/', $e['tokens']))) && !in_array('quic', explode(',', substr($l7, 12)), true)) {
       continue;
     }
     $payload = null;
@@ -3909,6 +3928,7 @@ function testJob(): void
   $iface = explode(' ', trim($exp['ISP_INTERFACE']))[0] ?: 'eth1';
   $baseArgs = tokens($exp['NFQWS_BASE_ARGS']);
   $http = ($job['proto'] ?? 'https') === 'http';
+  $quic = ($job['proto'] ?? '') === 'quic';
   $status = ['state' => 'running', 'type' => $job['type'], 'pid' => getmypid(), 'host' => $job['host'], 'proto' => $job['proto'] ?? 'https',
     'started' => time(), 'results' => [], 'done' => 0, 'total' => 0, 'current' => null];
   $auto = !empty($job['auto']);
@@ -3988,6 +4008,18 @@ function testJob(): void
   } elseif ($dns['ips'] && !array_filter(diagTcp($dns['ips'], $http ? 80 : 443), fn($x) => $x['ok'])) {
     $why = 'С адресом сайта нет соединения (' . implode(', ', $dns['ips']) . ') — похоже на блокировку по IP. Стратегии nfqws2 меняют пакеты, а не маршрут, и тут не помогут: нужен туннель (podkop, VPN).';
   }
+  $qip = null;
+  if ($why === null && $quic) {
+    // QUIC: проверка — своим зондом на один адрес сайта. Через podkop и у сайта без HTTP/3 подбирать нечего
+    $qip = $dns['ips'][0] ?? null;
+    if ($dns['status'] === 'podkop') {
+      $why = 'Сайт идёт через podkop — его соединения уходят в туннель, стратегии nfqws2 на них не действуют.';
+    } elseif ($qip === null) {
+      $why = 'У сайта нет адреса IPv4 — зонд QUIC работает по IPv4.';
+    } elseif (quicAdvertised($job['host']) === false) {
+      $why = 'Сайт не объявляет HTTP/3 (в ответе нет заголовка Alt-Svc с h3) — по QUIC он, похоже, не работает, и подбирать для него нечего. Браузер открывает его обычным соединением.';
+    }
+  }
   if ($why !== null) {
     $status['state'] = 'error';
     $status['title'] = 'Подбор не запущен';
@@ -3995,12 +4027,14 @@ function testJob(): void
     testSaveStatus($status);
     return;
   }
+  // один запрос: curl по TCP или зонд QUIC — ответ того же вида
+  $probe = fn() => $quic ? quicProbe($job['host'], $qip, true) + ['code' => 0] : curlProbe($job['host'], $http);
   $cands = [];
   if (in_array('config', $job['sets'], true)) {
     $cands = array_merge($cands, configCandidates($status['proto']));
   }
   if (in_array('std', $job['sets'], true)) {
-    foreach ($http ? STD_HTTP : STD_TLS as [$name, $steps]) {
+    foreach ($http ? STD_HTTP : ($quic ? STD_QUIC : STD_TLS) as [$name, $steps]) {
       $cands[] = ['name' => $name, 'from' => 'стандартный набор', 'steps' => $steps];
     }
   }
@@ -4008,7 +4042,7 @@ function testJob(): void
     array_unshift($cands, ['name' => strategyName($job['steps']), 'from' => 'вставленный профиль', 'steps' => $job['steps']]);
   }
   // каталог по правилам blockcheck2: расширенный или полный; то, что уже есть выше, не повторяем
-  $level = in_array('full', $job['sets'], true) ? 'full' : (in_array('ext', $job['sets'], true) ? 'ext' : null);
+  $level = $quic ? null : (in_array('full', $job['sets'], true) ? 'full' : (in_array('ext', $job['sets'], true) ? 'ext' : null));
   if ($level) {
     $have = array_flip(array_map(fn($c) => implode(' ', $c['steps']), $cands));
     foreach (catalogCandidates($level, $http) as $c) {
@@ -4055,7 +4089,7 @@ function testJob(): void
     $status['community'] = $info;
   }
   // Что нашла проба «Обрыв на 16 КБ»: в каталоге и стандартном наборе фейков с именем нет, а обрыв снимают только они
-  foreach ($http ? [] : freezeCandidates($job['host']) as $fc) {
+  foreach ($http || $quic ? [] : freezeCandidates($job['host']) as $fc) {
     $key = implode(' ', $fc['steps']);
     if (isset($byKey[$key])) {
       $cands[$byKey[$key]]['rank'] = min($cands[$byKey[$key]]['rank'] ?? 2, $fc['rank']);
@@ -4084,7 +4118,8 @@ function testJob(): void
     testSaveStatus($status);
     return;
   }
-  $filter = $http ? ['--filter-tcp=80', '--filter-l7=http', '--payload=http_req'] : ['--filter-tcp=443', '--filter-l7=tls', '--payload=tls_client_hello'];
+  $filter = $http ? ['--filter-tcp=80', '--filter-l7=http', '--payload=http_req']
+    : ($quic ? ['--filter-udp=443', '--filter-l7=quic', '--payload=quic_initial'] : ['--filter-tcp=443', '--filter-l7=tls', '--payload=tls_client_hello']);
   $repeats = max(1, min(5, (int)($job['repeats'] ?? 3)));
   $status['total'] = count($cands) + 1;
   $status['phase'] = 'baseline';
@@ -4094,7 +4129,7 @@ function testJob(): void
   $status['current'] = 'без обхода';
   testSaveStatus($status);
   testRules('bypass', $iface);
-  $status['baseline'] = curlProbe($job['host'], $http);
+  $status['baseline'] = $probe();
   $status['done'] = 1;
   if ($auto && $status['baseline']['ok']) {
     $cands = [];   // блокировки нет — перебирать нечего
@@ -4107,7 +4142,7 @@ function testJob(): void
 
   testRules('queue', $iface);
   // Одна стратегия: отдельный nfqws2 и до $repeats запросов
-  $try = function (array $steps) use (&$nfq, $baseArgs, $filter, $repeats, $job, $http): array {
+  $try = function (array $steps) use (&$nfq, $baseArgs, $filter, $repeats, $probe): array {
     $nfq = testNfqwsStart(array_merge($baseArgs, $filter, $steps));
     if (!$nfq) {
       return ['ok' => 0, 'tries' => 0, 'ms' => null, 'reason' => 'nfqws2 не принял параметры: ' . trim((string)@file_get_contents(TEST_DIR . '/nfqws.out'))];
@@ -4116,7 +4151,7 @@ function testJob(): void
     $times = [];
     $reason = null;
     for ($i = 0; $i < $repeats; $i++) {
-      $r = curlProbe($job['host'], $http);
+      $r = $probe();
       if ($r['ok']) {
         $ok++;
         $times[] = $r['ms'];
@@ -4133,7 +4168,7 @@ function testJob(): void
   };
   $entry = fn(array $c, array $r) => ['name' => $c['name'], 'from' => $c['from'], 'steps' => $c['steps'], 'profile' => array_merge($filter, $c['steps'])]
     + (isset($c['hist']) ? ['hist' => $c['hist']] : []) + (isset($c['community']) ? ['community' => $c['community']] : []) + $r;
-  if (!$auto && count($cands) > PAR_MIN) {
+  if (!$auto && !$quic && count($cands) > PAR_MIN) {
     // большой набор — параллельно, пачками по PAR_SLOTS; из каталога в результатах остаётся только то, что хоть раз открыло
     // сайт (иначе статус разрастается до мегабайта), остальное — счётчиком причин
     $status['parallel'] = parSlots();
@@ -4216,7 +4251,7 @@ function testJob(): void
       }
     }
   }
-  if ($status['state'] === 'running' && !($auto && !$cands)) {
+  if ($status['state'] === 'running' && !$quic && !($auto && !$cands)) {   // уточнение — оси TLS-фейков, к QUIC не подходит
     testRefine($status, $try, $repeats, $http, !empty($job['refine']), $filter);
   }
   testRules('off', $iface);
@@ -7327,7 +7362,8 @@ switch ($cmd) {
     $own = array_values(array_filter(is_array($in['steps'] ?? null) ? $in['steps'] : [], fn($t) => is_string($t) && preg_match('/^--lua-desync=[^\s"`$\\\\]+$/', $t)));
     curlRequire();
     testLaunch(['type' => $cmd === 'trace_start' ? 'trace' : 'pick', 'host' => $host,
-      'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https', 'sets' => $own ? $sets : ($sets ?: ['config', 'std']), 'steps' => $own, 'repeats' => (int)($in['repeats'] ?? 3), 'refine' => !empty($in['refine'])]);
+      'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : (($in['proto'] ?? '') === 'quic' && $cmd === 'test_start' ? 'quic' : 'https'),
+      'sets' => $own ? $sets : ($sets ?: ['config', 'std']), 'steps' => $own, 'repeats' => (int)($in['repeats'] ?? 3), 'refine' => !empty($in['refine'])]);
     respond(['ok' => true]);
 
   case 'multi_start':
