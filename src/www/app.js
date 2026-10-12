@@ -4108,7 +4108,7 @@ async function viewTests(main, r, bare = false) {
           h('label', { class: 'row', title: 'До восьми стратегий, которые сработали у абонентов вашего провайдера (база на GitHub, раз в сутки). Сначала — открывавшие этот сайт или его сеть.' }, setComm, 'стратегии сообщества', newTag('pick:community')))),
         oneRow(h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Каталог zapret2' }), h('div', { class: 'stack', style: 'gap:2px' },
           h('div', { class: 'row', style: 'min-width:0' }, catSel, newTag('pick:catalog')),
-          h('span', { class: 'sm muted', text: 'Те же функции, позиции разреза и способы испортить фейк, что перебирает blockcheck2 из zapret2. Большой набор проверяется параллельно, по 15 стратегий сразу; лучшие находки потом перепроверяются по одной.' })))),
+          h('span', { class: 'sm muted', text: 'Те же функции, позиции разреза и способы испортить фейк, что перебирает blockcheck2 из zapret2. Большой набор проверяется параллельно, до 15 стратегий сразу (на роутере со 128 МБ — по 5, чтобы он не тормозил); лучшие находки потом перепроверяются по одной.' })))),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Повторов' }), h('div', { class: 'row' }, repeats, h('span', { class: 'sm muted', text: 'Стратегия засчитывается, если сайт открылся каждый раз.' }))),
         oneRow(h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Уточнение' }), h('div', { class: 'stack', style: 'gap:2px' },
           h('label', { class: 'row' }, refine, 'искать вариант полегче, даже если рабочая стратегия найдена'),
