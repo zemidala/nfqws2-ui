@@ -1328,18 +1328,31 @@ function overviewExtra() {
 }
 
 // ============ Диагноз блокировки ============
-// Шесть ступеней на роутере (api: diag): имя → соединение → запрос мимо nfqws2 → по имени или по адресу →
-// открытый HTTP → запрос через nfqws2. Итог — один диагноз и что с ним делать.
+// Семь ступеней на роутере (api: diag): имя → соединение → запрос мимо nfqws2 → по имени или по адресу →
+// открытый HTTP → запрос через nfqws2 → QUIC. Итог — один диагноз и что с ним делать; QUIC — отдельной строкой:
+// сайт с закрытым QUIC открывается (браузер переходит на обычное соединение), но с задержкой.
 
 const pickHref = (host) => layout() === 'site' ? `#/site/${encodeURIComponent(host)}/pick` : '#/tests?host=' + encodeURIComponent(host);
 const diagHref = (host) => layout() === 'site' ? `#/site/${encodeURIComponent(host)}/diag` : '#/diag?host=' + encodeURIComponent(host);
 
 const DIAG_STEPS = [['dns', 'Имя сайта (DNS)'], ['tcp', 'Соединение (TCP 443)'], ['direct', 'Запрос мимо nfqws2'],
-  ['sni', 'По имени или по адресу'], ['http', 'Открытый HTTP (порт 80)'], ['via', 'Как открывается сейчас']];
+  ['sni', 'По имени или по адресу'], ['http', 'Открытый HTTP (порт 80)'], ['via', 'Как открывается сейчас'], ['quic', 'QUIC (HTTP/3, UDP 443)']];
 const DIAG_KIND = { timeout: 'нет ответа при установке шифрования', reset: 'соединение сброшено', tls: 'обрыв при установке шифрования', alert: 'сервер отказал в соединении',
   stall: 'шифрование установлено, но ответа нет', freeze: 'загрузка замирает на объёме (16–20 КБ)', connect: 'не удалось подключиться', empty: 'пустой ответ', dns: 'имя не разрешается', other: 'ошибка соединения' };
 
 // Диагноз: уровень плашки, заголовок, пояснение
+// Строка ступени QUIC: уровень и текст
+function quicStepText(q, qp) {
+  if (q.direct.ok) return ['ok', `Отвечает без обхода за ${q.direct.ms} мс — QUIC не заблокирован.`];
+  if (q.direct.reason !== 'нет ответа') return ['warn', `Проверить не удалось: ${q.direct.reason}.`];
+  if (q.via?.ok) return ['ok', `Без обхода ответа нет — QUIC этого сайта режут. Через ${qp || 'nfqws2'} отвечает за ${q.via.ms} мс: nfqws2 справляется.`];
+  if (q.h3 === false) return ['info', 'По QUIC не отвечает, и HTTP/3 сайт не объявляет — похоже, он работает только по обычному соединению. Это не блокировка.'];
+  if (q.policy) return ['warn', 'Без обхода ответа нет. Через nfqws2 с роутера не проверить: включена политика доступа Keenetic, запросы самого роутера идут мимо nfqws2.'];
+  if (!q.running) return ['warn', 'Без обхода ответа нет, а nfqws2 сейчас остановлен — через него не проверить.'];
+  if (q.h3 === null) return ['warn', 'По QUIC не отвечает ни без обхода, ни через nfqws2; объявляет ли сайт HTTP/3, узнать не удалось.'];
+  return ['bad', `Сайт объявляет HTTP/3, но по QUIC не отвечает ни без обхода, ни через nfqws2 (${qp ? qp + ' не помогает' : 'QUIC-профиля для него нет'}). Браузер ждёт ответа и только потом переходит на обычное соединение — страницы и видео стартуют с задержкой.`];
+}
+
 function diagVerdictText(R) {
   const v = R.verdict;
   const p = v.profile ? `профиль #${v.profile}` : null;
@@ -1455,6 +1468,16 @@ async function viewDiag(main, r, bare = false) {
         const via = R.via = await step('via');
         const where = d.podkop ? 'через podkop' : via.profile ? `через профиль #${via.profile}` : 'nfqws2 его не обрабатывает';
         set('via', via.ok ? 'ok' : 'bad', (via.ok ? `Открывается: HTTP ${via.code}, ${via.ms} мс — ${where}.` : `Не открывается: ${via.reason} — ${where}.`) + (via.running ? '' : ' nfqws2 сейчас остановлен.'));
+        // 7. QUIC: настоящий первый пакет HTTP/3 на имя сайта — мимо nfqws2 и через него
+        const qip = ip || d.ips[0];
+        if (d.podkop || !qip) set('quic', 'skip', d.podkop ? 'Не проверялось: сайт идёт через podkop.' : 'Не проверялось: адреса нет.');
+        else {
+          const q = R.quic = await step('quic', { ip: qip });
+          const qp = q.profile ? `профиль #${q.profile}` : null;
+          const [lvl, text] = quicStepText(q, qp);
+          q.blocked = lvl === 'bad';
+          set('quic', lvl, text);
+        }
       } else {
         DIAG_STEPS.slice(1).forEach(([id]) => set(id, 'skip', 'Не проверялось.'));
       }

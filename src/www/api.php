@@ -3619,10 +3619,15 @@ function testRules(string $mode, string $iface, int $slots = 0): void
     }
     $cmds[] = $ipt . "-A nfqws_test_post -o $if -p tcp -m multiport --sports " . TEST_PORTS . ' -m mark ! --mark 0x40000000/0x40000000 -j NFQUEUE --queue-num ' . TEST_QNUM . ' --queue-bypass';
     $cmds[] = $ipt . "-A nfqws_test_pre -i $if -p tcp -m multiport --dports " . TEST_PORTS . ' -m connbytes --connbytes-dir=reply --connbytes-mode=packets --connbytes 1:15 -j NFQUEUE --queue-num ' . TEST_QNUM . ' --queue-bypass';
+    // UDP — для зонда QUIC: первые пакеты в обе стороны, как у основного nfqws2
+    $cmds[] = $ipt . "-A nfqws_test_post -o $if -p udp -m multiport --sports " . TEST_PORTS . ' -m mark ! --mark 0x40000000/0x40000000 -m connbytes --connbytes-dir=original --connbytes-mode=packets --connbytes 1:15 -j NFQUEUE --queue-num ' . TEST_QNUM . ' --queue-bypass';
+    $cmds[] = $ipt . "-A nfqws_test_pre -i $if -p udp -m multiport --dports " . TEST_PORTS . ' -m connbytes --connbytes-dir=reply --connbytes-mode=packets --connbytes 1:15 -j NFQUEUE --queue-num ' . TEST_QNUM . ' --queue-bypass';
   }
   // без обхода и после очереди — мимо основного nfqws2
-  $cmds[] = $ipt . "-A nfqws_test_post -o $if -p tcp -m multiport --sports " . TEST_PORTS . ' -j ACCEPT';
-  $cmds[] = $ipt . "-A nfqws_test_pre -i $if -p tcp -m multiport --dports " . TEST_PORTS . ' -j ACCEPT';
+  foreach (['tcp', 'udp'] as $l4) {
+    $cmds[] = $ipt . "-A nfqws_test_post -o $if -p $l4 -m multiport --sports " . TEST_PORTS . ' -j ACCEPT';
+    $cmds[] = $ipt . "-A nfqws_test_pre -i $if -p $l4 -m multiport --dports " . TEST_PORTS . ' -j ACCEPT';
+  }
   foreach ($cmds as $c) {
     exec($c . ' 2>&1');
   }
@@ -5932,6 +5937,150 @@ function diagVerdict(array $r): array
   return $v('unknown', true);
 }
 
+// ----- QUIC (HTTP/3) -----
+// curl на роутерах собран без HTTP/3, а в PHP нет openssl — первый пакет QUIC собирает сам nfqws2: с --intercept=0 он
+// выполняет Lua и выходит, а в его Lua есть всё нужное шифрование (hash, aes, aes_gcm). Пакет — настоящий QUIC v1
+// Initial (RFC 9000, 9001) с ClientHello на имя сайта; сервер отвечает на него своим Initial, а провайдер, который
+// режет QUIC по имени, — молчанием. Отправляет пакет PHP по UDP: любой ответ значит «QUIC дошёл».
+const QUIC_LUA = <<<'LUA'
+local function u8(n) return string.char(n % 256) end
+local function u16(n) return string.char(math.floor(n / 256) % 256, n % 256) end
+local function u24(n) return string.char(math.floor(n / 65536) % 256, math.floor(n / 256) % 256, n % 256) end
+local function v16(b) return u16(#b) .. b end
+local function varint(n) if n < 64 then return u8(n) end return u16(0x4000 + n) end
+
+local function hmac(key, msg)
+  key = key .. string.rep("\0", 64 - #key)
+  return hash("sha256", bxor(key, string.rep("\92", 64)) .. hash("sha256", bxor(key, string.rep("\54", 64)) .. msg))
+end
+local function expand_label(secret, label, len)
+  local l = "tls13 " .. label
+  return hmac(secret, u16(len) .. u8(#l) .. l .. u8(0) .. "\1"):sub(1, len)
+end
+
+local dcid, scid = brandom(8), brandom(8)
+
+-- ClientHello TLS 1.3: имя, группы, подписи, ALPN h3, версия, ключ x25519, параметры QUIC
+local function ext(t, b) return u16(t) .. v16(b) end
+local tp = u8(0x0f) .. u8(#scid) .. scid .. u8(0x04) .. u8(4) .. "\128\16\0\0" .. u8(0x01) .. u8(2) .. u16(0x4000 + 13616)
+local exts = ext(0, v16(u8(0) .. v16(SNI)))
+  .. ext(10, v16(u16(0x001d) .. u16(0x0017)))
+  .. ext(13, v16(u16(0x0403) .. u16(0x0804) .. u16(0x0401) .. u16(0x0503) .. u16(0x0805) .. u16(0x0501) .. u16(0x0806) .. u16(0x0601)))
+  .. ext(16, v16(u8(2) .. "h3"))
+  .. ext(43, u8(2) .. u16(0x0304))
+  .. ext(45, u8(1) .. u8(1))
+  .. ext(51, v16(u16(0x001d) .. v16(brandom(32))))
+  .. ext(57, tp)
+local body = u16(0x0303) .. brandom(32) .. u8(0) .. v16(u16(0x1301) .. u16(0x1302) .. u16(0x1303)) .. u8(1) .. u8(0) .. v16(exts)
+local ch = u8(1) .. u24(#body) .. body
+
+-- кадр CRYPTO и добивка: дейтаграмма с Initial не короче 1200 байт
+local frames = u8(6) .. varint(0) .. varint(#ch) .. ch
+local pn_len = 4
+local need = 1200 - (1 + 4 + 1 + 8 + 1 + 8 + 1 + 2) - pn_len - 16
+if #frames < need then frames = frames .. string.rep("\0", need - #frames) end
+
+-- ключи Initial: соль QUIC v1 и идентификатор соединения
+local salt = "\56\118\44\247\245\89\52\179\77\23\154\230\164\200\12\173\204\187\127\10"
+local cis = expand_label(hmac(salt, dcid), "client in", 32)
+local key, iv, hp = expand_label(cis, "quic key", 16), expand_label(cis, "quic iv", 12), expand_label(cis, "quic hp", 16)
+
+local pn = "\0\0\0\0"
+local header = u8(0xC3) .. "\0\0\0\1" .. u8(8) .. dcid .. u8(8) .. scid .. u8(0) .. varint(pn_len + #frames + 16) .. pn
+local enc, tag = aes_gcm(true, key, iv, frames, header)   -- номер пакета 0: nonce = iv
+local packet = header .. enc .. tag
+
+-- защита заголовка
+local pn_off = #header - pn_len
+local mask = aes(true, hp, packet:sub(pn_off + 5, pn_off + 20))
+packet = u8(bitxor(packet:byte(1), bitand(mask:byte(1), 0x0f))) .. packet:sub(2, pn_off) .. bxor(pn, mask:sub(2, 5)) .. packet:sub(pn_off + pn_len + 1)
+
+local hex = packet:gsub(".", function(c) return string.format("%02x", c:byte()) end)
+print("QUICHEX " .. hex)
+LUA;
+const QUIC_WAIT = 2;    // секунд на ответ
+const QUIC_TRIES = 2;   // UDP теряется — один повтор
+
+function quicPacket(string $host): ?string
+{
+  @mkdir(TEST_DIR, 0777, true);
+  $lua = TEST_DIR . '/quic-initial.lua';
+  if (!is_file($lua) || md5_file($lua) !== md5(QUIC_LUA)) {
+    file_put_contents($lua, QUIC_LUA);
+    @chmod($lua, 0644);
+  }
+  [, $out] = runTimeout([NFQWS_BIN, '--intercept=0', '--lua-init=SNI="' . $host . '"', '--lua-init=@' . $lua], 10);
+  return preg_match('/^QUICHEX ([0-9a-f]+)$/m', $out, $m) ? hex2bin($m[1]) : null;
+}
+
+// Зонд QUIC. $testPort — с проверочного порта (мимо основного nfqws2 или через проверочную очередь — по правилам
+// testRules), иначе — как обычный трафик роутера, через основной nfqws2
+function quicProbe(string $host, string $ip, bool $testPort, ?string $pkt = null): array
+{
+  $pkt ??= quicPacket($host);
+  if ($pkt === null) {
+    return ['ok' => false, 'ms' => null, 'reason' => 'не удалось собрать пакет QUIC (nfqws2 не выполнил сценарий)'];
+  }
+  [$lo, $hi] = array_map('intval', explode(':', TEST_PORTS));
+  $s = false;
+  for ($i = 0; $i < 5 && !$s; $i++) {   // порт может быть занят — берём другой
+    $ctx = stream_context_create($testPort ? ['socket' => ['bindto' => '0.0.0.0:' . mt_rand($lo, $hi)]] : []);
+    $s = @stream_socket_client("udp://$ip:443", $en, $es, 3, STREAM_CLIENT_CONNECT, $ctx);
+    if (!$testPort) {
+      break;
+    }
+  }
+  if (!$s) {
+    return ['ok' => false, 'ms' => null, 'reason' => 'не удалось открыть соединение UDP'];
+  }
+  stream_set_timeout($s, QUIC_WAIT);
+  $t = microtime(true);
+  for ($i = 0; $i < QUIC_TRIES; $i++) {
+    @fwrite($s, $pkt);
+    $r = @fread($s, 4096);
+    if (is_string($r) && $r !== '') {
+      fclose($s);
+      return ['ok' => true, 'ms' => (int)round((microtime(true) - $t) * 1000), 'reason' => null, 'bytes' => strlen($r)];
+    }
+  }
+  fclose($s);
+  return ['ok' => false, 'ms' => null, 'reason' => 'нет ответа'];
+}
+
+// Объявляет ли сайт HTTP/3: заголовок Alt-Svc с h3 в ответе по обычному HTTPS. null — узнать не удалось
+function quicAdvertised(string $host): ?bool
+{
+  $alt = null;
+  $got = false;
+  $ch = curl_init('https://' . $host . '/');
+  curl_setopt_array($ch, [CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4, CURLOPT_NOBODY => true, CURLOPT_RETURNTRANSFER => true, CURLOPT_CONNECTTIMEOUT => 5,
+    CURLOPT_TIMEOUT => 8, CURLOPT_NOSIGNAL => 1, CURLOPT_SSL_VERIFYPEER => false, CURLOPT_SSL_VERIFYHOST => 0, CURLOPT_USERAGENT => DIAG_UA,
+    CURLOPT_HEADERFUNCTION => function ($ch, $h) use (&$alt, &$got) {
+      $got = true;
+      if (stripos($h, 'alt-svc:') === 0) {
+        $alt = (bool)preg_match('/\bh3(-\d+)?=/i', $h);
+      }
+      return strlen($h);
+    }] + policyProbeOpts());
+  curl_exec($ch);
+  curl_close($ch);
+  return $got ? (bool)$alt : null;
+}
+
+// Ступень диагноза: отвечает ли сайт по QUIC мимо nfqws2 и через него
+function diagQuic(string $host, string $ip): array
+{
+  $pkt = quicPacket($host);
+  $direct = diagBypass(fn() => quicProbe($host, $ip, true, $pkt));
+  $pol = interceptInfo()['policy'] ?? null;
+  $only = $pol && ($pol['mode'] ?? '') === 'only';   // политика Keenetic: запросы самого роутера идут мимо основного nfqws2
+  $running = findPid() !== null;
+  $via = $direct['ok'] || $only || !$running ? null : quicProbe($host, $ip, false, $pkt);
+  $route = matchRoute(currentProfiles(), $host, [$ip], 'udp', 443, 'quic', new ListCache());
+  return ['direct' => $direct, 'via' => $via, 'h3' => $direct['ok'] || !empty($via['ok']) ? true : quicAdvertised($host),
+    'profile' => $route['profile'] ?? null, 'policy' => $only, 'running' => $running];
+}
+
 // ================= обновление интерфейса =================
 // Проверка — по последнему релизу на GitHub, не чаще раза в 12 часов (кнопка «Проверить» — сразу).
 // Само обновление делает nfqws-ui-setup update в отдельном сеансе: при установке пакета lighttpd
@@ -6797,7 +6946,7 @@ switch ($cmd) {
     }
     $step = $str('step');
     $ip = is_string($in['ip'] ?? null) ? $in['ip'] : '';
-    if (in_array($step, ['direct', 'sni', 'http'], true) && !isIp4($ip)) {
+    if (in_array($step, ['direct', 'sni', 'http', 'quic'], true) && !isIp4($ip)) {
       fail('нет адреса сайта');
     }
     switch ($step) {
@@ -6814,6 +6963,8 @@ switch ($cmd) {
         respond(diagBypass(fn() => diagHttp($host, $ip)));
       case 'via':
         respond(diagVia($host));
+      case 'quic':
+        respond(diagQuic($host, $ip));
       case 'other':
         respond(diagOther($host, array_values(array_filter(is_array($in['tried'] ?? null) ? $in['tried'] : [], fn($x) => is_string($x) && isIp4($x)))));
       case 'verdict':
