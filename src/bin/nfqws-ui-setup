@@ -550,6 +550,13 @@ apply)
 		fi
 	fi
 	opcache_apply
+	# Пакет зависит от curl, но его могли удалить, а установленному может не хватать библиотеки (тогда тоже код 127)
+	if ! PATH=$JOB_PATH curl --version >/dev/null 2>&1; then
+		say ""
+		say "ВНИМАНИЕ: программа curl не запускается — без неё не работают подбор стратегий и проверки сайтов."
+		say "Поставьте её: $([ -n "$R" ] && echo 'opkg install curl' || echo 'opkg update && opkg install curl')"
+		say ""
+	fi
 	[ "$MANAGED" = true ] && apply_web
 	cron_apply; save
 	status

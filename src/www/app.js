@@ -936,6 +936,9 @@ function problemItems() {
     const p = st.conf_profiles.find((cp) => cp.source?.source === x.var && profIssues(cp).includes(x));
     items.push({ level: x.level, title: p ? `Профиль #${p.index} · ${profName(p)}` : (VAR_INFO[x.var]?.[0] || 'Конфиг'), text: x.msg.replace(/^Профиль #\d+: /, ''), code: tok, href: issueTarget(x), fix: fixButton(x) });
   }
+  if (st.curl) {
+    items.push({ level: 'error', title: 'Нет рабочей программы curl', text: `Подбор стратегий, проба «Обрыв на 16 КБ» и диагноз сайта делают запросы ею — без неё ни одна стратегия не откроет сайт, и это выглядело бы как блокировка. Система ответила: «${st.curl}». Поставьте curl: ${S.state.ui?.platform === 'Keenetic' ? 'opkg install curl' : 'opkg update && opkg install curl (OpenWrt 25 — apk add curl)'}.`, href: PAGES.log[0] });
+  }
   if (st.rivals?.length) {
     items.push({ level: 'warning', title: 'Работает другой обходчик', text: `${st.rivals.join(', ')} — он правит те же пакеты, что и nfqws2: стратегии мешают друг другу, результаты подбора ненадёжны. Оставьте что-то одно.`, href: PAGES.log[0] });
   }

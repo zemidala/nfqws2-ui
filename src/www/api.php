@@ -1659,6 +1659,37 @@ function cached(string $key, array $deps, callable $fn)
   return $data;
 }
 
+// Запускается ли программа curl: подбор, проба, диагноз и проверка на других сайтах делают запросы ею (PHP-модуль curl —
+// только в мониторинге и проверке сайта). Без неё каждая проверка кончается кодом 127, и подбор выдавал это за
+// блокировку. null — работает, иначе — что ответила система. Пакет зависит от curl, но его могли удалить, а 127 бывает
+// и у установленного curl, которому не хватает библиотеки
+function curlCmdError(): ?string
+{
+  $bins = ['/usr/bin/curl', '/opt/bin/curl', '/usr/lib/libcurl.so.4', '/opt/lib/libcurl.so.4'];
+  return cached('curl-cmd', $bins, function () {
+    [$rc, $out] = runTimeout(['sh', '-c', 'PATH=' . JOB_PATH . ' exec curl --version'], 5);
+    if ($rc === 0) {
+      return null;
+    }
+    $line = trim(strtok(trim($out), "\n") ?: '');
+    return $line !== '' ? $line : "код $rc";
+  });
+}
+
+function curlCmdHint(string $err): string
+{
+  return 'Нет рабочей программы curl — без неё подбор и проверки не могут открыть ни одного сайта (система ответила: «'
+    . $err . '»). Поставьте её: ' . (ROOT ? 'opkg install curl' : (is_file('/usr/bin/apk') && !is_file('/bin/opkg') ? 'apk add curl' : 'opkg update && opkg install curl'))
+    . ' — и повторите.';
+}
+
+function curlRequire(): void
+{
+  if (($e = curlCmdError()) !== null) {
+    fail(curlCmdHint($e));
+  }
+}
+
 // Запуск без shell-подстановок, с ограничением по времени (в busybox нет timeout)
 function runTimeout(array $argv, int $sec = 10): array
 {
@@ -3530,6 +3561,7 @@ function curlProbe(string $host, bool $http, string $path = '/'): array
   $ok = $rc === 0 && (int)$code > 0;
   $reason = $ok ? null : (match ($rc) {
     6 => 'имя не разрешается',
+    126, 127 => 'не запускается программа curl',
     7 => 'не удалось подключиться',
     28 => (int)$code > 0 ? REASON_FREEZE : 'тайм-аут',
     35 => 'обрыв TLS',
@@ -3650,6 +3682,7 @@ function curlReason(int $rc, int $code): string
 {
   return match ($rc) {
     6 => 'имя не разрешается',
+    126, 127 => 'не запускается программа curl',
     7 => 'не удалось подключиться',
     28 => $code > 0 ? REASON_FREEZE : 'тайм-аут',
     35 => 'обрыв TLS',
@@ -4950,6 +4983,11 @@ function autoTick(): void
   if ($d['queue'] && !testRunning() && !diagBusy() && !($p && in_array($p['state'], ['checking', 'waiting'], true))) {
     $h = array_shift($d['queue']);
     $d['sites'][$h]['last'] = time();
+    if (($ce = curlCmdError()) !== null) {
+      autoLog($d, $h, 'skip', 'Пропущен: не запускается программа curl (' . $ce . '), подбор не смог бы проверить ни одной стратегии.');
+      autoSave($d);
+      return;
+    }
     autoLog($d, $h, 'start', 'Перестал открываться — запущен подбор стратегии.');
     autoSave($d);
     testLaunch(['type' => 'pick', 'host' => $h, 'proto' => 'https', 'sets' => ['config', 'std', 'hist', 'other', 'community'], 'repeats' => 3, 'refine' => false, 'auto' => true]);
@@ -6055,6 +6093,7 @@ function state(): array
       return $i;
     })(),
     'logs' => nfqLogs(),
+    'curl' => curlCmdError(),
     'lint' => lintCurrent(),
     'conf_tokens' => array_map('tokens', array_intersect_key(confRawVars(file_get_contents(CONF_FILE)), array_flip(ARG_VARS))),
     // Профили по конфигу (для редактора) — могут отличаться от запущенных до перезапуска
@@ -6669,6 +6708,7 @@ switch ($cmd) {
 
   case 'diag':
     $host = cleanHost($str('host'));
+    curlRequire();
     if (!validHost($host) || isIp($host)) {
       fail('Введите имя сайта, например rutracker.org');
     }
@@ -7051,6 +7091,7 @@ switch ($cmd) {
     }
     $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : ['config', 'std'], ['config', 'std', 'hist', 'other', 'community', 'ext', 'full']));
     $own = array_values(array_filter(is_array($in['steps'] ?? null) ? $in['steps'] : [], fn($t) => is_string($t) && preg_match('/^--lua-desync=[^\s"`$\\\\]+$/', $t)));
+    curlRequire();
     testLaunch(['type' => $cmd === 'trace_start' ? 'trace' : 'pick', 'host' => $host,
       'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https', 'sets' => $own ? $sets : ($sets ?: ['config', 'std']), 'steps' => $own, 'repeats' => (int)($in['repeats'] ?? 3), 'refine' => !empty($in['refine'])]);
     respond(['ok' => true]);
@@ -7083,6 +7124,7 @@ switch ($cmd) {
       $list = ['name' => basename($path), 'path' => $path];
     }
     $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : [], ['config', 'std', 'hist', 'community']));
+    curlRequire();
     testLaunch(['type' => 'multi', 'host' => $list ? $list['name'] : 'сайтов: ' . count($hosts), 'hosts' => $hosts, 'list' => $list,
       'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https', 'sets' => $sets ?: ['config', 'std'], 'repeats' => (int)($in['repeats'] ?? 3)]);
     respond(['ok' => true]);
@@ -7113,6 +7155,7 @@ switch ($cmd) {
     // итог подбора, из которого запущена проверка, сохраняем — страница покажет его под новой проверкой
     $prev = testStatus();
     $pick = ($prev['type'] ?? '') === 'pick' ? $prev : (($prev['type'] ?? '') === 'wide' ? ($prev['pick'] ?? null) : null);
+    curlRequire();
     testLaunch(['type' => 'wide', 'host' => $pick['host'] ?? $hosts[0], 'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https',
       'hosts' => $hosts, 'steps' => $steps, 'repeats' => (int)($in['repeats'] ?? ($pick['repeats'] ?? 3)), 'pick' => $pick]);
     respond(['ok' => true]);
@@ -7131,6 +7174,7 @@ switch ($cmd) {
         $extra[] = $h;
       }
     }
+    curlRequire();
     testLaunch(['type' => 'freeze', 'host' => 'опорные сети', 'sets' => [], 'extra' => $extra]);
     respond(['ok' => true]);
 
