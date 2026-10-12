@@ -1676,11 +1676,59 @@ function curlCmdError(): ?string
   });
 }
 
+// «не установлена» — системе не найти команду; иначе curl есть, но не запускается (обычно не хватает библиотеки)
+function curlMissing(string $err): bool
+{
+  return (bool)preg_match('/not found|No such file|не найден/i', $err);
+}
+
 function curlCmdHint(string $err): string
 {
-  return 'Нет рабочей программы curl — без неё подбор и проверки не могут открыть ни одного сайта (система ответила: «'
-    . $err . '»). Поставьте её: ' . (ROOT ? 'opkg install curl' : (is_file('/usr/bin/apk') && !is_file('/bin/opkg') ? 'apk add curl' : 'opkg update && opkg install curl'))
-    . ' — и повторите.';
+  return (curlMissing($err) ? 'Программа curl не установлена' : 'Программа curl установлена, но не запускается')
+    . ' — без неё подбор и проверки не могут открыть ни одного сайта (система ответила: «' . $err . '»). '
+    . 'Нажмите «Установить curl» в «Проблемах» на «Обзоре» или выполните на роутере: '
+    . (pkgApk() ? 'apk add curl' : 'opkg install curl') . '.';
+}
+
+function pkgApk(): bool
+{
+  return !ROOT && is_file('/usr/bin/apk') && !is_file('/bin/opkg');
+}
+
+// Ставит (или переставляет, если curl есть, но не запускается) curl. Не дольше ~2,5 минуты: wget внутри opkg ждёт
+// недоступный источник пакетов бесконечно — по истечении времени процесс снимается вместе с потомками
+function curlInstall(): array
+{
+  set_time_limit(200);
+  $err = curlCmdError();
+  if ($err === null) {
+    return ['ok' => true, 'log' => 'curl уже работает'];
+  }
+  $tree = 'kt() { k=$(awk -v p="$1" \'$4 == p { print $1 }\' /proc/[0-9]*/stat 2>/dev/null); kill "$1" 2>/dev/null; for c in $k; do kt "$c"; done; }; ';
+  $lim = fn(int $s, string $cmd) => '( ' . $cmd . ' ) & p=$!; i=0; while kill -0 $p 2>/dev/null; do '
+    . 'if [ $i -ge ' . $s . ' ]; then kt $p; exit 124; fi; sleep 1; i=$((i+1)); done; wait $p';
+  if (pkgApk()) {
+    $cmd = $lim(150, 'apk add curl && apk fix curl libcurl');
+  } else {
+    // сначала без обновления списка: он почти всегда уже есть (пакеты ставились), а opkg update — самое долгое место;
+    // если curl в списке нет — обновить список и повторить. --force-reinstall: пакет может числиться установленным,
+    // а файла нет (удалили вручную) — тогда простой install ответил бы «уже установлен» и ничего не вернул
+    $inst = 'opkg install --force-reinstall curl libcurl';
+    // в команде только латиница: escapeshellarg при локали C выбрасывает кириллицу
+    $cmd = $lim(150, $inst . ' || { opkg update >/dev/null 2>&1; ' . $inst . '; }');
+  }
+  [$rc, $out] = runTimeout(['sh', '-c', 'PATH=' . JOB_PATH . '; ' . $tree . $cmd], 190);
+  @unlink(CACHE_DIR . '/curl-cmd.json');
+  $after = curlCmdError();
+  $log = trim(implode("\n", array_slice(explode("\n", trim($out)), -15)));
+  if ($after === null) {
+    return ['ok' => true, 'log' => $log];
+  }
+  $why = $rc === 124 ? 'источник пакетов не ответил за 2,5 минуты, curl не скачался. ' . (ROOT
+      ? "Сервер Entware (bin.entware.net) бывает недоступен — перейдите на зеркало и повторите: sed -i 's#http://bin.entware.net/#http://mirrors.bfsu.edu.cn/entware/#' /opt/etc/opkg.conf"
+      : 'Проверьте, что роутер достаёт до источника пакетов, и повторите.')
+    : 'curl всё ещё не запускается (' . $after . ').';
+  return ['ok' => false, 'error' => $why, 'log' => $log, 'code' => $rc];
 }
 
 function curlRequire(): void
@@ -7194,6 +7242,9 @@ switch ($cmd) {
       $s['error'] = 'задание прервалось';
     }
     respond($s);
+
+  case 'curl_install':
+    respond(curlInstall());
 
   case 'test_stop':
     @touch(TEST_DIR . '/stop');

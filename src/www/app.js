@@ -919,6 +919,23 @@ function policyProbeHint() {
   return p?.mode === 'only' && p.probe ? h('p', { class: 'sm muted', text: `nfqws2 обрабатывает только политику доступа «${p.name}» — проверки с роутера идут как от её устройства: через то же подключение и через nfqws2.` }) : null;
 }
 
+// Ставит curl на роутере (или переставляет вместе с библиотекой, если он есть, но не запускается)
+function curlInstallBtn(missing) {
+  const note = h('span', { class: 'sm muted' });
+  const b = btn(missing ? 'Установить curl' : 'Переустановить curl', async () => {
+    b.disabled = true;
+    note.textContent = 'ставлю — до 2–3 минут…';
+    const r = await guarded(() => api('curl_install'));
+    b.disabled = false;
+    note.textContent = '';
+    if (!r) return;
+    if (r.ok) toast('curl установлен — подбор и проверки снова работают');
+    else toast(`curl не заработал: ${r.error}. ${r.log ? 'Последние строки: ' + r.log.split('\n').slice(-3).join(' · ') : ''}`, { err: true });
+    loadState().catch(() => {});
+  }, 'small primary', 'download');
+  return h('span', { class: 'row' }, b, note);
+}
+
 function problemItems() {
   const st = S.state;
   const items = [];
@@ -937,7 +954,11 @@ function problemItems() {
     items.push({ level: x.level, title: p ? `Профиль #${p.index} · ${profName(p)}` : (VAR_INFO[x.var]?.[0] || 'Конфиг'), text: x.msg.replace(/^Профиль #\d+: /, ''), code: tok, href: issueTarget(x), fix: fixButton(x) });
   }
   if (st.curl) {
-    items.push({ level: 'error', title: 'Нет рабочей программы curl', text: `Подбор стратегий, проба «Обрыв на 16 КБ» и диагноз сайта делают запросы ею — без неё ни одна стратегия не откроет сайт, и это выглядело бы как блокировка. Система ответила: «${st.curl}». Поставьте curl: ${S.state.ui?.platform === 'Keenetic' ? 'opkg install curl' : 'opkg update && opkg install curl (OpenWrt 25 — apk add curl)'}.`, href: PAGES.log[0] });
+    const missing = /not found|No such file|не найден/i.test(st.curl);
+    items.push({ level: 'error', title: missing ? 'Не установлена программа curl' : 'Программа curl не запускается',
+      text: (missing ? 'На роутере нет программы curl. ' : 'curl установлен, но не запускается — обычно ему не хватает библиотеки после обновления других пакетов. ')
+        + `Подбор стратегий, проба «Обрыв на 16 КБ» и диагноз сайта открывают сайты именно ею: без неё ни одна стратегия не откроет сайт, и это выглядело бы как блокировка. Система ответила: «${st.curl}».`,
+      href: PAGES.log[0], fix: curlInstallBtn(missing) });
   }
   if (st.rivals?.length) {
     items.push({ level: 'warning', title: 'Работает другой обходчик', text: `${st.rivals.join(', ')} — он правит те же пакеты, что и nfqws2: стратегии мешают друг другу, результаты подбора ненадёжны. Оставьте что-то одно.`, href: PAGES.log[0] });
