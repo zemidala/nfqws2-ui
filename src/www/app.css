@@ -88,7 +88,7 @@ svg { width: 17px; height: 17px; flex: none; }
 /* ---------- раскладка: колонка обзора + основная область ---------- */
 .layout { display: block; }
 #side { display: none; }
-main { padding: 16px; display: grid; gap: 14px; align-content: start; min-width: 0; max-width: 1100px; margin: 0 auto; }
+main { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 14px; align-content: start; min-width: 0; max-width: 1100px; margin: 0 auto; }
 @media (min-width: 1100px) {
   .layout { display: grid; grid-template-columns: var(--side-w) minmax(0, 1fr); transition: grid-template-columns .2s; }
   #side { display: block; position: sticky; top: var(--top-h); height: calc(100vh - var(--top-h)); overflow-y: auto; border-right: 1px solid var(--line); scrollbar-width: thin; }
@@ -145,7 +145,7 @@ button.chip { cursor: pointer; font-size: 12px; }
 .notice.warn { background: var(--warn-soft); color: var(--warn); } .notice.info { background: var(--accent-soft); color: var(--accent); }
 .notice .t { color: var(--fg); overflow-wrap: anywhere; }
 .notice svg { margin-top: 1px; }
-.seg { display: inline-flex; border: 1px solid var(--line); border-radius: calc(var(--radius) * .7 + 2px); padding: 2px; background: var(--bg); justify-self: start; }
+.seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--line); border-radius: calc(var(--radius) * .7 + 2px); padding: 2px; background: var(--bg); justify-self: start; }
 .seg button { border: 0; background: none; color: var(--muted); padding: 4px 11px; border-radius: calc(var(--radius) * .5 + 2px); cursor: pointer; min-height: 28px; font-size: 13px; font-weight: 500; }
 .seg button.on { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgba(0, 0, 0, .1); }
 .frow { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 8px 14px; align-items: start; }
@@ -566,8 +566,9 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 .brand > span { display: inline-flex; align-items: baseline; gap: 6px; }
 .zd { flex: none; display: block; }
 #burger, .quick { display: none; }
-.quick { gap: 6px; }
-.quick .input { width: 200px; min-height: 34px; }
+/* поле проверки сжимается, если шапке тесно: пороги ниже считают ширину окна вместе с полосой прокрутки, а места без неё меньше */
+.quick { gap: 6px; flex: 0 1 auto; min-width: 0; }
+.quick .input { width: 200px; min-width: 60px; flex: 0 1 auto; min-height: 34px; }
 @media (min-width: 760px) { :root:not([data-layout="tabs"]) .quick { display: flex; } }
 @media (min-width: 760px) and (max-width: 1099px) { :root[data-layout="menu"] #burger { display: inline-flex; } .quick .input { width: 150px; } }
 @media (min-width: 1100px) {
@@ -743,6 +744,13 @@ a.over-row:hover { background: var(--soft); }
   .top .pill { padding: 2px 8px; }
 }
 @media (max-width: 339px) { .top .pill { font-size: 0; gap: 0; padding: 6px; } }
+/* переключатель вида в заголовке страницы («Обзор»: пять кнопок) — на телефоне во всю ширину, кнопки делят её поровну;
+   иначе он шире экрана и растягивает за собой всю страницу */
+@media (max-width: 479px) {
+  .vh > .seg { display: flex; flex-wrap: nowrap; width: 100%; }
+  .vh > .seg button { flex: 1 1 0; min-width: 0; padding-inline: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root[data-variant="k"] .vh > .seg button { padding-inline: 2px; font-size: 14px; }
+}
 /* таблицы из четырёх и более колонок не сжимаем в столбики — пусть прокручиваются вбок */
 @media (max-width: 759px) { .scroll > .tbl:has(th:nth-child(4)) { min-width: 600px; } }
 /* колонка с длинным текстом: без минимума браузер сжимает её до слова в строке */
@@ -757,6 +765,7 @@ a.over-row:hover { background: var(--soft); }
 @media (min-width: 760px) and (max-width: 899px) {
   :root[data-layout="tabs"] .brand > span { display: none; }
   :root[data-layout="tabs"] .tabs a { padding: 0 9px; }
+  :root[data-layout="site"] .tabs a { padding: 0 8px; }
 }
 /* поле ввода в строке с кнопкой или списком: если ему осталось меньше 180px — сосед переносится на следующую строку */
 .row > .input.grow { flex: 1 1 180px; min-width: 0; }
@@ -795,6 +804,8 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
 .ov-ask > h2 { margin: 0 0 8px; font-size: 16px; }
 .ov-ask > .blk { border: 0; padding: 0; background: none; box-shadow: none; }
 .ov-ask > .blk > .blk-h { display: none; }
+/* в стиле K у вложенного блока оставались своя рамка и поля — на телефоне поле ввода сжималось до пары букв */
+:root[data-variant="k"] .ov .ov-ask > .blk { border: 0; padding: 0; box-shadow: none; }
 .ov-folds { padding: 0; overflow: hidden; }
 .ofold { border-bottom: 1px solid var(--line); }
 .ofold:last-child { border-bottom: 0; }
