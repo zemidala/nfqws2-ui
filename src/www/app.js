@@ -3850,7 +3850,7 @@ async function viewTests(main, r, bare = false) {
       return h('tr', {},
         h('td', {}, levelIcon(full ? 'ok' : x.ok || x.unsure ? 'warning' : 'error')),
         h('td', {}, h('div', {}, x.name, needsTs(x.steps) ? ' ' : null, needsTs(x.steps) ? tsChip() : null), h('code', { class: 'sm muted', style: 'word-break:break-all', text: x.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') })),
-        h('td', { class: 'sm muted' }, x.from, x.hist ? h('div', { class: 'nowrap' }, chip('работала ' + fmtDate(x.hist), 'ok')) : null, x.confirmed ? h('div', { class: 'nowrap' }, full ? chip('перепроверена', 'ok') : chip('в пачке открывала, по одной — нет')) : null),
+        h('td', { class: 'sm muted src' }, x.from, x.hist ? h('div', { class: 'nowrap' }, chip('работала ' + fmtDate(x.hist), 'ok')) : null, x.confirmed ? h('div', { class: 'nowrap' }, full ? chip('перепроверена', 'ok') : chip('в пачке открывала, по одной — нет')) : null),
         h('td', { class: 'sm', text: full ? `открылся ${x.ok} из ${x.ok}` : x.ok ? `${x.ok} из ${x.tries}` : x.reason || 'не открылся' }),
         h('td', { class: 'num', text: x.ms ? x.ms + ' мс' : '—' }),
         h('td', {}, x.ok || x.community ? h('div', { class: 'row', style: 'flex-wrap:nowrap;justify-content:flex-end' }, x.ok ? applyMenu(x, s) : null, full ? wideBtn(x, s) : null, full || x.community ? shareBtn(x, s) : null) : null));
@@ -4012,7 +4012,7 @@ async function viewTests(main, r, bare = false) {
       return h('tr', {},
         h('td', {}, levelIcon(full ? 'ok' : x.confirmed && x.opened ? 'warning' : x.confirmed ? 'error' : 'info')),
         h('td', {}, h('div', {}, x.name, needsTs(x.steps) ? ' ' : null, needsTs(x.steps) ? tsChip() : null), h('code', { class: 'sm muted', style: 'word-break:break-all', text: x.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') })),
-        h('td', { class: 'sm muted' }, x.from, x.hist ? h('div', { class: 'nowrap' }, chip('работала ' + fmtDate(x.hist), 'ok')) : null),
+        h('td', { class: 'sm muted src' }, x.from, x.hist ? h('div', { class: 'nowrap' }, chip('работала ' + fmtDate(x.hist), 'ok')) : null),
         h('td', { class: 'sm' }, x.confirmed
           ? [h('b', { text: `${x.opened} из ${M}` }), x.opened < M ? h('div', { class: 'muted' }, 'не открыла: ', h('span', { class: 'mono', text: missed(x).join(', ') })) : null]
           : h('span', { class: 'muted nowrap', title: 'Открыла столько сайтов в параллельной пачке; по одной не перепроверялась — применить нельзя', text: `пачка: ${x.scan} из ${M}` })),
