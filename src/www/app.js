@@ -1690,7 +1690,7 @@ function codeEditor({ value, mode, onInput, onCaret, rows = 4, maxHeight = 520, 
       const marks = lineMarks();
       const n = text.split('\n').length;
       const lines = [];
-      for (let i = 0; i < n; i++) lines.push(h('div', { class: marks[i] === 'error' ? 'e' : marks[i] === 'warning' ? 'w' : null, text: String(i + 1) }));
+      for (let i = 0; i < n; i++) lines.push(h('div', { class: marks[i] === 'error' ? 'e' : marks[i] === 'warning' ? 'w' : marks[i] === 'info' ? 'i' : null, text: String(i + 1) }));
       lines.push(h('div', { text: ' ' }));
       gut.replaceChildren(...lines);
     }
@@ -3133,7 +3133,12 @@ async function paneRaw(content) {
   function drawCounts() {
     const e = issues.filter((x) => x.level === 'error').length;
     const w = issues.filter((x) => x.level === 'warning').length;
+    const notes = issues.filter((x) => x.level === 'info' && x.var);
+    // замечание «к сведению» подчёркнуто в тексте — по метке курсор встаёт на место, справка под редактором показывает текст
+    let ni = 0;
+    const toNote = () => { const x = notes[ni++ % notes.length]; const p = locate(x); if (p) ed.select(p.start, p.end); };
     counts.replaceChildren(e ? chip(plural(e, 'ошибка', 'ошибки', 'ошибок'), 'bad') : null, w ? chip(plural(w, 'предупреждение', 'предупреждения', 'предупреждений'), 'warn') : null, !e && !w ? chip('ошибок нет', 'ok') : null,
+      notes.length ? h('button', { type: 'button', class: 'chip', title: 'Не ошибка, а пояснение. Нажмите — курсор встанет на место, текст появится под редактором', onclick: toNote }, plural(notes.length, 'замечание', 'замечания', 'замечаний')) : null,
       e || w ? btn('К ошибке ↓', () => { const x = issues.find((i) => i.level === 'error') || issues.find((i) => i.level === 'warning'); const p = x && locate(x); if (p) ed.select(p.start, p.end); }, 'small') : null);
   }
   function drawStatus() {
