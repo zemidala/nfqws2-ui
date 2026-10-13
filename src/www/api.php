@@ -6503,8 +6503,9 @@ function rivals(): array
     $pid = (int)basename(dirname($f));
     if (isset($names[$c])) {
       $found[$names[$c]] = true;
-    } elseif ($c === 'nfqws2' && $pid !== $main && !preg_match('/--qnum=' . TEST_QNUM . '\b|--dry-run/', (string)@file_get_contents("/proc/$pid/cmdline"))) {
+    } elseif ($c === 'nfqws2' && $pid !== $main && !preg_match('/--qnum=' . TEST_QNUM . '\b|--dry-run|--intercept=0/', (string)@file_get_contents("/proc/$pid/cmdline"))) {
       // --dry-run — наша же проверка конфига: на медленном роутере она идёт заметное время и попадала сюда
+      // --intercept=0 — сборка пакета QUIC для зонда (quicPacket): тоже наш запуск, пакеты он не трогает
       $found['ещё один nfqws2 (zapret2)'] = true;
     }
   }
