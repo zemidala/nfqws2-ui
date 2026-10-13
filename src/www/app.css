@@ -761,6 +761,11 @@ a.over-row:hover { background: var(--soft); }
 }
 /* пояснение рядом с кнопкой: если рядом ему тесно — переносится под кнопку, а не сжимается в столбик */
 .note-wide { flex: 1 1 220px; min-width: 0; }
+/* подбор: поле «Своя стратегия» раскрывается по нажатию — форма и так длинная */
+.own-st { display: grid; gap: 6px; min-width: 0; }
+.own-st > summary { cursor: pointer; color: var(--accent); width: fit-content; font-size: 14px; min-height: 28px; display: flex; align-items: center; gap: 6px; }
+.own-st > summary::before { content: "▸"; }
+.own-st[open] > summary::before { content: "▾"; }
 /* компоновка «Вкладки» на планшете: вкладки, кнопки и состояние nfqws2 в одну строку помещаются только без названия */
 @media (min-width: 760px) and (max-width: 899px) {
   :root[data-layout="tabs"] .brand > span { display: none; }

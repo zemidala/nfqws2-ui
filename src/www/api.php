@@ -4041,6 +4041,14 @@ function testJob(): void
   if (!empty($job['steps'])) {
     array_unshift($cands, ['name' => strategyName($job['steps']), 'from' => 'вставленный профиль', 'steps' => $job['steps']]);
   }
+  // свои стратегии из формы подбора — первыми и в том порядке, в каком вставлены; такая же из набора ниже не повторяется
+  if (!empty($job['own'])) {
+    $mine = [];
+    foreach ($job['own'] as $st) {
+      $mine[implode(' ', $st)] ??= ['name' => strategyName($st), 'from' => 'своя стратегия', 'steps' => $st, 'rank' => -1, 'own' => true];
+    }
+    $cands = array_merge(array_values($mine), array_values(array_filter($cands, fn($c) => !isset($mine[implode(' ', $c['steps'])]))));
+  }
   // каталог по правилам blockcheck2: расширенный или полный; то, что уже есть выше, не повторяем
   $level = $quic ? null : (in_array('full', $job['sets'], true) ? 'full' : (in_array('ext', $job['sets'], true) ? 'ext' : null));
   if ($level) {
@@ -4089,7 +4097,8 @@ function testJob(): void
     $status['community'] = $info;
   }
   // Что нашла проба «Обрыв на 16 КБ»: в каталоге и стандартном наборе фейков с именем нет, а обрыв снимают только они
-  foreach ($http || $quic ? [] : freezeCandidates($job['host']) as $fc) {
+  // (когда наборы не выбраны — проверяют только свою или вставленную стратегию, — находки пробы тоже не берём)
+  foreach ($http || $quic || !$job['sets'] ? [] : freezeCandidates($job['host']) as $fc) {
     $key = implode(' ', $fc['steps']);
     if (isset($byKey[$key])) {
       $cands[$byKey[$key]]['rank'] = min($cands[$byKey[$key]]['rank'] ?? 2, $fc['rank']);
@@ -6571,6 +6580,74 @@ function profileCheck(array $tokens): array
     'steps' => array_values(array_filter($clean, fn($t) => str_starts_with($t, '--lua-desync=')))];
 }
 
+// Свои стратегии для подбора (поле «Своя стратегия»): у каждой оставляем шаги --lua-desync и говорим, что не так,
+// до запуска — иначе непонятная строка выглядела бы как «не открылось». Остальные параметры профиля (фильтры,
+// списки, --payload) в проверке не участвуют: подбор сам ставит фильтр под сайт и протокол.
+const OWN_MAX = 10;     // стратегий за один запуск
+const OWN_STEPS = 20;   // шагов в одной стратегии
+function strategyCheck(array $items, string $proto): array
+{
+  $opts = helpInfo()['options'];
+  $lua = luaCatalog();
+  // блобы, объявленные в конфиге (--blob=имя:…), встроенные и заданные в lua
+  preg_match_all('/--blob=([^:\s"]+):/', implode(' ', array_intersect_key(confValues(), array_flip(ARG_VARS))), $bm);
+  $blobs = array_flip(array_merge($bm[1], BUILTIN_BLOBS, $lua['globals']));
+  $out = [];
+  foreach (array_slice($items, 0, OWN_MAX) as $tokens) {
+    $steps = [];
+    $errors = [];
+    $skipped = [];
+    foreach (array_slice(is_array($tokens) ? $tokens : [], 0, 200) as $t) {
+      if (!is_string($t) || !preg_match('/^--([a-z0-9-]+)(=[^"`$\\\\\s]*)?$/', $t, $m)) {
+        $errors[] = (is_string($t) ? $t : '?') . ' — не параметр nfqws2';
+        continue;
+      }
+      if ($m[1] !== 'lua-desync') {
+        // фильтры и прочее от чужого профиля — не ошибка, просто здесь не нужны
+        $skipped[] = isset($opts[$m[1]]) ? $t : $t . ' (такого параметра nfqws2 на этом роутере не знает)';
+        continue;
+      }
+      $s = stepParse($t);
+      if (!isset($lua['functions'][$s['fn']])) {
+        $errors[] = $t . ' — функции «' . $s['fn'] . '» нет в lua-скриптах этого роутера (другая версия nfqws2?)';
+        continue;
+      }
+      foreach (['blob', 'seqovl_pattern', 'pattern'] as $k) {
+        $v = $s['p'][$k] ?? null;
+        if (is_string($v) && $v !== '' && !str_starts_with($v, '0x') && !isset($blobs[$v])) {
+          $errors[] = $t . ' — блоб «' . $v . '» в вашем конфиге не объявлен (у автора стратегии он задан параметром --blob)';
+          continue 2;
+        }
+      }
+      if (count($steps) < OWN_STEPS) {
+        $steps[] = $t;
+      }
+    }
+    if (!$steps && !$errors) {
+      $errors[] = 'нет ни одного шага --lua-desync';
+    }
+    $out[] = ['steps' => $steps, 'name' => $steps ? strategyName($steps) : '', 'errors' => $errors, 'skipped' => $skipped];
+  }
+  // принимает ли nfqws2 сами шаги: сначала все разом, при отказе — по одной, чтобы назвать виноватую
+  $filter = $proto === 'quic' ? ['--filter-udp=443', '--filter-l7=quic'] : ($proto === 'http' ? ['--filter-tcp=80', '--filter-l7=http'] : ['--filter-tcp=443', '--filter-l7=tls']);
+  $dry = function (array $list) use ($filter): array {
+    $exp = confValues();
+    $mine = implode(' --new ', array_map(fn($st) => implode(' ', array_merge($filter, $st)), $list));
+    $exp['NFQWS_ARGS_CUSTOM'] = $mine . (trim($exp['NFQWS_ARGS_CUSTOM']) !== '' ? ' --new ' . $exp['NFQWS_ARGS_CUSTOM'] : '');
+    return dryRun($exp);
+  };
+  $good = array_keys(array_filter($out, fn($x) => $x['steps'] && !$x['errors']));
+  if ($good && !$dry(array_map(fn($i) => $out[$i]['steps'], $good))['ok']) {
+    foreach ($good as $i) {
+      $d = $dry([$out[$i]['steps']]);
+      if (!$d['ok']) {
+        $out[$i]['errors'][] = 'nfqws2 не принимает эту стратегию: ' . $d['message'];
+      }
+    }
+  }
+  return ['items' => $out, 'max' => OWN_MAX];
+}
+
 // Отчёт для помощи: текст без секретов — версии, состояние, профили, списки, мониторинг, подборы
 function reportText(array $sites, bool $hide, string $build): string
 {
@@ -7361,10 +7438,19 @@ switch ($cmd) {
     }
     $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : ['config', 'std'], ['config', 'std', 'hist', 'other', 'community', 'ext', 'full']));
     $own = array_values(array_filter(is_array($in['steps'] ?? null) ? $in['steps'] : [], fn($t) => is_string($t) && preg_match('/^--lua-desync=[^\s"`$\\\\]+$/', $t)));
+    // свои стратегии из формы подбора: до OWN_MAX штук, у каждой — только шаги --lua-desync
+    $ownList = [];
+    foreach (array_slice(is_array($in['own'] ?? null) && $cmd === 'test_start' ? $in['own'] : [], 0, OWN_MAX) as $o) {
+      $st = array_values(array_filter(is_array($o) ? $o : [], fn($t) => is_string($t) && preg_match('/^--lua-desync=[^\s"`$\\\\]+$/', $t)));
+      if ($st) {
+        $ownList[] = array_slice($st, 0, OWN_STEPS);
+      }
+    }
     curlRequire();
     testLaunch(['type' => $cmd === 'trace_start' ? 'trace' : 'pick', 'host' => $host,
       'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : (($in['proto'] ?? '') === 'quic' && $cmd === 'test_start' ? 'quic' : 'https'),
-      'sets' => $own ? $sets : ($sets ?: ['config', 'std']), 'steps' => $own, 'repeats' => (int)($in['repeats'] ?? 3), 'refine' => !empty($in['refine'])]);
+      'sets' => $own || $ownList ? $sets : ($sets ?: ['config', 'std']), 'steps' => $own, 'own' => $ownList,
+      'repeats' => (int)($in['repeats'] ?? 3), 'refine' => !empty($in['refine'])]);
     respond(['ok' => true]);
 
   case 'multi_start':
@@ -7794,6 +7880,9 @@ switch ($cmd) {
 
   case 'profile_check':
     respond(profileCheck(array_slice(is_array($in['tokens'] ?? null) ? $in['tokens'] : [], 0, 200)));
+
+  case 'strategy_check':
+    respond(strategyCheck(is_array($in['items'] ?? null) ? $in['items'] : [], ($in['proto'] ?? '') === 'http' ? 'http' : (($in['proto'] ?? '') === 'quic' ? 'quic' : 'https')));
 
   case 'report':
     session_write_close();

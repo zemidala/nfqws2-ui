@@ -341,6 +341,7 @@ const FEATURES = [
   ['phist:share', '1.9.0', '«Поделиться» в истории подборов'],
   ['frz', '1.10.0', 'проба «Обрыв на 16 КБ» — какое имя в фейке снимает обрыв у зарубежных хостингов'],
   ['pick:catalog', '1.10.0', 'каталог стратегий zapret2 в подборе (сотни и тысячи стратегий, параллельно)'],
+  ['pick:own', '1.14.0', 'своя стратегия в подборе: вставить из чата и проверить на сайте, не трогая конфиг'],
   ['pick:multi', '1.11.0', 'подбор одной стратегии для нескольких сайтов или списка'],
   ['pick:wide', '1.11.0', '«На других сайтах» у найденной стратегии — открывает ли она не только свой сайт'],
   ['tg:log', '1.11.0', 'уведомления не теряются, когда Telegram недоступен, и журнал последних сообщений'],
@@ -2412,6 +2413,20 @@ function shareProfile(index, args) {
     btn('Скопировать', () => { keep(); copyText(ta.value); }, 'primary', 'copy'));
 }
 
+// Текст со стратегиями (из чата или свой) → список стратегий, каждая — список параметров. Стратегии разделяет «--new»
+// или новая строка; строка с «\» в конце продолжается на следующей. Подписи, кавычки и «ИМЯ=» убираются; шаг без
+// «--lua-desync=» (fake:blob=…) дополняется сам. Что из этого годится, решает сервер (strategy_check).
+function parseStrategies(text) {
+  const out = [];
+  for (const line of text.replace(/\\[ \t]*\r?\n/g, ' ').split('\n')) {
+    if (/^\s*#/.test(line)) continue;
+    const toks = line.replace(/["'`\\]/g, ' ').replace(/^\s*[A-Z_]+=/, '').split(/\s+/).filter(Boolean)
+      .map((t) => /^[a-z_][a-z0-9_]*:\S/.test(t) ? '--lua-desync=' + t : t).filter((t) => t.startsWith('--'));
+    for (const part of splitParts(toks)) if (part.length) out.push(part);
+  }
+  return out;
+}
+
 // Чужой профиль из чата: разбираем текст, отбрасываем лишнее, проверяем у nfqws2, даём испытать на сайте
 function pasteProfile() {
   const ta = h('textarea', { class: 'input mono', rows: 6, style: 'width:100%;resize:vertical', placeholder: '--filter-tcp=443 --filter-l7=tls --lua-desync=fake:blob=tls_clienthello:tcp_md5 …', spellcheck: 'false' });
@@ -3719,6 +3734,30 @@ async function viewTests(main, r, bare = false) {
     mNote.textContent = `Случайные 10 из ${mList.value} — можно поменять. Найденную стратегию можно будет поставить профилем на весь ${mList.value}.`;
   }
   const oneRows = [];   // поля, которые есть только у подбора одного сайта (каталог, уточнение)
+  // Своя стратегия: вставленная из чата или написанная — проверяется первой, конфиг не трогается
+  const ownTa = h('textarea', { class: 'input mono', rows: 3, style: 'width:100%;resize:vertical', spellcheck: 'false', autocapitalize: 'off', 'aria-label': 'Свои стратегии',
+    placeholder: '--lua-desync=fake:blob=fake_default_tls:tcp_md5:repeats=6 --lua-desync=multisplit:pos=1,midsld' });
+  const ownOut = h('div', { class: 'stack', style: 'gap:6px' });
+  const ownDet = h('details', { class: 'own-st' }, h('summary', {}, 'вставить стратегию из чата или свою ', newTag('pick:own')), ownTa,
+    h('span', { class: 'sm muted', text: 'Вставляйте как есть — кавычки, подписи и переносы уберутся. Каждая строка — отдельная стратегия (до 10); профили через --new тоже разделяются. Проверяются шаги --lua-desync, фильтры и списки чужого профиля не нужны: подбор сам ставит фильтр под сайт. Свои стратегии идут первыми; ваш конфиг и трафик не затрагиваются. Чтобы проверить только их, снимите галочки выше.' }),
+    ownOut);
+  const ownRow = h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Своя стратегия' }), ownDet);
+  // до запуска: что в тексте не годится — названо, а не выглядит потом как «не открылось»
+  async function ownStrategies() {
+    if (!ownTa.value.trim()) { ownOut.replaceChildren(); return []; }
+    ownDet.open = true;
+    const items = parseStrategies(ownTa.value);
+    if (!items.length) { ownOut.replaceChildren(notice('bad', 'В тексте не нашлось стратегий', 'Нужны шаги вида --lua-desync=функция:параметры. Очистите поле, если своя стратегия не нужна.')); return null; }
+    const chk = await guarded(() => api('strategy_check', { items: items.slice(0, 10), proto: proto.value }));
+    if (!chk) return null;
+    const skipped = [...new Set(chk.items.flatMap((x) => x.skipped))];
+    ownOut.replaceChildren(
+      items.length > chk.max ? notice('info', `Взяты первые ${chk.max} из ${items.length} стратегий`, 'Остальные проверьте следующим запуском.') : null,
+      chk.items.map((x, i) => x.errors.length ? notice('bad', `Стратегия ${i + 1} не годится`, x.errors.join('; ')) : null),
+      skipped.length ? notice('info', 'В проверке участвуют только шаги --lua-desync', 'Не взято: ' + skipped.join(' ')) : null);
+    if (chk.items.some((x) => x.errors.length)) { toast('Поправьте свои стратегии или уберите строки с ошибками', { err: true }); return null; }
+    return chk.items.map((x) => x.steps);
+  }
   const multiRow = h('div', { class: 'frow', hidden: true }, h('span', { class: 'lbl', text: 'Сайты' }),
     h('div', { class: 'stack', style: 'gap:6px' }, h('div', { class: 'row' }, mList, btn('Другие случайные', () => fillMulti(), 'small', 'refresh')), mHosts, mNote,
       h('span', { class: 'sm muted', text: 'Сначала каждый сайт открывается без обхода: что открывается и так или закрыто по IP, в подборе не участвует. Потом каждая стратегия проверяется на всех оставшихся сайтах; пять лучших — перепроверяются по одной. Каталог zapret2 и уточнение здесь не участвуют — на десяти сайтах это заняло бы часы. Обычно 3–8 минут.' })));
@@ -3728,6 +3767,7 @@ async function viewTests(main, r, bare = false) {
     hostLbl.textContent = multi ? 'Протокол' : 'Сайт';
     host.hidden = multi;
     multiRow.hidden = !multi;
+    ownRow.hidden = multi;
     oneRows.forEach((el) => { el.hidden = multi || isQuic(); });
     quicNote.hidden = !isQuic() || multi;
     if (multi && !mHosts.value) fillMulti();
@@ -3741,7 +3781,8 @@ async function viewTests(main, r, bare = false) {
   async function start() {
     const cmd = tab === 'trace' ? 'trace_start' : 'test_start';
     const sets = [setCfg.checked && 'config', setStd.checked && 'std', setHist.checked && 'hist', setHist.checked && 'other', setComm.checked && 'community', catSel.value].filter(Boolean);
-    if (tab !== 'trace' && !sets.length) { toast('Выберите, что пробовать', { err: true }); return; }
+    const single = tab === 'pick' && mode.value !== 'multi';
+    if (tab !== 'trace' && !sets.length && !(single && ownTa.value.trim())) { toast('Выберите, что пробовать', { err: true }); return; }
     if (tab === 'pick' && mode.value === 'multi') {
       if (isQuic()) { toast('Подбор для QUIC — пока только для одного сайта', { err: true }); return; }
       const hosts = mHosts.value.split(/[\s,]+/).filter(Boolean);
@@ -3749,7 +3790,9 @@ async function viewTests(main, r, bare = false) {
       poll();
       return;
     }
-    if (!await guarded(() => api(cmd, { host: host.value, proto: proto.value, sets: isQuic() ? sets.filter((x) => !['ext', 'full'].includes(x)) : sets, repeats: Number(repeats.value), refine: !isQuic() && refine.checked }))) return;
+    const own = single ? await ownStrategies() : [];
+    if (!own) return;
+    if (!await guarded(() => api(cmd, { host: host.value, proto: proto.value, sets: isQuic() ? sets.filter((x) => !['ext', 'full'].includes(x)) : sets, own, repeats: Number(repeats.value), refine: !isQuic() && refine.checked }))) return;
     poll();
   }
   function poll() {
@@ -4184,6 +4227,7 @@ async function viewTests(main, r, bare = false) {
           h('label', { class: 'row' }, setCfg, 'стратегии из вашего конфига'), h('label', { class: 'row' }, setStd, 'стандартный набор'),
           h('label', { class: 'row', title: 'Стратегии из истории подборов: сначала работавшие для этого сайта, затем до пяти помогавших другим сайтам' }, setHist, 'что работало раньше'),
           h('label', { class: 'row', title: 'До восьми стратегий, которые сработали у абонентов вашего провайдера (база на GitHub, раз в сутки). Сначала — открывавшие этот сайт или его сеть.' }, setComm, 'стратегии сообщества', newTag('pick:community')))),
+        ownRow,
         oneRow(h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Каталог zapret2' }), h('div', { class: 'stack', style: 'gap:2px' },
           h('div', { class: 'row', style: 'min-width:0' }, catSel, newTag('pick:catalog')),
           h('span', { class: 'sm muted', text: 'Те же функции, позиции разреза и способы испортить фейк, что перебирает blockcheck2 из zapret2. Большой набор проверяется параллельно, до 15 стратегий сразу (на роутере со 128 МБ — по 5, чтобы он не тормозил); лучшие находки потом перепроверяются по одной.' })))),
