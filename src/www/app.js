@@ -3314,7 +3314,8 @@ async function paneBackup(content) {
     h('td', { class: 'sm' }, e.differs === null ? h('span', { class: 'faint', text: 'неизвестно — снимок на NAS' }) : e.differs.length ? h('span', { class: 'muted', text: 'отличается: ' + e.differs.map(base).slice(0, 4).join(', ') + (e.differs.length > 4 ? ` и ещё ${e.differs.length - 4}` : '') }) : h('span', { class: 'status-ok', text: 'как сейчас' })),
     h('td', { class: 'sm nowrap ' + (e.local ? '' : 'muted'), text: where(e) }),
     h('td', { class: 'num', text: fmtBytes(e.size) }),
-    h('td', { class: 'row', style: 'flex-wrap:nowrap;gap:2px' },
+    // кнопки — во вложенном блоке: ячейка с display:flex перестаёт быть ячейкой таблицы (строки разъезжаются)
+    h('td', {}, h('div', { class: 'row', style: 'flex-wrap:nowrap;gap:2px' },
       btn('Сравнить', () => compareSnapshot(e), 'small ghost', null, { disabled: e.differs !== null && !e.differs.length }),
       btn('Восстановить', async () => {
         if (!confirm(`Вернуть конфиг и списки к снимку от ${fmtDate(e.ts)}? Текущее состояние сохранится отдельным снимком.`)) return;
@@ -3322,7 +3323,7 @@ async function paneBackup(content) {
         if (r) { toast(r.changed.length ? `Восстановлено файлов: ${r.changed.length}. Перезапустите nfqws2.` : 'Снимок совпадает с текущим состоянием'); route(true); }
       }, 'small ghost', null, { disabled: e.differs !== null && !e.differs.length }),
       h('a', { class: 'btn small ghost icon', href: 'api.php?download=' + e.id, title: 'Скачать', 'aria-label': 'Скачать снимок' }, icon('download')),
-      btn('', async () => { await guarded(() => api('snapshot_pin', { id: e.id, pinned: !e.pinned })); route(); }, 'small ghost icon' + (e.pinned ? ' primary' : ''), 'pin', { title: e.pinned ? 'Закреплён — не удаляется с роутера' : 'Закрепить: оставить на роутере', 'aria-label': 'Закрепить', disabled: !e.local }))));
+      btn('', async () => { await guarded(() => api('snapshot_pin', { id: e.id, pinned: !e.pinned })); route(); }, 'small ghost icon' + (e.pinned ? ' primary' : ''), 'pin', { title: e.pinned ? 'Закреплён — не удаляется с роутера' : 'Закрепить: оставить на роутере', 'aria-label': 'Закрепить', disabled: !e.local })))));
   content.append(
     h('div', { class: 'vh' }, h('h1', { text: 'Резервные копии' }), h('span', { class: 'grow' }),
       btn('Создать снимок сейчас', async () => { const note = prompt('Подпись к снимку (необязательно):', ''); if (note === null) return; if (await guarded(() => api('snapshot_create', { note }), 'Снимок создан')) route(true); }, 'primary', 'plus')),

@@ -1037,7 +1037,8 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
   .ov-brief .ofold { break-inside: avoid; }
   /* записи списка и сайты мониторинга — в несколько колонок вместо одной длинной полосы */
   .entries { display: block; columns: 640px; column-gap: 0; column-rule: 1px solid var(--line); }
-  .mon-list { display: block; columns: 640px; column-gap: 32px; }
+  /* сайты — сеткой, а не «газетными» колонками: строки соседних колонок на одной высоте (порядок тут не важен) */
+  .mon-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(620px, 1fr)); column-gap: 32px; align-items: stretch; }
   .entries > .ent, .mon-list > .act { break-inside: avoid; }
   .two { grid-template-columns: minmax(0, 1fr) minmax(340px, 30%); }
 }
