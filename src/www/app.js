@@ -188,7 +188,7 @@ function toast(text, opts = {}) {
   const t = h('div', { class: 'toast' + (opts.err ? ' err' : ''), role: opts.err ? 'alert' : 'status' }, h('span', { text }));
   if (opts.undo) t.append(h('button', { type: 'button', text: 'Вернуть', onclick: () => { t.remove(); opts.undo(); } }));
   document.getElementById('toasts').append(t);
-  setTimeout(() => t.remove(), opts.undo ? 7000 : opts.err ? 7000 : 3000);
+  setTimeout(() => t.remove(), opts.long ? 10000 : opts.undo ? 7000 : opts.err ? 7000 : 3000);
 }
 
 class ApiError extends Error {
@@ -632,7 +632,7 @@ async function undoLast(ask = true) {
 async function safeRestart() {
   const r = await guarded(() => api('safe_restart', { minutes: 3 }));
   if (!r) return;
-  toast('nfqws2 перезапущен. Проверяю сайты…');
+  toast(r.fixed ? `nfqws2 перезапущен (${r.fixed}). Проверяю сайты…` : 'nfqws2 перезапущен. Проверяю сайты…', r.fixed ? { long: true } : undefined);
   await loadState().catch(() => {});
 }
 
@@ -724,7 +724,8 @@ async function service(action) {
   if (!r) return;
   if (!r.ok) modal('Не получилось: ' + action, h('div', { class: 'stack modal-b' }, h('p', { class: 'sm muted', text: 'Вот что ответил скрипт запуска:' }), h('pre', { class: 'box', text: r.output || 'без вывода' })));
   await loadState().catch(() => {});
-  if (r.ok) toast(S.state?.running ? 'nfqws2 работает' : 'nfqws2 остановлен');
+  if (r.fixed) toast('Исправлено: ' + r.fixed, { long: true });
+  else if (r.ok) toast(S.state?.running ? 'nfqws2 работает' : 'nfqws2 остановлен');
   route();
 }
 
@@ -978,6 +979,10 @@ function problemItems() {
       text: (missing ? 'На роутере нет программы curl. ' : 'curl установлен, но не запускается — обычно ему не хватает библиотеки после обновления других пакетов. ')
         + `Подбор стратегий, проба «Обрыв на 16 КБ» и диагноз сайта открывают сайты именно ею: без неё ни одна стратегия не откроет сайт, и это выглядело бы как блокировка. Система ответила: «${st.curl}».`,
       href: PAGES.log[0], fix: curlInstallBtn(missing) });
+  }
+  if (st.running && st.pid_lost) {
+    items.push({ level: 'error', title: 'nfqws2 не перезапускается', text: `Скрипт запуска nfqws2 не видит работающий процесс (PID ${st.process?.pid}): его файл PID с ним не совпадает. Так бывает, если при перезапуске рядом работал ещё один nfqws2. Пока это так, «Перезапустить» и restart в консоли его не трогают — новый конфиг не применяется. Кнопка остановит процесс сама и запустит сервис заново.`,
+      href: PAGES.log[0], fix: btn('Перезапустить', safeRestart, 'small', 'refresh', { title: 'Остановить работающий nfqws2 и запустить заново, с проверкой сайтов и откатом' }) });
   }
   if (st.rivals?.length) {
     items.push({ level: 'warning', title: 'Работает другой обходчик', text: `${st.rivals.join(', ')} — он правит те же пакеты, что и nfqws2: стратегии мешают друг другу, результаты подбора ненадёжны. Оставьте что-то одно.`, href: PAGES.log[0] });

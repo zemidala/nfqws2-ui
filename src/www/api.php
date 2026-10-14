@@ -894,11 +894,70 @@ function findPid(): ?int
     return $pid;
   }
   foreach (glob('/proc/[0-9]*/cmdline') as $f) {
-    if (str_starts_with((string)@file_get_contents($f), NFQWS_BIN . "\0")) {
+    $cmd = (string)@file_get_contents($f);
+    if (str_starts_with($cmd, NFQWS_BIN . "\0") && !ownNfqws($cmd)) {
       return (int)basename(dirname($f));
     }
   }
   return null;
+}
+
+// Наши собственные короткие запуски nfqws2: проверочный (подбор), --dry-run (проверка конфига), сборка пакета QUIC
+function ownNfqws(string $cmd): bool
+{
+  return (bool)preg_match('/--qnum=' . TEST_QNUM . '\b|--dry-run|--intercept=0/', str_replace("\0", ' ', $cmd));
+}
+
+// Файл PID скрипта запуска не указывает на работающий nfqws2. Скрипт nfqws2-keenetic считает сервис запущенным,
+// только если самый новый процесс nfqws2 (pgrep -nf) — тот, что в файле. Если в момент перезапуска работал ещё
+// один nfqws2 (наш проверочный, --dry-run), restart старый процесс не останавливает, новый не может занять
+// очередь и выходит, файл PID пропадает — и дальше restart не помогает никогда. На OpenWrt сервисом управляет procd
+function pidLost(?int $pid): bool
+{
+  return ROOT !== '' && $pid !== null && (int)trim((string)@file_get_contents(PID_FILE)) !== $pid;
+}
+
+// Скрипт запуска (start | stop | restart) с проверкой итога. На Keenetic чиним «потерянный» процесс (см. pidLost):
+// останавливаем его сами и запускаем сервис заново. Возвращает [код, вывод, что сделали сами или null]
+function serviceRun(string $action): array
+{
+  $before = findPid();
+  $started = $before ? processInfo($before)['started'] : null;
+  exec(INIT_SCRIPT . " $action 2>&1", $out, $rc);
+  if (ROOT === '' || $action === 'start' && !pidLost($before)) {
+    return [$rc, implode("\n", $out), null];
+  }
+  // restart возвращается раньше, чем nfqws2 поднимется: ждём новый процесс до 3 с
+  $now = null;
+  for ($i = 0; $i < 6; $i++) {
+    usleep(500000);
+    $now = findPid();
+    if ($action === 'stop' ? $now === null : $now !== null && $now !== $before && !pidLost($now)) {
+      return [$rc, implode("\n", $out), null];
+    }
+  }
+  $stuck = $now !== null && ($action === 'stop' || ($now === $before && processInfo($now)['started'] === $started) || pidLost($now));
+  if (!$stuck) {
+    return [$rc, implode("\n", $out), null];
+  }
+  exec('kill ' . (int)$now . ' 2>/dev/null');
+  for ($i = 0; $i < 10 && is_dir("/proc/$now"); $i++) {
+    usleep(300000);
+  }
+  if (is_dir("/proc/$now")) {
+    exec('kill -9 ' . (int)$now . ' 2>/dev/null');
+    usleep(300000);
+  }
+  @unlink(PID_FILE);
+  $note = "скрипт запуска не видел работающий nfqws2 (PID $now, файл PID не совпадал) — процесс остановлен"
+    . ($action === 'stop' ? '' : ' и сервис запущен заново');
+  if ($action !== 'stop') {
+    exec(INIT_SCRIPT . ' start 2>&1', $out2, $rc);
+    $out = array_merge($out, $out2);
+  } else {
+    $rc = is_dir("/proc/$now") ? 1 : 0;   // скрипт ответил «не запущен», но остановили мы
+  }
+  return [$rc, implode("\n", $out), $note];
 }
 
 function processInfo(int $pid): array
@@ -2991,7 +3050,7 @@ function pendingSave(array $p): void
 function doRollback(array &$p, string $reason): void
 {
   $changed = restoreVersions($p['versions'], 'откат к рабочему состоянию: ' . $reason);
-  exec(INIT_SCRIPT . ' restart 2>&1');
+  serviceRun('restart');
   $p['state'] = 'rolled_back';
   $p['reason'] = $reason;
   $p['rolled_files'] = $changed;
@@ -5324,7 +5383,7 @@ function autoApply(string $host, array $steps, string $who): array
   if (!writeWithBackup(CONF_FILE, $new, "$who: профиль только для $host")) {
     return $done(false, 'fail', 'Не применено: не удалось записать конфиг.');
   }
-  exec(INIT_SCRIPT . ' restart 2>&1');
+  serviceRun('restart');
   sleep(5);
   $why = null;
   if (findPid() === null) {
@@ -5349,7 +5408,7 @@ function autoApply(string $host, array $steps, string $who): array
     // после отката сервис обязан работать: ждём запуска, при неудаче пробуем ещё раз
     $up = false;
     for ($try = 0; $try < 2 && !$up; $try++) {
-      exec(INIT_SCRIPT . ' restart 2>&1');
+      serviceRun('restart');
       for ($i = 0; $i < 10 && !($up = findPid() !== null); $i++) {
         sleep(1);
       }
@@ -6404,6 +6463,7 @@ function state(): array
     'in_sync' => array_column($expected, 'tokens') === array_column($profiles, 'args'),
     'restart_needed' => restartNeeded($proc),
     'restart_why' => $pid ? restartWhy($proc, $expected, $profiles) : [],
+    'pid_lost' => pidLost($pid),
     'conf_mtime' => @filemtime(CONF_FILE),
     'profiles' => $profiles,
     'lists' => listsInventory($profiles),
@@ -6712,6 +6772,9 @@ function reportText(array $sites, bool $hide, string $build): string
       . ($st['restart_needed'] || !$st['in_sync'] ? ' · конфиг изменён после запуска — нужен перезапуск' : '');
     foreach ($st['restart_why'] as $w) {
       $L[] = '  причина: ' . $w;
+    }
+    if (ROOT !== '') {
+      $L[] = 'файл PID: ' . ($st['pid_lost'] ? 'не совпадает с работающим nfqws2 (PID ' . $st['process']['pid'] . ', в файле: ' . (trim((string)@file_get_contents(PID_FILE)) ?: 'пусто или нет файла') . ') — скрипт запуска его не видит, перезапуск не сработает' : 'совпадает');
     }
   } else {
     $L[] = 'ОСТАНОВЛЕН. ' . $st['stop']['text'];
@@ -7437,9 +7500,9 @@ switch ($cmd) {
     $p = ['id' => bin2hex(random_bytes(4)), 'state' => 'checking', 'T' => $T, 'versions' => versionsAt($T), 'started' => time(),
       'deadline' => time() + $minutes * 60, 'before' => $before, 'checks' => null];
     pendingSave($p);
-    exec(INIT_SCRIPT . ' restart 2>&1', $out, $rc);
+    [$rc, $out, $fixed] = serviceRun('restart');
     exec('(env -i PATH=' . JOB_PATH . ' NFQWS_UI_CLI=guard php-cgi -q -f ' . escapeshellarg(__FILE__) . ' >/dev/null 2>&1 &)');
-    respond(['ok' => $rc === 0, 'output' => implode("\n", $out), 'files' => array_map('basename', array_keys($p['versions']))]);
+    respond(['ok' => $rc === 0, 'output' => $out, 'fixed' => $fixed, 'files' => array_map('basename', array_keys($p['versions']))]);
 
   case 'safe_confirm':
     $p = pendingGet();
@@ -8080,9 +8143,14 @@ switch ($cmd) {
     if (!in_array($action, ['start', 'stop', 'restart', 'enable'], true)) {
       fail('bad action');
     }
-    exec(INIT_SCRIPT . ' ' . $action . ' 2>&1', $out, $rc);
+    if ($action === 'enable') {
+      exec(INIT_SCRIPT . ' enable 2>&1', $o, $rc);
+      [$out, $fixed] = [implode("\n", $o), null];
+    } else {
+      [$rc, $out, $fixed] = serviceRun($action);
+    }
     usleep(500000);
-    respond(['ok' => $rc === 0, 'output' => implode("\n", $out)]);
+    respond(['ok' => $rc === 0, 'output' => $out, 'fixed' => $fixed]);
 
   case 'update_check':
     respond(updateCheck(!empty($in['force'])));
