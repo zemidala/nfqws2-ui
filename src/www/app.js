@@ -1329,7 +1329,7 @@ function overviewExtra() {
       kv('nfqws2-ui', 'v' + (st.ui?.version || '?'), u.available ? h('a', { class: 'chip ok', href: PAGES.about[0], text: `есть ${u.latest}` }) : null),
       kv('Конфиг', h('a', { class: 'mono', href: PAGES.raw[0], text: st.ui?.conf_file || 'nfqws2.conf' })),
       kv('Изменён', st.conf_mtime ? fmtAgo(st.now - st.conf_mtime) : '—'),
-      h('p', { class: 'sm' }, h('a', { href: '#/settings/readme', text: 'Справка' }), ' · ', h('a', { href: REPO + '/wiki/Home', target: '_blank', rel: 'noopener', text: 'инструкция' }), ' · ', h('a', { href: '#/settings/changelog', text: 'изменения по версиям' })));
+      h('p', { class: 'sm' }, h('a', { href: '#/settings/readme', text: 'Справка' }), ' · ', h('a', { href: REPO + '/wiki/nfqws2%E2%80%90ui', target: '_blank', rel: 'noopener', text: 'инструкция' }), ' · ', h('a', { href: '#/settings/changelog', text: 'изменения по версиям' })));
   out.picksReq = api('tests_history');
   out.changesReq = api('history_log', { limit: 6 });
   out.picksReq.then((r) => {
@@ -3473,7 +3473,7 @@ async function paneAbout(content) {
       row('Версия', h('b', { text: st.ui?.version || '?' }), BUILD.includes('-') ? h('span', { class: 'muted mono', title: 'Хеш файлов интерфейса, загруженных в браузер', text: '  сборка ' + BUILD.split('-').pop() }) : null),
       row('nfqws2', st.version ? 'v' + st.version : 'не определена'),
       row('Исходный код', link(REPO, REPO.replace('https://', ''))),
-      row('Описание и помощь', h('a', { href: '#/settings/readme', text: 'справка (README)' }), ' · ', link(REPO + '/wiki/Home', 'инструкция (Wiki)'), ' · ', h('a', { href: '#/settings/changelog', text: 'изменения по версиям' }), ' · ', link(REPO + '/discussions/categories/q-a', 'задать вопрос'), ' · ', link(REPO + '/issues/new/choose', 'сообщить о проблеме'), ' · ', link('https://t.me/nfqws2_ui', 'чат в Telegram')),
+      row('Описание и помощь', h('a', { href: '#/settings/readme', text: 'справка (README)' }), ' · ', link(REPO + '/wiki/nfqws2%E2%80%90ui', 'инструкция (Wiki)'), ' · ', h('a', { href: '#/settings/changelog', text: 'изменения по версиям' }), ' · ', link(REPO + '/discussions/categories/q-a', 'задать вопрос'), ' · ', link(REPO + '/issues/new/choose', 'сообщить о проблеме'), ' · ', link('https://t.me/nfqws2_ui', 'чат в Telegram')),
       row('Лицензия', 'MIT')),
     S.authEnabled ? panel('Вход', newTag('about:session'),
       row('Не выходить', h('select', { class: 'select', 'aria-label': 'Сколько не выходить без действий', onchange: async (e) => {

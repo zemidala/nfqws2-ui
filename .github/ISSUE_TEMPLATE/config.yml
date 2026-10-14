@@ -1,7 +1,7 @@
 blank_issues_enabled: false
 contact_links:
   - name: Инструкция (Wiki)
-    url: https://github.com/zemidala/nfqws2-ui/wiki/Home
+    url: https://github.com/zemidala/nfqws2-ui/wiki/nfqws2%E2%80%90ui
     about: Пошаговая инструкция со снимками и «Решение возможных проблем» — возможно, ответ уже там
   - name: Чат в Telegram
     url: https://t.me/nfqws2_ui

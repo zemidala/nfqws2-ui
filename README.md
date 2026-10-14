@@ -11,10 +11,10 @@
 
 [![Release](https://img.shields.io/github/v/release/zemidala/nfqws2-ui)](https://github.com/zemidala/nfqws2-ui/releases/latest)
 [![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
-[![Инструкция](https://img.shields.io/badge/%D0%B8%D0%BD%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%86%D0%B8%D1%8F-Wiki-ff6a14)](https://github.com/zemidala/nfqws2-ui/wiki/Home)
+[![Инструкция](https://img.shields.io/badge/%D0%B8%D0%BD%D1%81%D1%82%D1%80%D1%83%D0%BA%D1%86%D0%B8%D1%8F-Wiki-ff6a14)](https://github.com/zemidala/nfqws2-ui/wiki/nfqws2%E2%80%90ui)
 [![Telegram](https://img.shields.io/badge/Telegram-%D1%87%D0%B0%D1%82-26A5E4?logo=telegram&logoColor=white)](https://t.me/nfqws2_ui)
 
-**📖 [Пошаговая инструкция со снимками — в Wiki](https://github.com/zemidala/nfqws2-ui/wiki/Home)**: установка, «сайт не открывается» по шагам, все страницы интерфейса, решение проблем.
+**📖 [Пошаговая инструкция со снимками — в Wiki](https://github.com/zemidala/nfqws2-ui/wiki/nfqws2%E2%80%90ui)**: установка, «сайт не открывается» по шагам, все страницы интерфейса, решение проблем.
 
 ![Обзор](docs/screenshots/overview.png)
 
