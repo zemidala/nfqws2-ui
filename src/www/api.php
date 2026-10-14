@@ -2303,6 +2303,7 @@ function lintConf(array $raw, string $text): array
       }
       $n += count($lt);
     }
+    $pic = false;   // в этом профиле уже был per_instance_condition — у следующих шагов законны cond / cond_neg
     foreach ($toks as $i => $t) {
       if (isset($comment[$i])) {
         if ($comment[$i]) {
@@ -2323,6 +2324,7 @@ function lintConf(array $raw, string $text): array
         $add($var, $i, 'warning', "Имя профиля «{$val}»: допустимы буквы, цифры, «_», «-», «.», до 32 знаков — другие знаки в конфиге могут сломать запуск");
       }
       if ($name === 'new') {
+        $pic = false;
         if ($var !== 'NFQWS_ARGS_CUSTOM') {
           $add($var, $i, 'error', '--new можно использовать только в «Своих профилях» — init-скрипт не запустится', ['op' => 'remove', 'label' => 'Удалить --new']);
         } elseif ($i === 0 || $i === count($toks) - 1) {
@@ -2398,7 +2400,8 @@ function lintConf(array $raw, string $text): array
           }
           break;
         case 'lua-desync':
-          lintDesync($var, $i, $val, $funcs, $lua, $loadedLua, $blobs, $help, $add);
+          lintDesync($var, $i, $val, $funcs, $lua, $loadedLua, $blobs, $help, $add, $pic);
+          $pic = $pic || explode(':', (string)$val, 2)[0] === 'per_instance_condition';
           break;
       }
     }
@@ -2574,7 +2577,19 @@ function lintConf(array $raw, string $text): array
   return ['issues' => $issues, 'dry_run' => ['ok' => $dry['ok'], 'message' => $dry['message']]];
 }
 
-function lintDesync(string $var, int $i, string $val, array $funcs, array $lua, array $loadedLua, array $blobs, array $help, callable $add): void
+// Маскировки (fooling) nfqws первого zapret (--dpi-desync-fooling=…) и их запись в nfqws2. Значения — как у nfqws
+// по умолчанию: badseq сдвигал seq на -10000 и ack на -66000, ts — метку времени на -600000
+const NFQWS1_FOOLING = [
+  'md5sig' => 'tcp_md5',
+  'badseq' => 'tcp_seq=-10000:tcp_ack=-66000',
+  'datanoack' => 'tcp_flags_unset=ack',
+  'ts' => 'tcp_ts=-600000',
+  'hopbyhop' => 'ip6_hopbyhop',
+  'hopbyhop2' => 'ip6_hopbyhop2',
+  'destopt' => 'ip6_destopt',
+];
+
+function lintDesync(string $var, int $i, string $val, array $funcs, array $lua, array $loadedLua, array $blobs, array $help, callable $add, bool $pic = false): void
 {
   $parts = explode(':', $val);
   $fn = array_shift($parts);
@@ -2588,7 +2603,7 @@ function lintDesync(string $var, int $i, string $val, array $funcs, array $lua, 
     $add($var, $i, 'error', "Функция {$fn} из {$f['file']}, а этот файл не подключён через --lua-init",
       listFileExists(LUA_DIR . "/{$f['file']}") ? ['op' => 'append', 'var' => 'NFQWS_BASE_ARGS', 'tok' => '--lua-init=@' . LUA_DIR . "/{$f['file']}", 'label' => "Подключить {$f['file']}"] : null);
   }
-  $allowed = array_merge(array_keys($f['args']), $f['file_keys'], ['strategy', 'final']);
+  $allowed = array_merge(array_keys($f['args']), $f['file_keys'], ['strategy', 'final'], $pic ? ['cond', 'cond_neg'] : []);
   foreach ($f['std'] as $g) {
     $allowed = array_merge($allowed, array_keys($lua['std'][$g] ?? []));
   }
@@ -2600,16 +2615,25 @@ function lintDesync(string $var, int $i, string $val, array $funcs, array $lua, 
     $known = array_merge($known, array_keys($ff['args']), $ff['file_keys']);
   }
   $keys = [];
+  $stepKeys = array_map(fn($p) => explode('=', $p, 2)[0], $parts);   // все параметры шага: не предлагать то, что уже есть
   foreach ($parts as $p) {
     [$k, $v] = array_pad(explode('=', $p, 2), 2, null);
     $keys[$k] = $v;
     if ($k === '') {
       $add($var, $i, 'error', 'Пустой параметр — лишнее двоеточие', ['op' => 'remove_param', 'key' => '', 'label' => 'Убрать лишнее двоеточие']);
     } elseif (!in_array($k, $allowed, true)) {
-      if (in_array($k, $known, true)) {
+      if ($k === 'cond' || $k === 'cond_neg') {
+        $add($var, $i, 'warning', "«{$k}» действует только вместе с per_instance_condition — поставьте его шагом раньше в этом профиле, иначе nfqws2 параметр пропустит", ['op' => 'remove_param', 'key' => $k, 'label' => "Убрать $k"]);
+      } elseif (in_array($k, $known, true)) {
         $add($var, $i, 'warning', "У функции {$fn} параметр «{$k}» не описан — возможно, он не действует", ['op' => 'remove_param', 'key' => $k, 'label' => "Убрать $k"]);
+      } elseif (isset(NFQWS1_FOOLING[$k]) && $v === null) {
+        // название из nfqws первого zapret: заменяем по смыслу, а не на похожее по написанию (badseq ≠ badsum)
+        $to = array_values(array_filter(explode(':', NFQWS1_FOOLING[$k]), fn($x) => !in_array(explode('=', $x, 2)[0], $stepKeys, true)));
+        $add($var, $i, 'warning', "«{$k}» — название маскировки из nfqws первого zapret, nfqws2 его не знает и пропускает. В nfqws2 это "
+          . NFQWS1_FOOLING[$k] . (!$to ? ' — и оно в шаге уже есть' : (count($to) < count(explode(':', NFQWS1_FOOLING[$k])) ? ' (часть уже стоит в шаге)' : '')),
+          $to ? ['op' => 'rename_param', 'key' => $k, 'to' => implode(':', $to), 'label' => 'Заменить на ' . implode(':', $to)] : ['op' => 'remove_param', 'key' => $k, 'label' => "Убрать $k"]);
       } else {
-        $s = levenshteinBest($k, array_unique($known));
+        $s = levenshteinBest($k, array_values(array_diff(array_unique($known), $stepKeys)));
         $add($var, $i, 'warning', "Неизвестный параметр «{$k}»" . ($s ? " — может быть, {$s}?" : ''), $s ? ['op' => 'rename_param', 'key' => $k, 'to' => $s, 'label' => "Заменить на $s"] : ['op' => 'remove_param', 'key' => $k, 'label' => "Убрать $k"]);
       }
     }
