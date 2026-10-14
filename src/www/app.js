@@ -347,6 +347,7 @@ const FEATURES = [
   ['tg:log', '1.11.0', 'уведомления не теряются, когда Telegram недоступен, и журнал последних сообщений'],
   ['about:session', '1.11.0', 'срок входа: сколько не выходить из интерфейса («О программе» → «Вход»)'],
   ['pick:quic', '1.13.0', 'подбор стратегии для QUIC (HTTP/3, UDP 443) и проверка QUIC в диагнозе'],
+  ['look:wints', '1.15.0', 'напоминание про метки TCP в Windows можно скопировать и скрыть'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 // на сколько минорных версий функция старше текущей (у сборки до выпуска — меньше нуля)
@@ -962,9 +963,11 @@ function problemItems() {
   if (lint.dry_run && !lint.dry_run.ok) items.push({ level: 'error', title: 'nfqws2 не примет конфиг', text: lint.dry_run.message, href: '#/settings/raw' });
   for (const x of lint.issues) {
     if (x.msg.startsWith('nfqws2: ')) continue;
+    const winTs = x.msg.includes(WIN_TS_CMD);
+    if (winTs && getLook().hideWinTs) continue;
     const tok = x.var && x.tok != null ? st.conf_tokens?.[x.var]?.[x.tok] : null;
     const p = st.conf_profiles.find((cp) => cp.source?.source === x.var && profIssues(cp).includes(x));
-    items.push({ level: x.level, title: p ? `Профиль #${p.index} · ${profName(p)}` : (VAR_INFO[x.var]?.[0] || 'Конфиг'), text: x.msg.replace(/^Профиль #\d+: /, ''), code: tok, href: issueTarget(x), fix: fixButton(x) });
+    items.push({ level: x.level, title: p ? `Профиль #${p.index} · ${profName(p)}` : (VAR_INFO[x.var]?.[0] || 'Конфиг'), text: x.msg.replace(/^Профиль #\d+: /, ''), code: tok, href: issueTarget(x), fix: winTs ? winTsActions() : fixButton(x) });
   }
   if (st.curl) {
     const missing = /not found|No such file|не найден/i.test(st.curl);
@@ -1015,6 +1018,14 @@ async function clearLog(name) {
   const r = await guarded(() => api('log_clear', { name }), 'Журнал очищен');
   if (r) { S.state.logs = r.logs; updateSide(); }
   return !!r;
+}
+// Замечание «маскировка только через tcp_ts»: текст пункта — ссылка, команду из него не выделить.
+// Кто уже включил метки на своём Windows, скрывает пункт — в этом браузере, вернуть можно в «Оформлении»
+function winTsActions() {
+  return h('span', { class: 'row', style: 'gap:6px' },
+    btn('Копировать команду', () => copyText(WIN_TS_CMD), 'small', 'copy', { title: WIN_TS_CMD }),
+    btn('Не показывать', () => { setLook({ hideWinTs: true }); toast('Скрыто в этом браузере. Вернуть: Оформление → «Напоминать про метки TCP в Windows»'); updateSide(); }, 'small ghost', null,
+      { title: 'Метки TCP на компьютере уже включены — не напоминать в этом браузере' }));
 }
 function logActions(name, debug) {
   return h('span', { class: 'row', style: 'gap:6px' },
@@ -3465,7 +3476,9 @@ async function paneLook(content) {
   content.append(h('div', { class: 'vh' }, h('h1', { text: 'Оформление' })),
     panel(null, null,
       h('label', { class: 'row', style: 'align-items:flex-start' }, h('input', { type: 'checkbox', checked: !!look.simple, style: 'margin-top:3px', onchange: (e) => { setLook({ simple: e.target.checked }); renderShell(); route(); } }),
-        h('span', {}, h('b', { text: 'Упрощённый вид' }), h('br'), h('span', { class: 'sm muted', text: 'Боковое меню — шесть разделов, страницы раздела — вкладками над страницей; «Обзор» по умолчанию «Кратко»; обновить, HTTPS, GitHub и выход — под кнопкой «⋯». Для тех, кому полный вид кажется перегруженным. Функции те же.' })))),
+        h('span', {}, h('b', { text: 'Упрощённый вид' }), h('br'), h('span', { class: 'sm muted', text: 'Боковое меню — шесть разделов, страницы раздела — вкладками над страницей; «Обзор» по умолчанию «Кратко»; обновить, HTTPS, GitHub и выход — под кнопкой «⋯». Для тех, кому полный вид кажется перегруженным. Функции те же.' }))),
+      h('label', { class: 'row', style: 'align-items:flex-start' }, h('input', { type: 'checkbox', checked: !look.hideWinTs, style: 'margin-top:3px', onchange: (e) => { setLook({ hideWinTs: !e.target.checked }); updateSide(); } }),
+        h('span', {}, h('b', { text: 'Напоминать про метки TCP в Windows' }), ' ', newTag('look:wints'), h('br'), h('span', { class: 'sm muted', text: `Пункт в «Проблемах» у профиля, стратегия которого маскируется только через tcp_ts: в Windows такие стратегии работают, только если включены временные метки TCP (${WIN_TS_CMD}). Если на ваших компьютерах они уже включены, напоминание можно убрать.` })))),
     panel(null, null,
       h('fieldset', { class: 'looks' }, h('legend', { class: 'sm muted', text: 'Компоновка — как разложены разделы' }),
         lay('menu', 'Боковое меню', 'Все разделы списком слева, любой — в один клик.'),
