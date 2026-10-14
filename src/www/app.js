@@ -268,6 +268,7 @@ const confProf = (n) => S.state?.conf_profiles.find((p) => p.index === n);
 
 function profName(p) {
   const s = p.source;
+  if (p.name) return p.name;   // --name=… или --new=… в конфиге
   if (!s) return 'Профиль';
   if (s.source === 'NFQWS_ARGS_CUSTOM') return 'Свой профиль ' + s.part;
   if (s.source === 'NFQWS_ARGS_UDP') return 'UDP: игры, звонки';
@@ -301,7 +302,7 @@ function profIssues(p) {
   if (p.source.source !== 'NFQWS_ARGS_CUSTOM') return all.filter(mine);
   const toks = st.conf_tokens?.NFQWS_ARGS_CUSTOM || [];
   let part = 1;
-  const partOf = toks.map((t) => (t === '--new' ? part++ : part));
+  const partOf = toks.map((t) => (isNewArg(t) ? part++ : part));
   return all.filter((x) => mine(x) && (x.tok == null || partOf[x.tok] === p.source.part));
 }
 
@@ -347,6 +348,7 @@ const FEATURES = [
   ['tg:log', '1.11.0', 'уведомления не теряются, когда Telegram недоступен, и журнал последних сообщений'],
   ['about:session', '1.11.0', 'срок входа: сколько не выходить из интерфейса («О программе» → «Вход»)'],
   ['pick:quic', '1.13.0', 'подбор стратегии для QUIC (HTTP/3, UDP 443) и проверка QUIC в диагнозе'],
+  ['prof:name', '1.15.0', 'имя профиля (--name, --new=имя): видно в интерфейсе вместо «Свой профиль N»'],
   ['look:wints', '1.15.0', 'напоминание про метки TCP в Windows можно скопировать и скрыть'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
@@ -593,7 +595,7 @@ function updateChrome() {
   if (repoLink) repoLink.title = `nfqws2-ui ${st.ui?.version || ''} — исходный код на GitHub. Версия и обновления: Настройки → О программе`;
   document.getElementById('banner').replaceChildren(
     need ? h('div', { class: 'banner' }, h('div', { class: 'banner-in' },
-      h('span', { text: 'Конфиг изменён после запуска — изменения вступят в силу после перезапуска.' }),
+      h('span', { text: 'Конфиг изменён после запуска — изменения вступят в силу после перезапуска.', title: (st.restart_why || []).join('; ') }),
       btn('Перезапустить с проверкой', safeRestart, 'warn small', 'refresh'))) : []);
   // Плашка обновления — отдельно: #banner на широком экране скрыт (там «нужен перезапуск» показывает колонка слева)
   document.getElementById('upd-banner').replaceChildren(
@@ -890,7 +892,8 @@ function renderSideService(el) {
       btn('Обновить', () => route(true), 'small ghost', 'refresh', { title: 'Обновить данные на странице' })),
     h('p', { class: 'muted sm num', text: [st.version && 'nfqws2 v' + st.version, st.running && st.process.started && 'запущен ' + fmtAgo(st.now - st.process.started), st.running && st.process.rss_kb && (st.process.rss_kb / 1024).toFixed(1).replace('.', ',') + ' МБ'].filter(Boolean).join(' · ') }),
     !st.running && st.stop ? stopNote(st.stop) : null,
-    need && !pendingActive() ? notice('warn', 'Нужен перезапуск', 'Конфиг изменён после запуска nfqws2. После перезапуска интерфейс проверит сайты и откатит изменения, если вы их не подтвердите.', btn('Перезапустить с проверкой', safeRestart, 'small warn')) : null,
+    need && !pendingActive() ? notice('warn', 'Нужен перезапуск', 'Конфиг изменён после запуска nfqws2. После перезапуска интерфейс проверит сайты и откатит изменения, если вы их не подтвердите.'
+      + (st.restart_why?.length ? ' Что отличается: ' + st.restart_why.join('; ') + '.' : ''), btn('Перезапустить с проверкой', safeRestart, 'small warn')) : null,
     st.rollback?.files.length && !pendingActive() ? h('div', { class: 'row sm' },
       h('span', { class: 'muted', text: `С ${fmtDate(st.rollback.since)} изменено: ${st.rollback.files.join(', ')}` }),
       btn('Вернуть рабочее состояние', rollbackToWorking, 'small ghost', 'history', { title: 'Вернуть файлы к моменту последнего запуска или подтверждения и перезапустить nfqws2' })) : null);
@@ -1548,7 +1551,7 @@ async function viewSite(main, r) {
 // ============ редактор с подсветкой ============
 
 function argPieces(tok) {
-  if (tok === '--new') return [[tok, 'tk-new']];
+  if (isNewArg(tok)) return [[tok, 'tk-new']];
   if (tok[0] === '#') return [[tok, 'tk-comment']];
   if (!tok.startsWith('--')) return [[tok, 'tk-bad']];
   const eq = tok.indexOf('=');
@@ -2340,7 +2343,10 @@ function listTargetVar(p, opt) {
   };
 }
 
-const splitParts = (toks) => toks.reduce((acc, t) => { if (t === '--new') acc.push([]); else acc[acc.length - 1].push(t); return acc; }, [[]]);
+// --new или --new=имя — начало следующего профиля; имя из --new=имя переходит в профиль как --name=имя
+// (для nfqws2 одно и то же; при сохранении «Своих профилей» пишется --new + --name=имя). На сервере — splitNew
+const isNewArg = (t) => t === '--new' || t.startsWith('--new=');
+const splitParts = (toks) => toks.reduce((acc, t) => { if (isNewArg(t)) acc.push(t.length > 6 ? ['--name=' + t.slice(6)] : []); else acc[acc.length - 1].push(t); return acc; }, [[]]);
 const joinParts = (parts) => parts.map((p) => p.join('\n')).join('\n--new\n');
 
 // Сохранение переменных конфига с проверкой; при ошибках предлагает сохранить всё равно (кроме фатальных)
@@ -2513,10 +2519,11 @@ function splitTok(t) {
   return eq < 0 ? [t.replace(/^--/, ''), null] : [t.slice(2, eq), t.slice(eq + 1)];
 }
 function parseModel(tokens) {
-  const m = { tcp: null, udp: null, l7: null, filters: [], lists: [], seq: [] };
+  const m = { name: '', tcp: null, udp: null, l7: null, filters: [], lists: [], seq: [] };
   for (const t of tokens) {
     const [n, v] = t.startsWith('--') ? splitTok(t) : [null, null];
-    if (n === 'filter-tcp') m.tcp = v ? v.split(',') : [];
+    if (n === 'name') m.name = v || '';
+    else if (n === 'filter-tcp') m.tcp = v ? v.split(',') : [];
     else if (n === 'filter-udp') m.udp = v ? v.split(',') : [];
     else if (n === 'filter-l7') m.l7 = v ? v.split(',') : [];
     else if (n && n.startsWith('filter-')) m.filters.push({ tok: t });
@@ -2535,6 +2542,7 @@ function serializeModel(m) {
   const tokens = [];
   const owners = [];
   const push = (t, o) => { tokens.push(t); owners.push(o); };
+  if (m.name) push('--name=' + m.name, 'name');
   if (m.tcp && m.tcp.length) push('--filter-tcp=' + m.tcp.join(','), 'tcp');
   if (m.udp && m.udp.length) push('--filter-udp=' + m.udp.join(','), 'udp');
   if (m.l7 && m.l7.length) push('--filter-l7=' + m.l7.join(','), 'l7');
@@ -2581,11 +2589,16 @@ async function viewProfile(content, index, r) {
   let helpInfo = null;
   let helpIss = null;
 
+  // Номер первого аргумента профиля в переменной — по нему замечания проверки привязываются к полям.
+  // Замечания из состояния считаны с конфига как есть: там «--new=имя» — один аргумент, а в модели это
+  // «--name=имя» в начале профиля (splitParts). После своей проверки (relint) текст уже записан как --new + --name
+  let issuesRaw = true;
   const mainOffset = () => {
     if (!isCustom) return 0;
+    const named = issuesRaw ? tokensOf(v.NFQWS_ARGS_CUSTOM).filter(isNewArg).map((t) => t !== '--new') : [];
     let off = 0;
-    for (let i = 0; i < s.part - 1; i++) off += customParts[i].length + 1;
-    return off;
+    for (let i = 0; i < s.part - 1; i++) off += customParts[i].length + 1 - (named[i - 1] ? 1 : 0);
+    return off - (named[s.part - 2] ? 1 : 0);
   };
   const buildVars = () => {
     const out = {};
@@ -2659,6 +2672,7 @@ async function viewProfile(content, index, r) {
     try {
       const res = await api('lint', { vars: buildVars() });
       dryRun = res.dry_run;
+      issuesRaw = false;
       const mainVar = s.source;
       issues = res.issues.filter((x) => x.var === mainVar && (!x.msg.startsWith('Профиль #') || x.msg.startsWith(`Профиль #${index}:`)));
       if (isCustom) {
@@ -2690,7 +2704,7 @@ async function viewProfile(content, index, r) {
     if (view === 'text') { drawText(); return; }
     const oi = ownerIssues();
     body.replaceChildren(h('div', { class: 'two' }, h('div', { class: 'panel' },
-      groupWhen(oi), groupWho(oi), groupWhat(oi)), helpBox));
+      groupName(oi), groupWhen(oi), groupWho(oi), groupWhat(oi)), helpBox));
     renderHelp(helpBox, helpInfo, helpIss);
   }
 
@@ -2715,6 +2729,26 @@ async function viewProfile(content, index, r) {
     renderHelp(help, null);
     body.replaceChildren(h('div', { class: 'panel' }, textEd.el, sug.el, issBox, help,
       h('p', { class: 'sm muted', text: 'По одному аргументу на строку. Tab — принять подсказку. Правки здесь и в конструкторе — одно и то же.' })));
+  }
+
+  // --- Имя: --name=… (nfqws2 пишет его в журнал; интерфейс показывает вместо «Свой профиль N»).
+  // У профилей из общей переменной (NFQWS_ARGS с IPSET и EXTRA_ARGS) имя досталось бы обоим — там поля нет
+  function groupName(oi) {
+    if (s.with) return null;
+    const NAME_RE = /^[\p{L}\p{N}_.-]{0,32}$/u;
+    const hint = h('div', { class: 'hint', style: 'grid-column:2' });
+    const showHint = (val) => {
+      const ok = NAME_RE.test(val);
+      hint.className = 'hint' + (ok ? '' : ' error');
+      hint.replaceChildren(ok ? h('span', { class: 'sm muted', text: 'Необязательно. Видно в интерфейсе вместо стандартного названия и в журнале nfqws2. Буквы, цифры, «_», «-», «.» — без пробелов, до 32 знаков.' })
+        : [levelIcon('error'), ' Пробелы, кавычки и другие знаки в имени сломают запуск — только буквы, цифры, «_», «-», «.», до 32 знаков.']);
+    };
+    const inp = h('input', { class: 'input', style: 'max-width:260px', value: model.name, placeholder: VAR_INFO[s.source][0] + (isCustom ? ' ' + s.part : ''), maxlength: 32,
+      'data-fk': 'name', 'aria-label': 'Имя профиля', autocapitalize: 'off', spellcheck: 'false',
+      oninput: (e) => { const val = e.target.value.trim(); showHint(val); if (NAME_RE.test(val)) { model.name = val; touch(); } } });
+    showHint(model.name);
+    return h('div', { class: 'group' }, h('div', { class: 'frow' }, h('span', { class: 'lbl' }, 'Имя ', newTag('prof:name')), inp), hint,
+      (oi.get('name') || []).map((x) => h('div', { class: 'hint ' + x.level, style: 'grid-column:2' }, levelIcon(x.level), ' ', x.msg)));
   }
 
   // --- «Когда срабатывает» ---

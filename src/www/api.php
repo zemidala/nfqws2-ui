@@ -1003,12 +1003,19 @@ function confSetVar(string $text, string $name, string $value): string
   return rtrim($text, "\n") . "\n$name=$quoted\n";
 }
 
+// --new или --new=имя — начало следующего профиля. Имя из --new=имя переносится в профиль как --name=имя:
+// для nfqws2 это одно и то же, а профиль несёт своё имя с собой (в app.js — splitParts, так же)
+function isNewArg(string $a): bool
+{
+  return $a === '--new' || str_starts_with($a, '--new=');
+}
+
 function splitNew(array $args): array
 {
   $parts = [[]];
   foreach ($args as $a) {
-    if ($a === '--new') {
-      $parts[] = [];
+    if (isNewArg($a)) {
+      $parts[] = strlen($a) > 6 ? ['--name=' . substr($a, 6)] : [];
     } else {
       $parts[count($parts) - 1][] = $a;
     }
@@ -1159,7 +1166,7 @@ function buildProfile(int $index, array $args): array
   $p = ['index' => $index, 'args' => $args, 'tcp' => null, 'udp' => null, 'l7' => null,
     'hostlists' => [], 'hostlist_excludes' => [], 'hostlist_domains' => [], 'hostlist_exclude_domains' => [],
     'ipsets' => [], 'ipset_excludes' => [], 'ipset_ips' => [], 'ipset_exclude_ips' => [],
-    'autolist' => null, 'payloads' => [], 'desync' => [], 'other' => []];
+    'autolist' => null, 'payloads' => [], 'desync' => [], 'other' => [], 'name' => null];
   foreach ($args as $a) {
     $name = optName($a);
     $val = str_contains($a, '=') ? substr($a, strpos($a, '=') + 1) : '';
@@ -1177,6 +1184,7 @@ function buildProfile(int $index, array $args): array
       case 'ipset-ip': array_push($p['ipset_ips'], ...explode(',', $val)); break;
       case 'ipset-exclude-ip': array_push($p['ipset_exclude_ips'], ...explode(',', $val)); break;
       case 'payload': $p['payloads'][] = $val; break;
+      case 'name': $p['name'] = $val !== '' ? $val : null; break;
       case 'lua-desync':
         $fn = explode(':', $val, 2);
         $p['desync'][] = ['fn' => $fn[0], 'params' => $fn[1] ?? '', 'payload' => end($p['payloads']) ?: null];
@@ -2252,6 +2260,9 @@ function lintConf(array $raw, string $text): array
       }
       $name = substr(explode('=', $t, 2)[0], 2);
       $val = str_contains($t, '=') ? substr($t, strpos($t, '=') + 1) : null;
+      if (($name === 'new' || $name === 'name') && $val !== null && !preg_match('/^[\p{L}\p{N}_.-]{1,32}$/u', $val)) {
+        $add($var, $i, 'warning', "Имя профиля «{$val}»: допустимы буквы, цифры, «_», «-», «.», до 32 знаков — другие знаки в конфиге могут сломать запуск");
+      }
       if ($name === 'new') {
         if ($var !== 'NFQWS_ARGS_CUSTOM') {
           $add($var, $i, 'error', '--new можно использовать только в «Своих профилях» — init-скрипт не запустится', ['op' => 'remove', 'label' => 'Удалить --new']);
@@ -2352,7 +2363,7 @@ function lintConf(array $raw, string $text): array
           $tok = $i;
           break;
         }
-        if ($t === '--new') {
+        if (isNewArg($t)) {
           $parts++;
         }
       }
@@ -6338,6 +6349,41 @@ function restartNeeded(?array $proc): bool
   return false;
 }
 
+// Почему «нужен перезапуск» — для отчёта и подсказки у плашки: какой файл новее процесса или какой профиль
+// в конфиге не совпадает с работающим nfqws2
+function restartWhy(?array $proc, array $expected, array $profiles): array
+{
+  $why = [];
+  if ($proc && $proc['started']) {
+    foreach (array_merge([CONF_FILE], array_values(luaFiles())) as $f) {
+      $m = @filemtime($f);
+      if ($m > $proc['started'] + 2) {
+        $why[] = basename($f) . ' изменён через ' . ($m - $proc['started']) . ' с после запуска' . ($m > time() + 60 ? ' (время файла в будущем — часы роутера?)' : '');
+      }
+    }
+  }
+  $exp = array_column($expected, 'tokens');
+  $run = array_column($profiles, 'args');
+  if (count($exp) !== count($run)) {
+    $why[] = 'профилей в конфиге ' . count($exp) . ', у работающего nfqws2 ' . count($run);
+  }
+  foreach ($exp as $i => $e) {
+    $r = $run[$i] ?? null;
+    if ($r === null || $r === $e) {
+      continue;
+    }
+    $a = array_values(array_diff($e, $r));
+    $b = array_values(array_diff($r, $e));
+    $cut = fn($x) => strlen($x) > 60 ? substr($x, 0, 57) . '...' : $x;
+    $why[] = 'профиль #' . ($i + 1) . ' не совпадает' . ($a ? '; только в конфиге: ' . implode(' ', array_map($cut, array_slice($a, 0, 3))) : '')
+      . ($b ? '; только в работе: ' . implode(' ', array_map($cut, array_slice($b, 0, 3))) : '') . (!$a && !$b ? '; другой порядок аргументов' : '');
+    if (count($why) >= 4) {
+      break;
+    }
+  }
+  return $why;
+}
+
 function state(): array
 {
   $seen = seenInfo();   // первым: до того, как состояние само создаст файлы, по которым видно «уже пользовались»
@@ -6357,6 +6403,7 @@ function state(): array
     'globals' => $globals,
     'in_sync' => array_column($expected, 'tokens') === array_column($profiles, 'args'),
     'restart_needed' => restartNeeded($proc),
+    'restart_why' => $pid ? restartWhy($proc, $expected, $profiles) : [],
     'conf_mtime' => @filemtime(CONF_FILE),
     'profiles' => $profiles,
     'lists' => listsInventory($profiles),
@@ -6663,6 +6710,9 @@ function reportText(array $sites, bool $hide, string $build): string
   if ($st['running']) {
     $L[] = 'работает' . (!empty($st['process']['started']) ? ', запущен ' . ldate('Y-m-d H:i', (int)$st['process']['started']) : '')
       . ($st['restart_needed'] || !$st['in_sync'] ? ' · конфиг изменён после запуска — нужен перезапуск' : '');
+    foreach ($st['restart_why'] as $w) {
+      $L[] = '  причина: ' . $w;
+    }
   } else {
     $L[] = 'ОСТАНОВЛЕН. ' . $st['stop']['text'];
     foreach ($st['stop']['log'] as $l) {
