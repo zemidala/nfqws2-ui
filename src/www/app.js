@@ -3565,7 +3565,7 @@ async function viewMonitor(main) {
   const add = h('input', { class: 'input mono grow', id: 'mon-add', placeholder: 'добавить сайт, например rutracker.org', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Добавить сайт' });
   const interval = h('select', { class: 'select', 'aria-label': 'Как часто' }, [10, 30, 60, 180, 720].map((n) => h('option', { value: n, text: n < 60 ? `каждые ${n} мин` : `каждые ${n / 60} ч`, selected: n === cfg.interval })));
   const enabled = h('input', { type: 'checkbox', id: 'mon-on', checked: cfg.enabled });
-  const listBox = h('div', { class: 'stack mon-list', style: 'gap:0' });
+  const listBox = h('div', { class: 'stack mon-list' });   // промежутки — в app.css (.mon-list): на широком экране между колонками свой
   const nextInfo = h('p', { class: 'sm muted' });
   const checking = new Set();
   const save = async (extra = {}) => guarded(() => api('monitor_set', { sites, interval: Number(interval.value), enabled: enabled.checked, ...extra }));
