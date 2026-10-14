@@ -182,7 +182,7 @@ const base = (p) => String(p).split('/').pop();
 const debounce = (fn, ms) => { let t; const d = (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; d.flush = (...a) => { clearTimeout(t); fn(...a); }; return d; };
 const worst = (issues) => (issues || []).reduce((w, x) => (LEVEL_RANK[x.level] > (LEVEL_RANK[w] || 0) ? x.level : w), null);
 // «\» в конце строки — перенос значения по строкам (оболочка его убирает), а не параметр
-const tokensOf = (s) => (s || '').replace(/\\\r?\n/g, ' ').trim().split(/\s+/).filter(Boolean);
+const tokensOf = (s) => (s || '').replace(/\\[ \t]*\r?\n/g, ' ').trim().split(/\s+/).filter(Boolean);
 
 function toast(text, opts = {}) {
   const t = h('div', { class: 'toast' + (opts.err ? ' err' : ''), role: opts.err ? 'alert' : 'status' }, h('span', { text }));
