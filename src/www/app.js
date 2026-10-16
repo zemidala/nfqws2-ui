@@ -1109,16 +1109,20 @@ function createCheck() {
     recentAdd(res.host);
     drawRecent();
     const probeBox = h('div', {}, spinner('Открываю сайт с роутера…'));
+    const routesEl = routesBlock(res);
     out.replaceChildren(
       h('div', {}, h('h3', { text: res.host }), h('div', { class: 'sm muted', text: res.ips.length ? 'IP: ' + res.ips.slice(0, 3).join(', ') + (res.ips.length > 3 ? ` +${res.ips.length - 3}` : '') : 'IP не определился' })),
       res.podkop?.proxy ? notice('info', 'Идёт через podkop (прокси на VPS)', 'Для клиентов сети этот сайт уходит в туннель podkop, nfqws2 видит только соединение до сервера прокси. Проверка ниже — с самого роутера, мимо podkop.') : null,
-      probeBox, routesBlock(res), actionsBlock(res),
+      probeBox, routesEl, actionsBlock(res),
       h('div', { class: 'row' }, btn('Подробный диагноз', () => go(diagHref(res.host)), 'small', 'search', { title: 'По шагам: DNS, блокировка по имени или по адресу, заморозка — и поможет ли подбор' }),
         btn('Подобрать стратегию', () => go(pickHref(res.host)), 'small', 'tests'),
         h('span', { class: 'grow' }), btn('Свернуть', () => { collapse(); input.value = ''; }, 'small ghost', 'up')));
     shown = res.host;
     const pr = await api('probe', { host: res.host }).catch((e) => ({ ok: false, reason: e.message }));
-    if (my === seq) probeBox.replaceChildren(...[probeVerdict(res, pr), !pr.ok ? policyNote() : null].filter(Boolean));
+    if (my !== seq) return;
+    probeBox.replaceChildren(...[probeVerdict(res, pr), !pr.ok && !pr.dns ? policyNote() : null].filter(Boolean));
+    // адрес подменён — маршрут через профили по настоящему адресу
+    if (pr.dns && pr.routes) routesEl.replaceWith(h('div', {}, h('p', { class: 'sm muted', text: `Маршрут — по настоящему адресу ${pr.dns.real[0]}:` }), routesBlock({ ...res, routes: pr.routes })));
   }
   const el = h('section', { class: 'blk' },
     h('div', { class: 'blk-h' }, h('h2', { text: 'Проверить сайт' }), closeBtn),
@@ -1146,8 +1150,24 @@ function checkHost(host) {
 const isFreeze = (reason) => !!reason && reason.includes('на объёме');
 const FREEZE_HINT = 'Похоже на ограничение ТСПУ «16-20 КБ»: соединения с зарубежными хостингами (Hetzner, DigitalOcean, OVH, Contabo…) зависают после ~16–20 КБ — маленькие страницы открываются, остальное нет. Обычные стратегии его не снимают, но иногда помогает много фейков с разрешённым именем — это пробует подбор с уточнением. Если не поможет и он — нужен VPN или прокси. Проверить провайдера можно чекером hyperion-cs.github.io/dpi-checkers/ru/tcp-16-20.';
 
+// Инструкция: как включить защищённый DNS в роутере
+const wikiDns = () => REPO + '/wiki/' + encodeURIComponent('11.-Решение-возможных-проблем') + '#' + encodeURIComponent('13-dns-роутера-подменяет-адрес-заглушка-провайдера');
+
+// DNS роутера отдаёт не тот адрес (обычно заглушку провайдера): стратегии nfqws2 тут ни при чём
+function dnsSpoofNotice(sp) {
+  const sys = sp.system.join(', ');
+  const real = sp.real.slice(0, 2).join(', ');
+  return notice(sp.real_ok ? 'warn' : 'bad', 'Не открывается: DNS роутера подменяет адрес',
+    `Роутер получил ${sys}` + (sp.isp ? ' — это сеть вашего провайдера, похоже на заглушку' : '') + `, а защищённый DNS отвечает ${real}. `
+    + (sp.real_ok ? `По настоящему адресу сайт через nfqws2 открывается (HTTP ${sp.real_code}, ${sp.real_ms} мс), так что стратегия ни при чём. Устройства, которые берут адреса у роутера, тоже получают неверный адрес.`
+      : `По настоящему адресу тоже не открывается: ${sp.real_reason}. Сначала включите защищённый DNS и проверьте ещё раз; не откроется — подберите стратегию.`)
+    + ' Включите в роутере DNS-over-HTTPS или DNS-over-TLS.',
+    h('a', { class: 'btn small', href: wikiDns(), target: '_blank', rel: 'noopener' }, 'Как включить защищённый DNS'));
+}
+
 function probeVerdict(res, pr) {
   const p = res.routes.https.profile ? prof(res.routes.https.profile) : null;
+  if (pr.dns) return dnsSpoofNotice(pr.dns);
   if (pr.ok) return notice('ok', 'Открывается', `HTTP ${pr.code}, ${pr.ms} мс.` + (p ? ` HTTPS — профиль #${p.index}.` : ' nfqws2 его не трогает — и не нужно.'));
   if (pr.reason && pr.reason.includes('DNS')) return notice('warn', 'Не открывается: ' + pr.reason, 'Проблема DNS, а не DPI — списки nfqws2 тут не помогут.');
   if (isFreeze(pr.reason)) return notice('bad', 'Открывается частично: ' + pr.reason, FREEZE_HINT + (p ? ` Сейчас HTTPS идёт через профиль #${p.index}.` : ''));
@@ -1439,7 +1459,7 @@ async function viewDiag(main, r, bare = false) {
         nxdomain: d.doh_answered ? 'Такого имени нет — ни у роутера, ни у защищённого DNS.' : 'Роутер адрес не нашёл, а защищённый DNS недоступен — сверить не с чем.',
         no_system: `Роутер адрес не получил, а защищённый DNS отвечает: ${ref}.`,
         podkop: `Роутер отдаёт служебный адрес podkop (${sys}): сайт уходит в туннель. Настоящий адрес — ${ref}.`,
-        fake: `Роутер получил ${sys} — это не адрес сайта. Защищённый DNS отвечает: ${ref}.`,
+        fake: `Роутер получил ${sys} — это не адрес сайта (часто так выглядит заглушка провайдера). Защищённый DNS отвечает: ${ref}. Включите в роутере DNS-over-HTTPS или DNS-over-TLS — иначе устройства сети получают тот же неверный адрес.`,
         differs: `Роутер получил ${sys}, защищённый DNS — ${ref}. У больших сетей ответы различаются; решит запрос к сайту.`,
         unverified: `Адрес ${sys}. Сверить не с чем: защищённый DNS ${d.doh_answered ? 'такого имени не знает' : 'недоступен'}.`,
       }[d.status]);

@@ -1653,10 +1653,11 @@ function policyProbeOpts(): array
   return [CURLOPT_LOCALPORT => $from, CURLOPT_LOCALPORTRANGE => $hi - $from + 1];
 }
 
-function volumeFrozen(string $url): bool
+function volumeFrozen(string $url, array $resolve = []): bool
 {
   $ch = curl_init($url . (str_contains($url, '?') ? '&' : '?') . 't=' . mt_rand());
   curl_setopt_array($ch, [
+    CURLOPT_RESOLVE => $resolve,
     CURLOPT_POST => true,
     CURLOPT_POSTFIELDS => random_bytes(VOLUME_BYTES),   // случайные данные — чтобы не сжимались
     CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
@@ -1678,12 +1679,25 @@ function volumeFrozen(string $url): bool
   return $frozen;
 }
 
-function probe(string $host): array
+// Каким профилем пойдёт сайт по HTTPS, QUIC и HTTP при этих адресах
+function checkRoutes(array $profiles, string $host, array $ips, ListCache $cache): array
+{
+  return [
+    'https' => matchRoute($profiles, $host, $ips, 'tcp', 443, 'tls', $cache),
+    'quic' => matchRoute($profiles, $host, $ips, 'udp', 443, 'quic', $cache),
+    'http' => matchRoute($profiles, $host, $ips, 'tcp', 80, 'http', $cache),
+  ];
+}
+
+// $ip — открыть по этому адресу, а не по ответу DNS роутера (проверка «по настоящему адресу» при подмене DNS)
+function probe(string $host, ?string $ip = null): array
 {
   $ch = curl_init('https://' . $host . '/');
   $code = null;
   $got = 0;
+  $resolve = $ip !== null ? ["$host:443:$ip"] : [];
   curl_setopt_array($ch, [
+    CURLOPT_RESOLVE => $resolve,
     // по IPv4, как подбор и диагноз: маршрут через профили считается для IPv4, а при IPv6 от провайдера запрос ушёл бы
     // по нему — мимо стратегии, если nfqws2 не настроен на IPv6 (в подборе сайт открывается, здесь — «тайм-аут»)
     CURLOPT_IPRESOLVE => CURL_IPRESOLVE_V4,
@@ -1717,7 +1731,7 @@ function probe(string $host): array
     return ['ok' => false, 'code' => $code, 'ms' => $ms, 'reason' => REASON_FREEZE];
   }
   if ($code !== null) {
-    $frozen = $got < VOLUME_SMALL && volumeFrozen('https://' . $host . '/');
+    $frozen = $got < VOLUME_SMALL && volumeFrozen('https://' . $host . '/', $resolve);
     return ['ok' => !$frozen, 'code' => $code, 'ms' => $ms, 'reason' => $frozen ? REASON_FREEZE : null];
   }
   $reason = match ($errno) {
@@ -3216,6 +3230,9 @@ function monitorRun(bool $force, ?array $only = null): ?array
   $changes = [];
   foreach ($only !== null ? array_values(array_intersect($cfg['sites'], $only)) : $cfg['sites'] as $host) {
     $r = probe($host);
+    if (!$r['ok'] && ($sp = dnsSpoof($host))) {
+      $r['reason'] = dnsSpoofReason($sp);   // по этой строке автоподбор поймёт, что стратегия ни при чём
+    }
     $hist = $data['sites'][$host] ?? [];
     $prevOk = $hist ? end($hist)[1] : null;
     $hist[] = [time(), $r['ok'] ? 1 : 0, $r['ms'], $r['reason']];
@@ -5209,7 +5226,8 @@ function autoTick(): void
     // сайт «не открывается» всегда, поломки стратегии за этим нет
     $skip = $policyOnly ? 'nfqws2 обрабатывает только устройства политики доступа, запросы роутера идут мимо него — мониторинг не показывает, работает ли обход'
       : ($massive ? 'не открывается больше половины сайтов мониторинга — похоже на обрыв связи, а не на блокировку'
-      : (findPid() === null ? 'nfqws2 не запущен — подбирать стратегию бессмысленно' : null));
+      : (findPid() === null ? 'nfqws2 не запущен — подбирать стратегию бессмысленно'
+      : (str_starts_with((string)(end($mon['sites'][$h])[3] ?? ''), 'DNS роутера отдаёт') ? 'DNS роутера подменяет адрес сайта — стратегия тут не поможет, нужен защищённый DNS (DoH/DoT) в настройках роутера' : null)));
     if ($skip !== null) {
       // связь или сервис вернутся — попробуем на следующем проходе; в журнал пишем один раз
       if (($d['log'][0]['host'] ?? '') !== $h || ($d['log'][0]['kind'] ?? '') !== 'skip') {
@@ -5835,14 +5853,78 @@ function diagDns(string $host): array
     $status = 'podkop';
   } elseif (array_intersect($system, $ref)) {
     $status = 'ok';
-  } elseif (!array_filter($system, fn($ip) => !ipReserved($ip))) {
-    $status = 'fake';
+  } elseif (!array_filter($system, fn($ip) => !ipReserved($ip)) || ipIspOwned($system[0])) {
+    $status = 'fake';   // «серый» адрес или адрес из сети провайдера — заглушка
   } else {
     $status = 'differs';   // у CDN ответы разным резолверам отличаются — решит запрос к сайту
   }
   $useRef = in_array($status, ['no_system', 'podkop', 'fake'], true);
   return ['status' => $status, 'system' => $system, 'ref' => $ref, 'doh' => $doh, 'doh_answered' => $answered, 'podkop' => $podkop,
     'ips' => array_slice($useRef ? $ref : $system, 0, 3), 'alt' => $status === 'differs' ? array_slice($ref, 0, 2) : []];
+}
+
+// Адрес из сети провайдера (его AS)? Так выглядит заглушка, которую DNS провайдера отдаёт вместо заблокированного сайта.
+// null — не узнать (AS провайдера не определилась, RIPEstat не ответил). Ответы RIPEstat помним сутки
+function ipIspOwned(string $ip): ?bool
+{
+  if (!isIp4($ip) || ipReserved($ip)) {
+    return null;
+  }
+  $my = myAsn(true);
+  if (!$my) {
+    return null;
+  }
+  $file = CACHE_DIR . '/ip-asn.json';
+  $c = json_decode((string)@file_get_contents($file), true);
+  $c = is_array($c) ? array_filter($c, fn($e) => time() - $e[1] < 86400) : [];
+  if (!isset($c[$ip])) {
+    $d = ripe('network-info', $ip, 8);
+    if ($d === null) {
+      return null;
+    }
+    $c[$ip] = [(int)($d['asns'][0] ?? 0), time()];
+    @mkdir(CACHE_DIR, 0700, true);
+    @file_put_contents($file, json_encode($c));
+  }
+  return $c[$ip][0] === $my;
+}
+
+// Сайт не открылся: не подменяет ли DNS роутера адрес. Сверка с защищённым DNS; если адреса разные — открываем сайт
+// через nfqws2 по настоящему адресу. Подмена — адрес роутера из сети провайдера или по настоящему адресу сайт открывается
+// (тогда дело не в стратегии). null — подмены не видно. Только для имён и только после неудачи: это 2–3 лишних запроса
+function dnsSpoof(string $host, ?array $system = null): ?array
+{
+  if (isIp($host)) {
+    return null;
+  }
+  $system = array_values(array_filter($system ?? (gethostbynamel($host) ?: []), 'isIp4'));
+  // podkop отдаёт свои адреса (FakeIP) намеренно — это не подмена
+  if (!$system || array_filter($system, fn($ip) => ipInEntry(inet_pton($ip), '198.18.0.0/15'))) {
+    return null;
+  }
+  $ref = [];
+  foreach (DIAG_DOH as [, $server, $ip]) {
+    $r = dohResolve($server, $ip, $host);
+    $ref = array_merge($ref, $r['ok'] ? $r['ips'] : []);
+  }
+  $ref = array_values(array_filter(array_unique($ref), fn($ip) => isIp4($ip) && !ipReserved($ip)));
+  if (!$ref || array_intersect($system, $ref)) {
+    return null;
+  }
+  $isp = ipIspOwned($system[0]);
+  $real = probe($host, $ref[0]);
+  if (!$isp && !$real['ok'] && !array_filter($system, 'ipReserved')) {
+    return null;   // у CDN ответы разным DNS отличаются, а по «настоящему» адресу тоже не открылось — подмены не видно
+  }
+  return ['system' => array_slice($system, 0, 3), 'real' => array_slice($ref, 0, 3), 'isp' => $isp,
+    'real_ok' => $real['ok'], 'real_code' => $real['code'], 'real_ms' => $real['ms'], 'real_reason' => $real['reason']];
+}
+
+// Строка для мониторинга и журнала
+function dnsSpoofReason(array $sp): string
+{
+  return 'DNS роутера отдаёт ' . $sp['system'][0] . ($sp['isp'] ? ' (сеть провайдера)' : '') . ' вместо ' . $sp['real'][0]
+    . ($sp['real_ok'] ? ' — по настоящему адресу открывается' : '');
 }
 
 // Адреса сайта не соединяются: не выдаёт ли другой DNS адрес, по которому сайт открывается. У больших сетей
@@ -6680,10 +6762,10 @@ function rivals(): array
   return array_keys($found);
 }
 
-function ripe(string $call, string $resource = ''): ?array
+function ripe(string $call, string $resource = '', int $timeout = 25): ?array
 {
   $ch = curl_init("https://stat.ripe.net/data/$call/data.json?sourceapp=nfqws2-ui" . ($resource !== '' ? '&resource=' . rawurlencode($resource) : ''));
-  curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 25, CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_NOSIGNAL => 1]);
+  curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => $timeout, CURLOPT_CONNECTTIMEOUT => min(8, $timeout), CURLOPT_NOSIGNAL => 1]);
   $j = json_decode((string)curl_exec($ch), true);
   curl_close($ch);
   return is_array($j['data'] ?? null) ? $j['data'] : null;
@@ -7190,11 +7272,7 @@ switch ($cmd) {
     $ips = $isIp ? [$host] : (gethostbynamel($host) ?: []);
     $profiles = currentProfiles();
     $cache = new ListCache();
-    $routes = [
-      'https' => matchRoute($profiles, $host, $ips, 'tcp', 443, 'tls', $cache),
-      'quic' => matchRoute($profiles, $host, $ips, 'udp', 443, 'quic', $cache),
-      'http' => matchRoute($profiles, $host, $ips, 'tcp', 80, 'http', $cache),
-    ];
+    $routes = checkRoutes($profiles, $host, $ips, $cache);
     // В каких списках (используемых и нет) уже есть сайт
     $in_lists = [];
     foreach (listsInventory($profiles) as $l) {
@@ -7214,7 +7292,13 @@ switch ($cmd) {
     if (!validHost($host)) {
       fail('bad host');
     }
-    respond(probe($host));
+    $r = probe($host);
+    // не открылся — не подменён ли адрес; тогда и маршрут через профили — по настоящему адресу
+    if (!$r['ok'] && ($sp = dnsSpoof($host))) {
+      $r['dns'] = $sp;
+      $r['routes'] = checkRoutes(currentProfiles(), $host, $sp['real'], new ListCache());
+    }
+    respond($r);
 
   case 'diag':
     $host = cleanHost($str('host'));
