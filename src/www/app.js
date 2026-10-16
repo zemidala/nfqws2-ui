@@ -350,6 +350,7 @@ const FEATURES = [
   ['pick:quic', '1.13.0', 'подбор стратегии для QUIC (HTTP/3, UDP 443) и проверка QUIC в диагнозе'],
   ['prof:name', '1.15.0', 'имя профиля (--name, --new=имя): видно в интерфейсе вместо «Свой профиль N»'],
   ['look:wints', '1.15.0', 'напоминание про метки TCP в Windows можно скопировать и скрыть'],
+  ['hist:initial', '1.16.0', '«Вернуть как при установке» — конфиг и списки к началу истории одним действием'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 // на сколько минорных версий функция старше текущей (у сборки до выпуска — меньше нуля)
@@ -646,6 +647,29 @@ async function rollbackToWorking() {
   S.conf = null;
   await loadState().catch(() => {});
   route(true);
+}
+
+// Конфиг и списки — к началу истории (обычно — установка интерфейса). Свои списки, созданные позже, остаются
+async function resetInitial() {
+  const r = await guarded(() => api('initial_get'));
+  if (!r) return;
+  if (!r.files.length) { toast('С начала истории конфиг и списки не менялись — возвращать нечего'); return; }
+  const go = btn('Вернуть и перезапустить с проверкой', async () => {
+    go.disabled = true;
+    const x = await guarded(() => api('initial_reset'));
+    bg.close();
+    if (!x) return;
+    toast(`Возвращено: ${x.files.join(', ') || 'без изменений'}`);
+    S.conf = null;
+    await safeRestart();
+    route(true);
+  }, 'warn');
+  const bg = modal('Вернуть как при установке', h('div', { class: 'modal-b' },
+    h('p', { text: `Конфиг nfqws2 и списки станут такими, какими были ${fmtDate(r.at)}, когда интерфейс начал вести историю (обычно это и есть установка). Что вернётся:` }),
+    h('ul', {}, r.files.map((f) => h('li', {}, h('span', { class: 'mono', text: f.file }),
+      h('span', { class: 'muted sm', text: f.exists ? ` — +${f.n_added} −${f.n_removed} строк` : ' — файл был удалён, появится снова' })))),
+    h('p', { class: 'sm muted', text: 'Свои списки, созданные позже, останутся, но конфиг на них ссылаться перестанет. Настройки интерфейса (мониторинг, уведомления, история подборов) не меняются. Перед возвратом делается снимок, а «Отменить» в шапке вернёт всё обратно.' }),
+    h('p', { class: 'sm', text: 'После возврата nfqws2 перезапустится с проверкой: если сайты мониторинга перестанут открываться или вы не подтвердите за 3 минуты, всё вернётся как сейчас.' })), go);
 }
 
 let pendingTimer = null;
@@ -3464,6 +3488,7 @@ async function paneHistory(content, r) {
   }
   content.append(h('div', { class: 'vh' }, h('h1', { text: 'История изменений' }), h('span', { class: 'grow' }),
     S.state.undo ? btn('Отменить последнее', () => undoLast(true), 'small', 'undo', { title: S.state.undo.note }) : null,
+    h('span', { class: 'row', style: 'gap:4px;flex-wrap:nowrap' }, btn('Вернуть как при установке', resetInitial, 'small', 'history', { title: 'Конфиг и списки — к тому, какими они были, когда интерфейс начал вести историю (обычно это установка)' }), newTag('hist:initial')),
     S.state.rollback?.files.length ? btn('Вернуть рабочее состояние', rollbackToWorking, 'small', 'history', { title: 'На ' + fmtDate(S.state.rollback.since) + ': ' + S.state.rollback.files.join(', ') }) : null,
     h('select', { class: 'select', 'aria-label': 'Файл', onchange: (ev) => go('#/settings/hist' + (ev.target.value ? '?file=' + encodeURIComponent(ev.target.value) : '')) },
       h('option', { value: '', text: 'Все файлы' }), files.map((f) => h('option', { value: f, text: f, selected: f === fileFilter })))),

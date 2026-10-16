@@ -3097,6 +3097,27 @@ function versionsAt(int $T): array
   return $res;
 }
 
+// «Как при установке»: версии конфига и списков на момент, когда интерфейс начал вести историю (обычно — установка).
+// Списки, созданные позже, не трогаем: конфиг перестанет на них ссылаться, а свои списки терять жалко.
+// null — истории нет. at — время начала истории
+function initialVersions(): ?array
+{
+  $log = histLog();
+  if (!$log) {
+    return null;
+  }
+  $T = null;
+  foreach ($log as $e) {
+    if (($e['file'] ?? '') === '*' && ($e['note'] ?? '') === 'История изменений начата') {
+      $T = (int)$e['ts'];
+      break;
+    }
+  }
+  $T ??= (int)$log[0]['ts'] - 1;
+  $v = array_filter(versionsAt($T), fn($h, $path) => $h !== null && (!is_file($path) || md5_file($path) !== $h), ARRAY_FILTER_USE_BOTH);
+  return ['at' => $T, 'versions' => $v];
+}
+
 function pendingGet(): ?array
 {
   $p = json_decode((string)@file_get_contents(PENDING_FILE), true);
@@ -8250,6 +8271,29 @@ switch ($cmd) {
       }
     }
     fail('Нет такой записи', 404);
+
+  case 'initial_get':
+    // что изменится при «Вернуть как при установке»
+    $iv = initialVersions();
+    $files = [];
+    foreach ($iv['versions'] ?? [] as $path => $h) {
+      [$added, $removed] = lineDelta(is_file($path) ? (string)file_get_contents($path) : '', (string)histObjGet($h));
+      $files[] = ['file' => basename($path), 'exists' => is_file($path), 'n_added' => count($added), 'n_removed' => count($removed)];
+    }
+    respond(['at' => $iv['at'] ?? null, 'files' => $files]);
+
+  case 'initial_reset':
+    if (($cur = pendingGet()) && in_array($cur['state'], ['checking', 'waiting'], true)) {
+      fail('Идёт перезапуск с проверкой — дождитесь его конца');
+    }
+    historyScan('auto');
+    $iv = initialVersions();
+    if (!$iv || !$iv['versions']) {
+      fail('С начала истории конфиг и списки не менялись — возвращать нечего');
+    }
+    snapshotCreate('перед изменением', true, 'перед «Вернуть как при установке»');   // крупное изменение — снимок всегда, а не раз в 15 минут
+    $changed = restoreVersions($iv['versions'], 'как при установке (' . ldate('d.m.Y H:i', $iv['at']) . ')');
+    respond(['files' => $changed]);
 
   case 'history_revert':
     // Вернуть файл к состоянию ДО выбранного изменения
