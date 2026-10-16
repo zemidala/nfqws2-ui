@@ -285,7 +285,8 @@ function snapHashes(): array
 
 function snapPaths(): array
 {
-  $p = ['etc/nfqws2/nfqws2.conf', 'etc/nfqws2/lists', 'etc/nfqws2/blobs'];
+  // пути от корня, как на диске: в Entware (Keenetic) — opt/etc/…
+  $p = [substr(CONF_FILE, 1), substr(LISTS_DIR, 1), substr(CONF_DIR, 1) . '/blobs'];
   // настройки интерфейса — кроме ключа роутера для NAS: закрытый ключ не должен уходить ни на NAS, ни в скачанный архив
   foreach (glob(UI_CONF_DIR . '/*') ?: [] as $f) {
     if (is_file($f) && !preg_match('/^(remote_key(\.pub)?|known_hosts)$|\.(tmp|bad)$/', basename($f))) {
@@ -301,7 +302,8 @@ function snapshotCreate(string $reason, bool $ifChanged = true, string $note = '
   @mkdir(SNAP_DIR, 0700, true);
   $idx = snapIndex();
   $hashes = snapHashes();
-  if ($ifChanged && $idx && end($idx)['files'] === $hashes) {
+  // full — снимок с конфигом и списками; на Keenetic до 1.15.4 в снимки попадали только настройки интерфейса
+  if ($ifChanged && $idx && end($idx)['files'] === $hashes && (!ROOT || !empty(end($idx)['full']))) {
     return null;
   }
   $id = ldate('Ymd-His');
@@ -314,7 +316,7 @@ function snapshotCreate(string $reason, bool $ifChanged = true, string $note = '
     @unlink($file);
     return null;
   }
-  $entry = ['id' => $id, 'ts' => time(), 'reason' => $reason, 'note' => $note, 'size' => filesize($file), 'files' => $hashes];
+  $entry = ['id' => $id, 'ts' => time(), 'reason' => $reason, 'note' => $note, 'size' => filesize($file), 'files' => $hashes, 'full' => true];
   $lock = snapLock();
   $idx = snapIndex();   // перечитываем под замком: отправка на NAS могла поменять отметки
   $idx[] = $entry;
@@ -632,25 +634,32 @@ function remoteSetupCmd(string $dir, string $pub): string
 function snapReadFile(string $id, string $rel): ?string
 {
   $file = snapArchive($id);
-  if (!is_file($file) || !preg_match('#^etc/nfqws2/(nfqws2\.conf|lists/[A-Za-z0-9_.-]+|blobs/[A-Za-z0-9_.-]+)$#', $rel)) {
+  if (!is_file($file) || !preg_match('#^(opt/)?etc/nfqws2/(nfqws2\.conf|lists/[A-Za-z0-9_.-]+|blobs/[A-Za-z0-9_.-]+)$#', $rel)) {
     return null;
   }
   $out = shell_exec('tar -xzOf ' . escapeshellarg($file) . ' ' . escapeshellarg($rel) . ' 2>/dev/null');
   return $out === null ? null : $out;
 }
 
-// Проверяет архив и раскладывает его поверх текущих файлов (файлы, которых нет в архиве, не трогает)
+// Проверяет архив и раскладывает его поверх текущих файлов (файлы, которых нет в архиве, не трогает).
+// Пути в архиве — etc/… (OpenWrt) или opt/etc/… (Keenetic); файлы ложатся туда, где они у этой системы,
+// так что копию с одного роутера можно восстановить и на другом.
 function restoreArchive(string $archive, string $reason): array
 {
   exec('tar -tzf ' . escapeshellarg($archive) . ' 2>&1', $list, $rc);
   if ($rc !== 0 || !$list) {
     fail('Это не архив tar.gz или он повреждён');
   }
-  $allowed = '#^(etc/?|etc/nfqws2/?|etc/nfqws2/(nfqws2\.conf|lists/?|blobs/?|lists/[A-Za-z0-9_.-]+|blobs/[A-Za-z0-9_.-]+)|etc/nfqws-ui/?|etc/nfqws-ui/[A-Za-z0-9_.-]+)$#';
+  $allowed = '#^(opt/?|(opt/)?(etc/?|etc/nfqws2/?|etc/nfqws2/(nfqws2\.conf|lists/?|blobs/?|lists/[A-Za-z0-9_.-]+|blobs/[A-Za-z0-9_.-]+)|etc/nfqws-ui/?|etc/nfqws-ui/[A-Za-z0-9_.-]+))$#';
+  $conf = false;
   foreach ($list as $e) {
     if (!preg_match($allowed, $e)) {
       fail("В архиве лишний файл: $e — восстановление отменено");
     }
+    $conf = $conf || preg_match('#^(opt/)?etc/nfqws2/nfqws2\.conf$#', $e);
+  }
+  if (!$conf) {
+    fail('В архиве нет конфига nfqws2 — только настройки интерфейса. Так собирались копии на Keenetic до версии 1.15.4: конфиг, списки и блобы в них не попадали. Восстановить из такой копии нечего — сделайте новый снимок.');
   }
   historyScan('auto');
   snapshotCreate('перед восстановлением', false, $reason);
@@ -663,7 +672,7 @@ function restoreArchive(string $archive, string $reason): array
     if (!is_file($src)) {
       continue;
     }
-    $dst = '/' . $e;
+    $dst = ROOT . '/' . preg_replace('#^opt/#', '', $e);
     if (is_file($dst) && md5_file($dst) === md5_file($src)) {
       continue;
     }
@@ -7761,6 +7770,8 @@ switch ($cmd) {
       // что отличается от текущего состояния; у снимков только на NAS хешей нет — неизвестно
       $e['local'] = $e['local'] ?? true;
       $e['remote'] = !empty($e['remote']);
+      $e['partial'] = ROOT && empty($e['full']);   // Keenetic, до 1.15.4: без конфига и списков
+      unset($e['full']);
       if (!isset($e['files'])) {
         $e['differs'] = null;
         continue;
