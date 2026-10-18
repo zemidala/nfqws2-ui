@@ -277,6 +277,10 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
   background: transparent; color: transparent; caret-color: var(--fg); border-color: var(--line); outline: none; }
 .ed-ta:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .ed-ta::selection { background: rgba(37, 99, 235, .28); color: transparent; }
+.ed.plain .ed-ta { color: var(--fg); background: var(--bg); }
+.ed.plain .ed-ta::selection { color: inherit; }
+.ed.plain .ed-hl, .ed.plain .ed-gut { display: none; }
+.ed.gutter-on.plain .ed-ta { padding-left: 11px; }
 .ed-hl { position: absolute; inset: 0; overflow: hidden; pointer-events: none; background: var(--bg); color: var(--fg); }
 .ed.gutter-on .ed-ta, .ed.gutter-on .ed-hl { padding-left: 58px; }
 .ed-gut { position: absolute; left: 1px; top: 1px; bottom: 1px; width: 46px; overflow: hidden; z-index: 2; pointer-events: none; font-family: var(--mono); font-size: 12.5px; line-height: 1.65; padding-top: 8px; text-align: right; color: var(--faint); border-right: 1px solid var(--line); background: var(--bg); border-radius: calc(var(--radius) * .7 + 2px) 0 0 calc(var(--radius) * .7 + 2px); }

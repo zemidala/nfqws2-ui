@@ -1695,6 +1695,8 @@ function paintConf(frag, text, issues, find) {
   plain(text.slice(pos));
 }
 
+const ED_PLAIN_CHARS = 200000;   // больше — без подсветки и номеров строк
+
 // Текстовое поле с подсвеченной подложкой. mode: 'args' | 'conf' | 'list'
 function codeEditor({ value, mode, onInput, onCaret, rows = 4, maxHeight = 520, gutter = false, suggest = null }) {
   const hl = h('pre', { class: 'ed-hl', 'aria-hidden': 'true' });
@@ -1730,6 +1732,11 @@ function codeEditor({ value, mode, onInput, onCaret, rows = 4, maxHeight = 520, 
   }
   function paint() {
     const text = ta.value;
+    // большой текст (списки на сотни тысяч строк) — простое поле: подсветка и номера строк
+    // на каждую строку вешают телефон и переполняют стек
+    const big = text.length > ED_PLAIN_CHARS;
+    el.classList.toggle('plain', big);
+    if (big) { hl.replaceChildren(); gut?.replaceChildren(); sync(); return; }
     const frag = document.createDocumentFragment();
     if (mode === 'args') {
       const byTok = {};
@@ -1752,10 +1759,10 @@ function codeEditor({ value, mode, onInput, onCaret, rows = 4, maxHeight = 520, 
     if (gut) {
       const marks = lineMarks();
       const n = text.split('\n').length;
-      const lines = [];
-      for (let i = 0; i < n; i++) lines.push(h('div', { class: marks[i] === 'error' ? 'e' : marks[i] === 'warning' ? 'w' : marks[i] === 'info' ? 'i' : null, text: String(i + 1) }));
-      lines.push(h('div', { text: ' ' }));
-      gut.replaceChildren(...lines);
+      const lines = document.createDocumentFragment();
+      for (let i = 0; i < n; i++) lines.append(h('div', { class: marks[i] === 'error' ? 'e' : marks[i] === 'warning' ? 'w' : marks[i] === 'info' ? 'i' : null, text: String(i + 1) }));
+      lines.append(h('div', { text: ' ' }));
+      gut.replaceChildren(lines);
     }
     sync();
   }
@@ -2209,7 +2216,8 @@ async function drawList(content, name) {
           ed.select(start, start + lines[x.line].length);
         }, (x) => 'строка ' + (x.line + 1)));
       };
-      const relint = debounce(async (v) => { const r = await api('list_lint', { name, content: v }).catch(() => null); if (r) showIss(r.issues); }, 500);
+      // большой список роутер проверяет секундами — тогда только при сохранении
+      const relint = debounce(async (v) => { if (v.length > ED_PLAIN_CHARS) return; const r = await api('list_lint', { name, content: v }).catch(() => null); if (r) showIss(r.issues); }, 500);
       showIss(data.issues);
       body.replaceChildren(tools, ed.el, issBox, h('div', { class: 'row' },
         h('span', { class: 'sm muted grow', text: 'Одна запись на строку, # в начале — комментарий. Поддомены учитываются автоматически, ^домен — без поддоменов, «*» не поддерживается.' }),
