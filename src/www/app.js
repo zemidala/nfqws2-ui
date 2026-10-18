@@ -351,6 +351,7 @@ const FEATURES = [
   ['prof:name', '1.15.0', 'имя профиля (--name, --new=имя): видно в интерфейсе вместо «Свой профиль N»'],
   ['look:wints', '1.15.0', 'напоминание про метки TCP в Windows можно скопировать и скрыть'],
   ['hist:initial', '1.16.0', '«Вернуть как при установке» — конфиг и списки к началу истории одним действием'],
+  ['lists:text', '1.17.0', 'список открывается тем видом, что выбран в прошлый раз; Ctrl+/ в тексте — комментарий'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 // на сколько минорных версий функция старше текущей (у сборки до выпуска — меньше нуля)
@@ -1697,6 +1698,31 @@ function paintConf(frag, text, issues, find) {
 
 const ED_PLAIN_CHARS = 200000;   // больше — без подсветки и номеров строк
 
+// «#» в начале строк под курсором или выделением: если все непустые строки закомментированы — снять, иначе поставить.
+// Замена через insertText, чтобы Ctrl+Z её отменял (прямая запись в value стирает историю отмены)
+function toggleComment(ta) {
+  const v = ta.value;
+  const s0 = ta.selectionStart, e0 = ta.selectionEnd;
+  const from = v.lastIndexOf('\n', s0 - 1) + 1;
+  const endAt = e0 > s0 && v[e0 - 1] === '\n' ? e0 - 1 : e0;
+  let to = v.indexOf('\n', endAt);
+  if (to < 0) to = v.length;
+  const lines = v.slice(from, to).split('\n');
+  const filled = lines.filter((l) => l.trim());
+  if (!filled.length) return;
+  const off = filled.every((l) => /^\s*#/.test(l));
+  const out = lines.map((l) => !l.trim() ? l : off ? l.replace(/^(\s*)# ?/, '$1') : '# ' + l).join('\n');
+  ta.focus();
+  ta.setSelectionRange(from, to);
+  if (!document.execCommand('insertText', false, out)) {
+    ta.setRangeText(out, from, to, 'end');
+    ta.dispatchEvent(new Event('input'));
+  }
+  // одна строка без выделения — курсор остаётся на своём месте в тексте строки
+  if (s0 === e0 && lines.length === 1) { const p = Math.max(from, s0 + out.length - (to - from)); ta.setSelectionRange(p, p); }
+  else ta.setSelectionRange(from, from + out.length);
+}
+
 // Текстовое поле с подсвеченной подложкой. mode: 'args' | 'conf' | 'list'
 function codeEditor({ value, mode, onInput, onCaret, rows = 4, maxHeight = 520, gutter = false, suggest = null }) {
   const hl = h('pre', { class: 'ed-hl', 'aria-hidden': 'true' });
@@ -1772,6 +1798,9 @@ function codeEditor({ value, mode, onInput, onCaret, rows = 4, maxHeight = 520, 
   ['keyup', 'click', 'focus'].forEach((ev) => ta.addEventListener(ev, caret));
   ta.addEventListener('keydown', (e) => {
     if (e.key === 'Tab' && suggest?.accept(ta)) { e.preventDefault(); paint(); onInput?.(ta.value); }
+    // Ctrl+/ (⌘+/) — закомментировать или раскомментировать строки; только в списках:
+    // в конфиге строки стратегий стоят внутри кавычек, и «#» там не комментарий, а аргумент nfqws2
+    if (mode === 'list' && (e.ctrlKey || e.metaKey) && !e.altKey && (e.code === 'Slash' || e.key === '/')) { e.preventDefault(); toggleComment(ta); }
   });
   requestAnimationFrame(() => { paint(); fit(); });
   return {
@@ -2102,7 +2131,7 @@ async function drawList(content, name) {
   if (!meta || !meta.exists) { content.replaceChildren(notice('bad', 'Списка нет', name)); return; }
   let data = await api('list_get', { name });
   const isIp = meta.kind === 'ip';
-  let raw = false;
+  let raw = !!getLook().listText;   // «Списком» / «Текстом» — как выбирали в прошлый раз в этом браузере
   let filter = '';
   let sortMode = 'file';
   const selected = new Set();
@@ -2193,8 +2222,8 @@ async function drawList(content, name) {
     viewSlot.replaceChildren(
       h('span', { class: 'sm muted num', text: plural(all.filter((l) => l.trim() && !/^\s*#/.test(l)).length, 'запись', 'записи', 'записей') }),
       h('div', { class: 'seg', role: 'group', 'aria-label': 'Вид' },
-        h('button', { type: 'button', class: raw ? '' : 'on', text: 'Списком', onclick: () => { raw = false; draw(); } }),
-        h('button', { type: 'button', class: raw ? 'on' : '', text: 'Текстом', onclick: () => { raw = true; draw(); } })));
+        h('button', { type: 'button', class: raw ? '' : 'on', text: 'Списком', onclick: () => { raw = false; setLook({ listText: false }); draw(); } }),
+        h('button', { type: 'button', class: raw ? 'on' : '', text: 'Текстом', onclick: () => { raw = true; setLook({ listText: true }); draw(); } })), newTag('lists:text'));
     // замечания к списку — плашкой с кнопкой исправления
     const prNow = S.state.lists.find((l) => l.name === name)?.problems || {};
     const prText = [prNow.error && plural(prNow.error, 'ошибка', 'ошибки', 'ошибок'), prNow.warning && plural(prNow.warning, 'повтор', 'повтора', 'повторов'), prNow.info && plural(prNow.info, 'лишняя запись', 'лишние записи', 'лишних записей')].filter(Boolean).join(', ');
@@ -2220,7 +2249,7 @@ async function drawList(content, name) {
       const relint = debounce(async (v) => { if (v.length > ED_PLAIN_CHARS) return; const r = await api('list_lint', { name, content: v }).catch(() => null); if (r) showIss(r.issues); }, 500);
       showIss(data.issues);
       body.replaceChildren(tools, ed.el, issBox, h('div', { class: 'row' },
-        h('span', { class: 'sm muted grow', text: 'Одна запись на строку, # в начале — комментарий. Поддомены учитываются автоматически, ^домен — без поддоменов, «*» не поддерживается.' }),
+        h('span', { class: 'sm muted grow', text: 'Одна запись на строку, # в начале — комментарий (Ctrl+/ ставит и снимает). Поддомены учитываются автоматически, ^домен — без поддоменов, «*» не поддерживается.' }),
         btn('Сохранить', async () => {
           if (await guarded(() => api('list_save', { name, content: ed.ta.value }), 'Сохранено')) { setDirty(false); await reload(); }
         }, 'primary')));
