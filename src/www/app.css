@@ -352,6 +352,7 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 .tev { display: grid; grid-template-columns: 48px 22px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 9px 0; border-top: 1px solid var(--line); }
 .tev .tm { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; padding-top: 1px; }
 .tev .who { font-size: 12px; color: var(--muted); }
+.tev > div { min-width: 0; overflow-wrap: anywhere; }   /* в записи бывает стратегия без пробелов — переносим, а не растягиваем страницу */
 @media (max-width: 759px) { .tev { grid-template-columns: 42px minmax(0, 1fr); } .tev > .lvl { display: none; } .tev > .btn { grid-column: 2; justify-self: start; } }
 .diff { font-family: var(--mono); font-size: 12px; line-height: 1.6; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 0; overflow: auto; max-height: 60vh; }
 .diff div { padding: 0 10px; white-space: pre-wrap; word-break: break-all; min-height: 1.6em; }
