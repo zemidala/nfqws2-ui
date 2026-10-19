@@ -356,6 +356,13 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 .diff { font-family: var(--mono); font-size: 12px; line-height: 1.6; background: var(--bg); border: 1px solid var(--line); border-radius: 8px; padding: 6px 0; overflow: auto; max-height: 60vh; }
 .diff div { padding: 0 10px; white-space: pre-wrap; word-break: break-all; min-height: 1.6em; }
 .diff .add { background: var(--ok-soft); color: var(--ok); } .diff .del { background: var(--bad-soft); color: var(--bad); } .diff .gap { color: var(--faint); font-style: italic; }
+/* окно «Исключить из профиля»: варианты карточками */
+.ex-opts { gap: 6px; }
+.ex-opt { display: grid; grid-template-columns: 20px minmax(0, 1fr); gap: 6px; align-items: start; padding: 8px 10px; border: 1px solid var(--line); border-radius: var(--radius); cursor: pointer; }
+.ex-opt:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); }
+.ex-opt input { margin: 2px 0 0; width: 18px; height: 18px; }
+.notice-actions.full { flex: 1 1 100%; padding-left: 26px; }
+.ex-opt b { font-weight: 500; overflow-wrap: anywhere; }
 .status-ok { color: var(--ok); font-weight: 600; } .status-bad { color: var(--bad); font-weight: 600; }
 
 /* ---------- оформление ---------- */

@@ -352,6 +352,8 @@ const FEATURES = [
   ['look:wints', '1.15.0', 'напоминание про метки TCP в Windows можно скопировать и скрыть'],
   ['hist:initial', '1.16.0', '«Вернуть как при установке» — конфиг и списки к началу истории одним действием'],
   ['lists:text', '1.17.0', 'список открывается тем видом, что выбран в прошлый раз; Ctrl+/ в тексте — комментарий'],
+  ['over:exclude', '1.19.0', '«Проверить сайт»: сайт не заблокирован, а профиль его ломает — «Исключить из профиля»'],
+  ['diag:exclude', '1.19.0', 'диагноз: «Исключить из профиля», когда сайт ломает nfqws2'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 // на сколько минорных версий функция старше текущей (у сборки до выпуска — меньше нуля)
@@ -1198,7 +1200,55 @@ function probeVerdict(res, pr) {
   if (pr.reason && pr.reason.includes('DNS')) return notice('warn', 'Не открывается: ' + pr.reason, 'Проблема DNS, а не DPI — списки nfqws2 тут не помогут.');
   if (isFreeze(pr.reason)) return notice('bad', 'Открывается частично: ' + pr.reason, FREEZE_HINT + (p ? ` Сейчас HTTPS идёт через профиль #${p.index}.` : ''));
   if (!p) return notice('bad', 'Не открывается: ' + pr.reason, 'nfqws2 его не обрабатывает. Добавьте сайт в список, который ведёт в подходящий профиль, или подберите стратегию тестом.');
+  if (pr.direct?.ok) return brokenNotice(res.host, p, `Через профиль #${p.index} «${profName(p)}»: ${pr.reason.replace(/ — похоже.*$/, '')}. Мимо nfqws2 открывается: HTTP ${pr.direct.code} за ${pr.direct.ms} мс. Обход этому сайту не нужен — исключите его из профиля.`);
   return notice('bad', 'Не открывается: ' + pr.reason, `Профиль #${p.index} (${strategyText(p)}) не помогает. Подберите стратегию тестом или исключите сайт из этого профиля.`);
+}
+
+// Сайт не заблокирован, а профиль его ломает: итог с кнопкой «Исключить из профиля #N»
+function brokenNotice(host, p, text) {
+  return notice('warn', `Сайт не заблокирован — его ломает профиль #${p.index}`, text,
+    h('div', { class: 'notice-actions full' }, btn(`Исключить из профиля #${p.index}`, () => excludeDialog(host, p.index), 'primary small'), newTag('over:exclude'),
+      btn('Подобрать стратегию', () => go(pickHref(host)), 'ghost small', 'tests')));
+}
+
+// Окно: что исключить (имя, домен, адрес, сеть) и что для этого изменится; потом — перезапуск с проверкой
+async function excludeDialog(host, index) {
+  const wait = modal(`Исключить из профиля #${index}`, h('div', { class: 'modal-b' }, spinner('Смотрю, что можно исключить…')));
+  const r = await api('exclude_preview', { host, profile: index }).catch((e) => { toast(e.message, { err: true }); return null; });
+  wait.close();
+  if (!r) return;
+  let mode = r.options[0]?.mode;
+  const changes = h('div', { class: 'diff' });
+  const drawChanges = () => {
+    const o = r.options.find((x) => x.mode === mode);
+    const lines = [];
+    o.files.forEach((f) => {
+      lines.push(h('div', { text: f.name }));
+      (f.add || []).forEach((x) => lines.push(h('div', { class: 'add', text: '+ ' + x })));
+      (f.remove || []).forEach((x) => lines.push(h('div', { class: 'del', text: '− ' + x })));
+    });
+    if (o.token) lines.push(h('div', { text: `nfqws2.conf, профиль #${index}` }), h('div', { class: 'add', text: '+ ' + o.token }));
+    changes.replaceChildren(...lines);
+  };
+  const opts = r.options.map((o, k) => h('label', { class: 'ex-opt' },
+    h('input', { type: 'radio', name: 'ex-mode', value: o.mode, checked: k === 0, onchange: () => { mode = o.mode; drawChanges(); } }),
+    h('span', {}, h('b', { text: o.title }), h('br'), h('span', { class: 'sm muted', text: o.hint }))));
+  drawChanges();
+  const go = btn('Исключить и перезапустить с проверкой', async () => {
+    go.disabled = true;
+    const x = await guarded(() => api('exclude_apply', { host, profile: index, mode }));
+    bg.close();
+    if (!x) return;
+    toast(`Исключено: ${x.title}. Файлы: ${x.files.join(', ')}`);
+    S.conf = null;
+    await safeRestart();
+    route(true);
+  }, 'primary');
+  const name = r.name ? ` «${r.name}»` : '';
+  const bg = modal(`Исключить из профиля #${index}${name}`, h('div', { class: 'modal-b stack' },
+    h('div', { class: 'stack ex-opts' }, opts),
+    h('div', { class: 'sm muted', text: 'Что изменится:' }), changes,
+    h('p', { class: 'sm', text: 'После этого nfqws2 перезапустится с проверкой: если сайты мониторинга перестанут открываться или вы не подтвердите за 3 минуты, всё вернётся как было. «Отменить» в шапке тоже вернёт.' })), go);
 }
 
 function routesBlock(res) {
@@ -1553,7 +1603,9 @@ async function viewDiag(main, r, bare = false) {
       const [lvl, title, text] = diagVerdictText(R);
       const prof = R.verdict.profile;
       verdictBox.replaceChildren(notice(lvl, title, text, h('div', { class: 'notice-actions' },
-        R.verdict.pick ? btn('Подобрать стратегию', () => go(pickHref(host)), 'small primary', 'tests') : null,
+        prof && R.verdict.code === 'broken_by_nfqws' ? btn(`Исключить из профиля #${prof}`, () => excludeDialog(host, prof), 'small primary') : null,
+        prof && R.verdict.code === 'broken_by_nfqws' ? newTag('diag:exclude') : null,
+        R.verdict.pick ?btn('Подобрать стратегию', () => go(pickHref(host)), 'small primary', 'tests') : null,
         R.quic?.blocked ? btn('Подобрать для QUIC', () => go('#/tests?host=' + encodeURIComponent(host) + '&proto=quic'), 'small', 'tests', { title: 'По QUIC (HTTP/3) сайт не отвечает ни без обхода, ни через nfqws2 — подобрать стратегию для UDP 443' }) : null,
         prof && ['broken_by_nfqws', 'sni_block', 'tls_block', 'fixed'].includes(R.verdict.code) ? h('a', { class: 'btn small', href: `#/settings/p${prof}`, text: `Профиль #${prof}` }) : null,
         btn('Ещё раз', () => run(host), 'small ghost', 'refresh'))));
@@ -4329,7 +4381,13 @@ async function viewTests(main, r, bare = false) {
   // Рекомендация по итогам теста — простыми словами
   function recommendation(s, good, best) {
     const b = s.baseline;
-    if (b?.ok) return notice('info', 'Менять ничего не нужно', `${s.host} открывается и без обхода — блокировки сейчас нет.`);
+    if (b?.ok) {
+      // без обхода открывается, а стратегия нынешнего профиля — нет: профиль сайт ломает
+      const rp = routeKey(s) === 'https' ? routeProfile(s) : null;
+      const mine = rp && (s.results || []).find((r) => new RegExp(`#${rp}(?!\\d)`).test(r.from || ''));
+      if (mine && !mine.ok && prof(rp)) return brokenNotice(s.host, prof(rp), `${s.host} открывается и без обхода, а со стратегией профиля #${rp} — нет${mine.reason ? ` (${mine.reason})` : ''}. Обход этому сайту не нужен — исключите его из профиля.`);
+      return notice('info', 'Менять ничего не нужно', `${s.host} открывается и без обхода — блокировки сейчас нет.`);
+    }
     if (!routeInfo || routeInfo.host !== s.host) return h('div', { class: 'skeleton sm' }, h('span', { class: 'spin' }), 'Смотрю, через какой профиль сайт идёт сейчас…');
     const rp = routeProfile(s);
     const p = rp ? confProf(rp) : null;
