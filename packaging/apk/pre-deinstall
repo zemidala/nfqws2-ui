@@ -1,0 +1,5 @@
+#!/bin/sh
+[ -n "${IPKG_INSTROOT}" ] && exit 0
+# apk зовёт этот скрипт только при удалении (при обновлении — post-upgrade)
+/usr/sbin/nfqws-ui-setup remove
+exit 0

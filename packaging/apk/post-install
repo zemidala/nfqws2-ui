@@ -1,0 +1,14 @@
+#!/bin/sh
+[ -n "${IPKG_INSTROOT}" ] && exit 0
+mkdir -p /etc/nfqws-ui
+chmod 700 /etc/nfqws-ui
+# Раньше на OpenWrt с apk интерфейс ставился файлами — теперь им владеет пакет
+rm -f /etc/nfqws-ui/.manual
+if /usr/sbin/nfqws-ui-setup apply; then
+	echo ""
+	echo "nfqws2-ui установлен. Вход — логин root и его пароль."
+	echo "Настройки порта, HTTPS и прочего: nfqws-ui-setup help"
+else
+	echo "nfqws2-ui: не удалось настроить lighttpd (см. выше). Повторить: nfqws-ui-setup apply"
+fi
+exit 0

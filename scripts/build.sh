@@ -1,5 +1,5 @@
 #!/bin/sh
-# Сборка пакетов nfqws2-ui: .ipk для OpenWrt, .ipk для Entware (Keenetic) и архив для ручной установки.
+# Сборка пакетов nfqws2-ui: .ipk для OpenWrt, .ipk для Entware (Keenetic), .apk для OpenWrt 25+ и архив для ручной установки.
 # Результат — в dist/. Нужны GNU tar и gzip (Linux, WSL, Git Bash).
 set -e
 cd "$(dirname "$0")/.."
@@ -57,10 +57,23 @@ pack openwrt /www/nfqws-ui /usr/sbin "nfqws2-ui_${VERSION}-1_all.ipk"
 # В Entware всё лежит под /opt
 pack entware /opt/share/www/nfqws-ui /opt/sbin "nfqws2-ui_${VERSION}-1_all_entware.ipk"
 
-# Архив файлов — для ручной установки и для систем с apk (OpenWrt 25+)
+# Архив файлов — для ручной установки
 ( cd "$STAGE/openwrt/data" && $TAR --mode='u=rwX,go=rX' -czf - . ) > "$OUT/nfqws2-ui_${VERSION}.tar.gz"
+
+# .apk для OpenWrt 25+ — из тех же файлов, что .ipk для OpenWrt. Нужен apk mkpkg (apk-tools 3): свой, если мы root
+# в Alpine 3.23+, иначе Docker с alpine (так в GitHub Actions). Без них — пропускаем (Git Bash на Windows)
+APK_FILE=nfqws2-ui_${VERSION}-1_all.apk
+cp -R packaging/apk "$STAGE/apk-scripts"
+if [ "$(id -u)" = 0 ] && apk mkpkg --help 2>&1 | grep -q 'apk mkpkg'; then   # --help отвечает кодом 1
+	sh scripts/mkapk.sh "$VERSION" "$STAGE/openwrt/data" "$STAGE/apk-scripts" "$OUT/$APK_FILE"
+elif command -v docker >/dev/null 2>&1; then
+	docker run --rm -e SOURCE_DATE_EPOCH -v "$PWD/scripts:/s:ro" -v "$STAGE:/stage" -v "$PWD/$OUT:/out" alpine:3.23 \
+		sh /s/mkapk.sh "$VERSION" /stage/openwrt/data /stage/apk-scripts "/out/$APK_FILE"
+else
+	echo "ВНИМАНИЕ: нет apk mkpkg и Docker — $APK_FILE не собран" >&2
+fi
 
 sed "s/^VERSION=.*/VERSION=v$VERSION/" install.sh > "$OUT/install.sh"
 
-( cd "$OUT" && sha256sum *.ipk *.tar.gz install.sh > sha256sums.txt )
+( cd "$OUT" && sha256sum *.ipk $(ls *.apk 2>/dev/null) *.tar.gz install.sh > sha256sums.txt )
 ls -l "$OUT"

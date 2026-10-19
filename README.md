@@ -123,7 +123,7 @@
 
 | | |
 |---|---|
-| Система | **OpenWrt 24.10** (opkg). Проверено на 24.10.6, aarch64 (GL.iNet GL-MT6000).<br>**Keenetic с Entware** — проверено на Keenetic Viva (KN-1910, KeeneticOS 5.0–5.1, mipsel), см. [Keenetic](#keenetic-entware) |
+| Система | **OpenWrt 24.10** (opkg). Проверено на 24.10.6, aarch64 (GL.iNet GL-MT6000).<br>**OpenWrt 25.12** (apk). Проверено на 25.12.6 x86-64 в виртуальной машине: установка, обновление, удаление, интерфейс.<br>**Keenetic с Entware** — проверено на Keenetic Viva (KN-1910, KeeneticOS 5.0–5.1, mipsel), см. [Keenetic](#keenetic-entware) |
 | nfqws2 | пакет **nfqws2-keenetic ≥ 1.3** уже установлен и работает (`/etc/nfqws2/nfqws2.conf`, на Keenetic — `/opt/etc/nfqws2/nfqws2.conf`) |
 | Зависимости | ставятся сами: `lighttpd` (+ `mod-cgi`, `mod-rewrite`, `mod-setenv`), `php8-cgi`, `php8-mod-session`, `php8-mod-curl`, `curl`; на Keenetic ещё `cron` |
 | Место | ~0,3 МБ сам интерфейс; lighttpd + PHP ≈ 4–5 МБ, если их ещё нет |
@@ -147,7 +147,7 @@ wget -qO- https://github.com/zemidala/nfqws2-ui/releases/latest/download/install
 Установщик выполняет шаги по порядку:
 1. Проверяет, что это OpenWrt или Keenetic с Entware и что nfqws2-keenetic на месте.
 2. Скачивает пакет из релиза и сверяет контрольную сумму.
-3. Ставит пакет через `opkg`, вместе с зависимостями.
+3. Ставит пакет вместе с зависимостями: через `opkg`, а на OpenWrt 25 — через `apk`.
 4. Настраивает lighttpd.
 
 В конце он печатает адрес. По умолчанию это **`http://192.168.1.1:8090`**; если порт занят, берётся следующий свободный.
@@ -159,6 +159,8 @@ wget -qO- https://github.com/zemidala/nfqws2-ui/releases/latest/download/install
 1. Скачайте `nfqws2-ui_<версия>-1_all.ipk` со страницы [Releases](https://github.com/zemidala/nfqws2-ui/releases). Для Keenetic — `nfqws2-ui_<версия>-1_all_entware.ipk`.
 2. Скопируйте файл на роутер: `scp -O nfqws2-ui_*.ipk root@192.168.1.1:/tmp/`.
 3. Установите: `opkg update && opkg install /tmp/nfqws2-ui_*.ipk`.
+
+На OpenWrt 25 файл другой — `nfqws2-ui_<версия>-1_all.apk`, а ставится он так: `apk update && apk add --allow-untrusted /tmp/nfqws2-ui_*.apk`. `--allow-untrusted` нужен, потому что пакет не подписан ключом из репозитория OpenWrt. Подлинность можно проверить по `sha256sums.txt` из того же релиза; установщик делает это сам.
 
 ### Обновление
 
@@ -175,7 +177,8 @@ nfqws-ui update v1.0.0 --force   # конкретная версия, напри
 ### Удаление
 
 ```sh
-opkg remove nfqws2-ui
+opkg remove nfqws2-ui     # OpenWrt 24.10 и Keenetic
+apk del nfqws2-ui         # OpenWrt 25
 ```
 
 Удаляются интерфейс, конфиг lighttpd и задания cron. **Остаются:**
@@ -185,7 +188,7 @@ opkg remove nfqws2-ui
 
 Удалить и их: `rm -rf /etc/nfqws-ui /etc/nfqws2/.snapshots /etc/nfqws2/.history`.
 
-lighttpd и PHP не удаляются: ими может пользоваться что-то ещё. Если они больше не нужны, удалите их вручную: `opkg remove lighttpd php8-cgi …`.
+lighttpd и PHP не удаляются: ими может пользоваться что-то ещё. Если они больше не нужны, удалите их вручную: `opkg remove lighttpd php8-cgi …` (на OpenWrt 25 — `apk del lighttpd php8-cgi …`).
 
 ### Keenetic (Entware)
 
@@ -237,7 +240,7 @@ nfqws-ui-setup remove               убрать конфиг lighttpd и зад
 ### Ограничения
 - **Только nfqws2** и только формат конфига **nfqws2-keenetic** (`NFQWS_ARGS`, `NFQWS_ARGS_CUSTOM`, `NFQWS_ARGS_UDP` и т.д.). zapret с `config` от bol-van, nfqws первой версии и другие сборки не поддерживаются.
 - **Keenetic (Entware)**: проверено на Keenetic Viva (KN-1910), см. [Keenetic](#keenetic-entware). Прошивка Keenetic время от времени пересобирает правила iptables и может стереть временные правила теста стратегий посреди прогона — тогда тест нужно повторить.
-- **OpenWrt 25.x (apk) не проверялся.** Установщик ставит файлы без пакета, удаление — `nfqws-ui-setup uninstall`.
+- **OpenWrt 25 (apk)** проверялся в виртуальной машине x86-64, не на настоящем роутере. До версии 1.18.0 интерфейс ставился там файлами, без пакета; обновление до 1.18.0 и новее само переводит его на пакет, настройки остаются.
 - Проверялось на iptables (nfqws2-keenetic использует iptables-legacy). С nftables-вариантами может не работать.
 - **Тесты стратегий проверяют TCP (HTTPS и HTTP) и QUIC на UDP 443.** Остальной UDP (голос Discord, игры, STUN, WireGuard) не тестируется: у них меняются адреса и порты, и проверить их с роутера нечем.
 - Проверка QUIC — это ответ сервера на первый пакет соединения. Она показывает, что QUIC до сервера доходит, но не загружает страницу целиком; замедление QUIC на объёме так не увидеть.
@@ -344,8 +347,10 @@ netsh interface tcp set global timestamps=enabled
 ## Разработка
 
 ```sh
-sh scripts/build.sh          # dist/: .ipk для OpenWrt и для Entware, .tar.gz, install.sh, sha256sums.txt
+sh scripts/build.sh          # dist/: .ipk для OpenWrt и для Entware, .apk для OpenWrt 25, .tar.gz, install.sh, sha256sums.txt
 ```
+
+Для `.apk` нужен `apk mkpkg` из apk-tools 3: на Alpine 3.23 и новее он есть, иначе `build.sh` берёт его из контейнера `alpine:3.23` через Docker. Если нет ни того, ни другого (Git Bash на Windows), `.apk` пропускается, остальное собирается.
 
 Релиз собирается GitHub Actions при пуше тега `v*`. Номер версии — в файле `VERSION`.
 

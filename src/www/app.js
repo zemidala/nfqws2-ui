@@ -732,7 +732,8 @@ function fixButton(x, disabledReason = null) {
   const attrs = disabledReason ? { disabled: true, title: disabledReason } : { title: (f.changes?.length ? 'Будет сделано:\n' + f.changes.join('\n') + '\n\n' : '') + 'Исправить автоматически. Отменить можно кнопкой «Отменить» или в истории изменений.' };
   if (f.choices?.length) {
     const sel = h('select', { class: 'mini-sel mono', 'aria-label': 'Значение' }, f.choices.map((c) => h('option', { value: c, text: c })));
-    return h('span', { class: 'row', style: 'gap:4px;flex-wrap:nowrap' }, sel, btn(f.label, () => run(sel.value), 'small primary', 'wand', attrs));
+    // на телефоне ряд сжимается до ширины блока, а уже список — кнопка остаётся целой
+    return h('span', { class: 'row', style: 'gap:4px;flex-wrap:nowrap;min-width:0;max-width:100%' }, sel, btn(f.label, () => run(sel.value), 'small primary', 'wand', attrs));
   }
   if (f.op === 'add_param') {
     const inp = h('input', { class: 'input mono', style: 'width:120px;min-height:26px;padding:1px 8px', placeholder: 'значение', 'aria-label': 'Значение ' + f.key });

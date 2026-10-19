@@ -20,13 +20,13 @@ fetch() { # url [файл]
 	fi
 }
 
-# opkg с ограничением времени: wget внутри opkg ждёт недоступный источник бесконечно, а следующий запуск
-# упирается в «Could not lock opkg.lock». $1 — секунд, $2 — файл для вывода («-» — на экран), дальше — аргументы
-# opkg. Код 124 — не дождались
-opkg_limited() {
+# Менеджер пакетов (opkg или apk) с ограничением времени: wget внутри opkg ждёт недоступный источник бесконечно,
+# а следующий запуск упирается в «Could not lock opkg.lock». $1 — секунд, $2 — файл для вывода («-» — на экран),
+# дальше — аргументы $PM. Код 124 — не дождались
+pm_limited() {
 	s=$1 log=$2
 	shift 2
-	if [ "$log" = - ]; then opkg "$@" & else opkg "$@" >"$log" 2>&1 & fi
+	if [ "$log" = - ]; then $PM "$@" & else $PM "$@" >"$log" 2>&1 & fi
 	p=$! i=0
 	while kill -0 $p 2>/dev/null; do
 		if [ $i -ge "$s" ]; then
@@ -95,7 +95,6 @@ elif command -v opkg >/dev/null 2>&1; then
 	PM=opkg
 elif command -v apk >/dev/null 2>&1; then
 	PM=apk
-	say "Внимание: OpenWrt с apk (25.x) ещё не проверялся, установка без пакета — файлами."
 else
 	die "не найден менеджер пакетов opkg или apk"
 fi
@@ -113,18 +112,20 @@ if [ -n "$R" ]; then
 elif [ "$PM" = opkg ]; then
 	FILE=nfqws2-ui_${V}-1_all.ipk
 else
-	FILE=nfqws2-ui_${V}.tar.gz
+	FILE=nfqws2-ui_${V}-1_all.apk
 fi
 
 TMP=/tmp/nfqws2-ui-install.$$
 trap 'rm -rf "$TMP"' EXIT INT TERM
 mkdir -p "$TMP"
 say "Скачиваю nfqws2-ui $VERSION…"
+fetch "$BASE/sha256sums.txt" "$TMP/sha256sums.txt" || die "не удалось скачать sha256sums.txt"
+# Пакет .apk есть начиная с версии 1.18.0 — более ранние на apk ставятся файлами из архива
+[ "$PM" = apk ] && ! grep -q " $FILE\$" "$TMP/sha256sums.txt" && PM=files FILE=nfqws2-ui_${V}.tar.gz
 fetch "$BASE/$FILE" "$TMP/$FILE" || {
 	[ -n "$R" ] && die "не удалось скачать $BASE/$FILE (пакет для Keenetic есть начиная с версии 1.4.0)"
 	die "не удалось скачать $BASE/$FILE"
 }
-fetch "$BASE/sha256sums.txt" "$TMP/sha256sums.txt" || die "не удалось скачать sha256sums.txt"
 ( cd "$TMP" && grep " $FILE\$" sha256sums.txt > sum.txt && sha256sum -c sum.txt >/dev/null 2>&1 ) || die "контрольная сумма $FILE не совпала — файл повреждён или подменён"
 
 # --- установка ---
@@ -138,7 +139,7 @@ if [ "$PM" = opkg ]; then
 	# Один недоступный источник (часто — от удалённого пакета) даёт ошибку всего opkg update, хотя нужные списки
 	# скачались. Не останавливаемся: если зависимостей действительно не найти, остановит opkg install ниже.
 	rc=0
-	opkg_limited 120 "$TMP/opkg-update.log" update || rc=$?   # set -e: ненулевой код разбираем сами
+	pm_limited 120 "$TMP/opkg-update.log" update || rc=$?   # set -e: ненулевой код разбираем сами
 	case $rc in
 	0) ;;
 	124)
@@ -152,7 +153,7 @@ if [ "$PM" = opkg ]; then
 	say "Ставлю nfqws2-ui и зависимости (lighttpd, php8)…"
 	# NFQWS_UI_FORCE=1 (nfqws-ui update --force) — поставить заново ту же версию
 	rc=0
-	opkg_limited 600 - install ${NFQWS_UI_FORCE:+--force-reinstall} "$TMP/$FILE" || rc=$?
+	pm_limited 600 - install ${NFQWS_UI_FORCE:+--force-reinstall} "$TMP/$FILE" || rc=$?
 	case $rc in
 	0) ;;
 	124)
@@ -160,6 +161,40 @@ if [ "$PM" = opkg ]; then
 		die "установка не закончилась за 10 минут и остановлена — скорее всего, не отвечает источник пакетов (см. выше)" ;;
 	*) die "opkg install не прошёл (см. выше)" ;;
 	esac
+elif [ "$PM" = apk ]; then
+	if busy=$(ps w 2>/dev/null | grep -E '[a]pk .*(add|del|update|upgrade|fix)'); then
+		say "$busy"
+		die "уже работает другой apk (выше). Дождитесь, пока он закончит, или остановите его: kill <число из первой колонки> — и запустите установку снова"
+	fi
+	say "Обновляю список пакетов…"
+	rc=0
+	pm_limited 120 "$TMP/apk-update.log" update || rc=$?
+	case $rc in
+	0) ;;
+	124) say "Внимание: список пакетов не обновился за 2 минуты — продолжаю с тем, что уже скачано." ;;
+	*)
+		say "Внимание: часть источников пакетов недоступна — продолжаю с тем, что скачалось:"
+		grep -i 'error\|warning' "$TMP/apk-update.log" | sed 's/^/  /' ;;
+	esac
+	say "Ставлю nfqws2-ui и зависимости (lighttpd, php8)…"
+	# Пакет не подписан своим ключом (своего репозитория нет) — подлинность проверена суммой выше.
+	# Та же версия заново (nfqws-ui update --force): apk add её пропустит, а apk fix --reinstall без репозитория
+	# пакет не найдёт — раскладываем файлы пакета поверх установленных. apk extract не перезаписывает файлы,
+	# поэтому сначала во временную папку: если распаковка сорвётся, установленное останется целым
+	if [ -n "$NFQWS_UI_FORCE" ] && apk list -I nfqws2-ui 2>/dev/null | grep -q "^nfqws2-ui-$V-r"; then
+		mkdir "$TMP/x"
+		apk extract --allow-untrusted --destination "$TMP/x" "$TMP/$FILE" >/dev/null || die "не удалось распаковать $FILE"
+		cp -a "$TMP/x/www" "$TMP/x/usr" / || die "не удалось разложить файлы пакета"
+		/usr/sbin/nfqws-ui-setup apply
+	else
+		rc=0
+		pm_limited 600 - add --allow-untrusted "$TMP/$FILE" || rc=$?
+		case $rc in
+		0) ;;
+		124) die "установка не закончилась за 10 минут и остановлена — скорее всего, не отвечает источник пакетов" ;;
+		*) die "apk add не прошёл (см. выше)" ;;
+		esac
+	fi
 else
 	apk update >/dev/null || die "apk update не прошёл"
 	apk add lighttpd lighttpd-mod-cgi lighttpd-mod-rewrite lighttpd-mod-setenv php8-cgi php8-mod-session php8-mod-curl curl || die "не удалось поставить зависимости"

@@ -320,8 +320,8 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 .cfg-adapt { grid-column: 1 / -1; padding: 10px; border-bottom: 1px solid var(--line); }
 .cfg-adapt:empty { display: none; }
 .cfg-adapt ul { margin: 4px 0; padding-left: 18px; font-size: 12px; overflow-wrap: anywhere; }
-.cfg-extra { grid-column: 1 / -1; padding: 10px 12px; border-top: 1px solid var(--line); display: grid; gap: 8px; }
-@media (max-width: 899px) { .cfg { grid-template-columns: 1fr; } .outline { display: none; } .cfg-body .ed-ta { height: 60vh; } }
+.cfg-extra { grid-column: 1 / -1; padding: 10px 12px; border-top: 1px solid var(--line); display: grid; gap: 8px; overflow-wrap: anywhere; }
+@media (max-width: 899px) { .cfg { grid-template-columns: minmax(0, 1fr); } .outline { display: none; } .cfg-body .ed-ta { height: 60vh; } }
 
 /* ---------- списки ---------- */
 .lhead { display: grid; gap: 6px; }

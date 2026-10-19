@@ -533,7 +533,10 @@ apply)
 	if ! PATH=$JOB_PATH curl --version >/dev/null 2>&1; then
 		say ""
 		say "ВНИМАНИЕ: программа curl не запускается — без неё не работают подбор стратегий и проверки сайтов."
-		say "Поставьте её: $([ -n "$R" ] && echo 'opkg install curl' || echo 'opkg update && opkg install curl')"
+		if [ -n "$R" ]; then hint='opkg install curl'
+		elif command -v apk >/dev/null 2>&1 && ! command -v opkg >/dev/null 2>&1; then hint='apk update && apk add curl'
+		else hint='opkg update && opkg install curl'; fi
+		say "Поставьте её: $hint"
 		say ""
 	fi
 	[ "$MANAGED" = true ] && apply_web
@@ -573,9 +576,12 @@ remove)
 	cron_apply
 	;;
 uninstall)
-	# Для установки без пакета (OpenWrt с apk); пакет удаляется через opkg remove nfqws2-ui
+	# Для установки без пакета (файлами из архива); пакет удаляется менеджером пакетов
 	if [ ! -f "$CONF_DIR/.manual" ] && command -v opkg >/dev/null 2>&1 && opkg status nfqws2-ui 2>/dev/null | grep -q '^Status:.*installed'; then
 		die "интерфейс установлен пакетом, удаляйте так: opkg remove nfqws2-ui"
+	fi
+	if [ -z "$R" ] && command -v apk >/dev/null 2>&1 && apk info -e nfqws2-ui >/dev/null 2>&1; then
+		die "интерфейс установлен пакетом, удаляйте так: apk del nfqws2-ui"
 	fi
 	"$0" remove
 	rm -rf "$WWW" /tmp/nfqws-ui-cache /tmp/nfqws-ui-test /tmp/nfqws-ui-sess /tmp/nfqws-ui-pending.json /tmp/nfqws-ui-login.json
