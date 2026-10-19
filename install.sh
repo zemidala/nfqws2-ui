@@ -151,7 +151,8 @@ if [ "$PM" = opkg ]; then
 	*)
 		say "Внимание: часть источников пакетов недоступна — продолжаю с тем, что скачалось:"
 		grep -o 'https\{0,1\}://[^ ,]*Packages\.gz' "$TMP/opkg-update.log" | sort -u | sed 's/^/  /'
-		say "  (ненужный источник можно убрать из ${R:-}/etc/opkg/ или /etc/opkg/customfeeds.conf)" ;;
+		say "  (ненужный источник можно убрать из ${R:-}/etc/opkg/ или /etc/opkg/customfeeds.conf)"
+		grep -q 'bin\.entware\.net' "$TMP/opkg-update.log" && ENTWARE_DEAD=1 ;;
 	esac
 	say "Ставлю nfqws2-ui и зависимости (lighttpd, php8)…"
 	# NFQWS_UI_FORCE=1 (nfqws-ui update --force) — поставить заново ту же версию
@@ -162,7 +163,15 @@ if [ "$PM" = opkg ]; then
 	124)
 		feed_hint
 		die "установка не закончилась за 10 минут и остановлена — скорее всего, не отвечает источник пакетов (см. выше)" ;;
-	*) die "opkg install не прошёл (см. выше)" ;;
+	*)
+		if [ -n "${ENTWARE_DEAD:-}" ]; then
+			# без основного источника opkg не знает зависимостей (cron, lighttpd, php8) и пишет путаное
+			# «Unknown package» / «incompatible with the architectures»
+			say "Основной источник Entware (bin.entware.net) не ответил, поэтому зависимости (lighttpd, php8, cron) взять неоткуда."
+			say "Повторите установку позже или перейдите на зеркало и повторите:"
+			say "  sed -i 's#http://bin.entware.net/#http://mirrors.bfsu.edu.cn/entware/#' $R/etc/opkg.conf"
+		fi
+		die "opkg install не прошёл (см. выше)" ;;
 	esac
 elif [ "$PM" = apk ]; then
 	if busy=$(ps w 2>/dev/null | grep -E '[a]pk .*(add|del|update|upgrade|fix)'); then
