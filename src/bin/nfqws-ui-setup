@@ -370,8 +370,12 @@ fetch() { # url [файл]
 }
 
 latest_version() {
-	fetch "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null |
-		sed -n 's/.*"tag_name" *: *"v\{0,1\}\([^"]*\)".*/\1/p' | head -n1
+	v=$(fetch "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null |
+		sed -n 's/.*"tag_name" *: *"v\{0,1\}\([^"]*\)".*/\1/p' | head -n1)
+	# API отказал (403 — лимит запросов на общий адрес провайдера): номер есть в имени пакета в sha256sums.txt
+	[ -n "$v" ] || v=$(fetch "https://github.com/$REPO/releases/latest/download/sha256sums.txt" 2>/dev/null |
+		sed -n 's/.*nfqws2-ui_\([0-9][0-9.]*\)-[0-9]*_.*/\1/p' | head -n1)
+	echo "$v"
 }
 
 # $1 новее $2 (версии вида 1.2.3)

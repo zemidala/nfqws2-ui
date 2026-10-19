@@ -101,8 +101,11 @@ fi
 
 # --- версия и файлы ---
 if [ "$VERSION" = latest ]; then
-	VERSION=$(fetch "https://api.github.com/repos/$REPO/releases/latest" | sed -n 's/.*"tag_name" *: *"\([^"]*\)".*/\1/p' | head -n1)
-	[ -n "$VERSION" ] || die "не удалось узнать последнюю версию (нет доступа к api.github.com?). Укажите версию: sh -s -- v1.0.0"
+	VERSION=$(fetch "https://api.github.com/repos/$REPO/releases/latest" 2>/dev/null | sed -n 's/.*"tag_name" *: *"\([^"]*\)".*/\1/p' | head -n1)
+	# API отказал (403 — лимит запросов на общий адрес провайдера): номер есть в имени пакета в sha256sums.txt
+	[ -n "$VERSION" ] || VERSION=$(fetch "https://github.com/$REPO/releases/latest/download/sha256sums.txt" 2>/dev/null |
+		sed -n 's/.*nfqws2-ui_\([0-9][0-9.]*\)-[0-9]*_.*/\1/p' | head -n1)
+	[ -n "$VERSION" ] || die "не удалось узнать последнюю версию (нет доступа к github.com?). Укажите версию: sh -s -- v1.0.0"
 fi
 case "$VERSION" in v*) ;; *) VERSION=v$VERSION ;; esac
 V=${VERSION#v}

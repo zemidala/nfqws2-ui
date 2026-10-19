@@ -6590,8 +6590,13 @@ function updateCheck(bool $force): array
   curl_close($ch);
   $j = json_decode((string)$res, true);
   $save = ['checked' => time()];
+  $fb = null;
   if ($code === 200 && preg_match('/^v?(\d+\.\d+\.\d+)$/', (string)($j['tag_name'] ?? ''), $m)) {
     $save += ['latest' => $m[1], 'notes' => preg_match('/^.{0,4000}/su', (string)($j['body'] ?? ''), $nm) ? $nm[0] : '', 'url' => (string)($j['html_url'] ?? REPO_URL . '/releases')];
+  } elseif ($fb = updateFallback()) {
+    // API GitHub отказал (чаще всего 403 — лимит 60 запросов в час на внешний адрес, а за общим адресом провайдера
+    // его выбирают соседи); версию и описание берём из файлов релиза — на них лимита нет
+    $save += $fb;
   } else {
     $old = json_decode((string)@file_get_contents(UPDATE_FILE), true) ?: [];
     $save += array_intersect_key($old, array_flip(['latest', 'notes', 'url']))
@@ -6599,6 +6604,33 @@ function updateCheck(bool $force): array
   }
   @file_put_contents(UPDATE_FILE, json_encode($save, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
   return updateInfo();
+}
+
+function updateGet(string $url): ?string
+{
+  $ch = curl_init($url);
+  curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5, CURLOPT_TIMEOUT => 15,
+    CURLOPT_CONNECTTIMEOUT => 8, CURLOPT_HTTPHEADER => ['User-Agent: nfqws2-ui/' . UI_VERSION]]);
+  $res = curl_exec($ch);
+  $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  curl_close($ch);
+  return $code === 200 && is_string($res) ? $res : null;
+}
+
+// Последняя версия без API: в sha256sums.txt последнего релиза имя пакета содержит номер,
+// описание — раздел этой версии из CHANGELOG.md (так же его берёт release.yml)
+function updateFallback(): ?array
+{
+  $sums = updateGet(REPO_URL . '/releases/latest/download/sha256sums.txt');
+  if ($sums === null || !preg_match('/nfqws2-ui_(\d+\.\d+\.\d+)-\d+_/', $sums, $m)) {
+    return null;
+  }
+  $notes = '';
+  $cl = updateGet('https://raw.githubusercontent.com/zemidala/nfqws2-ui/v' . $m[1] . '/CHANGELOG.md');
+  if ($cl !== null && preg_match('/^## ' . preg_quote($m[1], '/') . '\b[^\n]*\n(.*?)(?=^## |\z)/msu', $cl, $c)) {
+    $notes = preg_match('/^.{0,4000}/su', trim($c[1]), $nm) ? $nm[0] : '';
+  }
+  return ['latest' => $m[1], 'notes' => $notes, 'url' => REPO_URL . '/releases/tag/v' . $m[1]];
 }
 
 function updateRunning(): bool
