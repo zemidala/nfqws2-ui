@@ -3281,6 +3281,14 @@ function versionsAt(int $T): array
   return $res;
 }
 
+// То же для отката к рабочему состоянию, но без автосписков (--hostlist-auto): их пополняет сам nfqws2, и откат
+// стирал бы сайты, которые он добавил после рабочего состояния
+function rollbackVersions(int $T): array
+{
+  $auto = array_filter(array_map(fn($p) => $p['autolist'], currentProfiles()));
+  return array_diff_key(versionsAt($T), array_flip($auto));
+}
+
 // «Как при установке»: версии конфига и списков на момент, когда интерфейс начал вести историю (обычно — установка).
 // Списки, созданные позже, не трогаем: конфиг перестанет на них ссылаться, а свои списки терять жалко.
 // null — истории нет. at — время начала истории
@@ -3339,10 +3347,21 @@ function guardJob(): void
   }
   $running = findPid() !== null;
   $checks = [];
+  // проверка сайтов идёт десятки секунд: если за это время откатили или подтвердили, состояние уже не наше
+  $ours = function () use ($p): bool {
+    $cur = pendingGet();
+    return $cur && ($cur['id'] ?? '') === $p['id'] && $cur['state'] === 'checking';
+  };
   foreach (uiSettings()['monitor']['sites'] as $host) {
+    if (!$ours()) {
+      return;
+    }
     $r = probe($host);
     $before = $p['before'][$host] ?? null;
     $checks[] = ['host' => $host, 'ok' => $r['ok'], 'ms' => $r['ms'], 'reason' => $r['reason'], 'was_ok' => $before, 'regressed' => $before === 1 && !$r['ok']];
+  }
+  if (!$ours()) {
+    return;
   }
   $p['checks'] = $checks;
   $p['running'] = $running;
@@ -6836,7 +6855,7 @@ function state(): array
     })(),
     'rollback' => (function () {
       $T = confirmPoint();
-      return ['since' => $T, 'files' => array_values(array_unique(array_map('basename', array_keys(versionsAt($T)))))];
+      return ['since' => $T, 'files' => array_values(array_unique(array_map('basename', array_keys(rollbackVersions($T)))))];
     })(),
     'monitor' => (function () {
       $cfg = uiSettings()['monitor'];
@@ -7852,7 +7871,7 @@ switch ($cmd) {
       $before[$h] = $hist ? end($hist)[1] : null;
     }
     $minutes = max(1, min(15, (int)($in['minutes'] ?? 3)));
-    $p = ['id' => bin2hex(random_bytes(4)), 'state' => 'checking', 'T' => $T, 'versions' => versionsAt($T), 'started' => time(),
+    $p = ['id' => bin2hex(random_bytes(4)), 'state' => 'checking', 'T' => $T, 'versions' => rollbackVersions($T), 'started' => time(),
       'deadline' => time() + $minutes * 60, 'before' => $before, 'checks' => null];
     pendingSave($p);
     [$rc, $out, $fixed] = serviceRun('restart');
@@ -7875,7 +7894,7 @@ switch ($cmd) {
     $p = pendingGet();
     if (!$p || !in_array($p['state'], ['checking', 'waiting'], true)) {
       $T = confirmPoint();
-      $p = ['id' => bin2hex(random_bytes(4)), 'state' => 'manual', 'T' => $T, 'versions' => versionsAt($T), 'started' => time()];
+      $p = ['id' => bin2hex(random_bytes(4)), 'state' => 'manual', 'T' => $T, 'versions' => rollbackVersions($T), 'started' => time()];
       if (!$p['versions']) {
         fail('С момента последнего рабочего состояния ничего не менялось');
       }
