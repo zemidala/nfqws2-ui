@@ -3358,6 +3358,12 @@ function guardJob(): void
     }
     $r = probe($host);
     $before = $p['before'][$host] ?? null;
+    // до перезапуска открывался, а сейчас нет — перепроверяем: стратегия может срабатывать не каждый раз,
+    // и одна неудача сразу после перезапуска ещё не значит, что изменение сломало сайт
+    for ($k = 0; $before === 1 && !$r['ok'] && $k < 2 && $ours(); $k++) {
+      sleep(3);
+      $r = probe($host);
+    }
     $checks[] = ['host' => $host, 'ok' => $r['ok'], 'ms' => $r['ms'], 'reason' => $r['reason'], 'was_ok' => $before, 'regressed' => $before === 1 && !$r['ok']];
   }
   if (!$ours()) {
