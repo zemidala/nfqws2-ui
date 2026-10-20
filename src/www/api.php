@@ -5457,7 +5457,8 @@ function autoTick(): void
     $skip = $policyOnly ? 'nfqws2 обрабатывает только устройства политики доступа, запросы роутера идут мимо него — мониторинг не показывает, работает ли обход'
       : ($massive ? 'не открывается больше половины сайтов мониторинга — похоже на обрыв связи, а не на блокировку'
       : (findPid() === null ? 'nfqws2 не запущен — подбирать стратегию бессмысленно'
-      : (str_starts_with((string)(end($mon['sites'][$h])[3] ?? ''), 'DNS роутера отдаёт') ? 'DNS роутера подменяет адрес сайта — стратегия тут не поможет, нужен защищённый DNS (DoH/DoT) в настройках роутера' : null)));
+      : (str_starts_with($last = (string)(end($mon['sites'][$h])[3] ?? ''), 'DNS роутера отдаёт') ? 'DNS роутера подменяет адрес сайта — стратегия тут не поможет, нужен защищённый DNS (DoH/DoT) в настройках роутера'
+      : (str_contains($last, REASON_OTHER_SERVER) ? 'по другому адресу сайт открывается, а по адресу от DNS роутера — нет: этот сервер, похоже, закрыт по IP, стратегия тут не поможет' : null))));
     if ($skip !== null) {
       // связь или сервис вернутся — попробуем на следующем проходе; в журнал пишем один раз
       if (($d['log'][0]['host'] ?? '') !== $h || ($d['log'][0]['kind'] ?? '') !== 'skip') {
@@ -6146,13 +6147,21 @@ function dnsSpoof(string $host, ?array $system = null): ?array
   if (!$isp && !$real['ok'] && !array_filter($system, 'ipReserved')) {
     return null;   // у CDN ответы разным DNS отличаются, а по «настоящему» адресу тоже не открылось — подмены не видно
   }
-  return ['system' => array_slice($system, 0, 3), 'real' => array_slice($ref, 0, 3), 'isp' => $isp,
+  // fake — заглушка (адрес провайдера или «серый»); иначе это другой сервер того же сайта: у больших сетей (Meta, Google)
+  // разные DNS отдают разные адреса, и часть из них провайдер закрывает по IP — DNS тут не виноват
+  $fake = $isp !== false || (bool)array_filter($system, 'ipReserved');
+  return ['system' => array_slice($system, 0, 3), 'real' => array_slice($ref, 0, 3), 'isp' => $isp, 'fake' => $fake,
     'real_ok' => $real['ok'], 'real_code' => $real['code'], 'real_ms' => $real['ms'], 'real_reason' => $real['reason']];
 }
 
 // Строка для мониторинга и журнала
+const REASON_OTHER_SERVER = 'похоже, этот сервер закрыт по IP';
+
 function dnsSpoofReason(array $sp): string
 {
+  if (!($sp['fake'] ?? true)) {
+    return 'адрес ' . $sp['system'][0] . ' не открывается, а ' . $sp['real'][0] . ' от защищённого DNS открывается — ' . REASON_OTHER_SERVER;
+  }
   return 'DNS роутера отдаёт ' . $sp['system'][0] . ($sp['isp'] ? ' (сеть провайдера)' : '') . ' вместо ' . $sp['real'][0]
     . ($sp['real_ok'] ? ' — по настоящему адресу открывается' : '');
 }
