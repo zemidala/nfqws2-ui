@@ -168,7 +168,7 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 .list { display: grid; }
 .item { display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-top: 1px solid var(--line); min-width: 0; color: inherit; }
 .item:first-child { border-top: 0; }
-.item-main { flex: 1; min-width: 0; display: grid; gap: 1px; }
+.item-main { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; }
 .item-title { font-weight: 600; }
 
 /* ---------- колонка обзора ---------- */
