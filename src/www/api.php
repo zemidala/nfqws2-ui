@@ -4454,6 +4454,18 @@ function testJob(): void
   if ($auto) {
     $status['auto'] = true;
   }
+  // сайты, которые podkop пускает в туннель (FakeIP): проверка с роутера уходит туда же, и все стратегии
+  // выглядят одинаково — проверяется туннель, а не nfqws2
+  $podkop = [];
+  foreach (in_array($job['type'], ['pick', 'multi', 'wide', 'cfg'], true) && !$auto ? ($job['hosts'] ?? [$job['host']]) : [] as $h) {
+    $pk = podkopRoute($h);
+    if ($pk && !empty($pk['proxy'])) {
+      $podkop[] = $h;
+    }
+  }
+  if ($podkop) {
+    $status['podkop'] = $podkop;
+  }
   $nfq = null;
   register_shutdown_function(function () use (&$nfq, $iface, &$status) {
     testNfqwsStop($nfq);

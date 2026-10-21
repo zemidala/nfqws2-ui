@@ -357,6 +357,7 @@ const FEATURES = [
   ['diag:exclude', '1.19.0', 'диагноз: «Исключить из профиля», когда сайт ломает nfqws2'],
   ['cfg', '1.20.0', '«Чужой конфиг» — проверить конфиг из чата на своих сайтах и сравнить с текущим, не ставя его'],
   ['over:leftovers', '1.21.0', '«Проблемы»: файлы -opkg от обновления nfqws2 — посмотреть и удалить'],
+  ['pick:podkop', '1.21.0', 'подбор и проверки предупреждают, если сайт идёт через podkop'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 // на сколько минорных версий функция старше текущей (у сборки до выпуска — меньше нуля)
@@ -3895,6 +3896,16 @@ function sentPanel(sent) {
 }
 
 // bare — без заголовка: страница встроена в карточку сайта
+// Сайты задания, которые podkop пускает в туннель: проверка с роутера уходит туда же, nfqws2 её не видит
+function podkopNote(s) {
+  const list = s?.podkop || [];
+  if (!list.length) return null;
+  const one = list.length === 1;
+  return notice('warn', one ? `${list[0]} идёт через podkop` : `Через podkop идут: ${list.join(', ')}`,
+    `Для ${one ? 'этого сайта' : 'этих сайтов'} роутер получает служебный адрес podkop (198.18.x), и проверочные запросы уходят в туннель, а не через nfqws2. Поэтому ${one ? 'его результат' : 'их результаты'} показывают работу туннеля: все стратегии и конфиги выглядят одинаково. Чтобы сравнить стратегии, возьмите сайт, который не идёт через podkop, или на время уберите этот сайт из podkop.`,
+    newTag('pick:podkop'));
+}
+
 async function viewTests(main, r, bare = false) {
   await loadCatalog();
   stopTestPoll();
@@ -4052,13 +4063,13 @@ async function viewTests(main, r, bare = false) {
       s.current ? h('p', { class: 'sm muted', text: 'Сейчас: ' + s.current }) : null) : null;
     if (s.type === 'wide') {
       const p = s.pick;
-      out.replaceChildren(wideResult(s, running), p && (p.results?.length || p.baseline) ? pickResult(p, false) : null);
+      out.replaceChildren(podkopNote(s), wideResult(s, running), p && (p.results?.length || p.baseline) ? pickResult(p, false) : null);
       return;
     }
     if (s.state === 'error') { out.replaceChildren(notice('bad', s.title || 'Тест не удался', s.error || '', s.host && s.title ? btn('Подробный диагноз', () => go(diagHref(s.host)), 'small', 'search') : null)); return; }
     if (s.type === 'trace') { out.replaceChildren(head, s.state === 'done' ? traceResult(s) : null); return; }
-    if (s.type === 'multi') { out.replaceChildren(head, multiResult(s, running)); return; }
-    out.replaceChildren(head, s.results?.length || s.baseline ? pickResult(s, running) : null);
+    if (s.type === 'multi') { out.replaceChildren(head, podkopNote(s), multiResult(s, running)); return; }
+    out.replaceChildren(head, podkopNote(s), s.results?.length || s.baseline ? pickResult(s, running) : null);
   }
 
   function pickResult(s, running) {
@@ -4829,6 +4840,7 @@ async function viewCfg(main) {
           return h('td', { class: 'sm ' + (ok ? 'ok' : 'bad'), text: ok ? `${p.ok}/${p.tries}` + (p.ms ? ` · ${p.ms} мс` : '') : (p.reason || `${p.ok}/${p.tries}`) });
         }))))));
     out.replaceChildren(
+      podkopNote(s),
       running ? h('section', { class: 'panel' }, h('div', { class: 'row' }, h('span', { class: 'spin' }), h('b', { text: 'Проверяю конфиги' }), h('span', { class: 'grow' }),
         h('span', { class: 'sm muted num', text: s.total ? `${s.done} из ${s.total}` : 'запуск…' }), btn('Остановить', () => api('test_stop'), 'small danger', 'stop')),
         s.current ? h('p', { class: 'sm muted', text: 'Сейчас: ' + s.current }) : null) : null,
