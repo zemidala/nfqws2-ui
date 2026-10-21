@@ -344,6 +344,8 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 .menu-list { position: absolute; top: calc(100% + 4px); left: 0; z-index: 40; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; box-shadow: 0 8px 24px rgba(0, 0, 0, .16); padding: 4px; min-width: 250px; max-height: 50vh; overflow: auto; display: grid; }
 .menu-list button { font-size: 13px; text-align: left; background: none; border: 0; color: var(--fg); padding: 6px 10px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; gap: 10px; }
 .menu-list button:hover { background: var(--soft); }
+.menu-list button:disabled { color: var(--faint); cursor: default; max-width: 320px; }
+.menu-list button:disabled:hover { background: none; }
 .menu-list .nav-h { padding: 6px 10px 2px; }
 
 /* ---------- копии, история ---------- */

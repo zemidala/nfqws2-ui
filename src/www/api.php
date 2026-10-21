@@ -1439,7 +1439,8 @@ function listsInventory(array $profiles): array
       'kind' => listUse()[$path] ?? listKind($name),
       'exists' => $real !== null,
       'editable' => $real === $path && dirname($path) === LISTS_DIR,
-      'removable' => !in_array($name, PROTECTED_LISTS, true) && empty($usage[$path]),
+      // удалить можно любой список, который не читает ни один профиль; стандартный — с предупреждением в интерфейсе
+      'removable' => empty($usage[$path]), 'stock' => in_array($name, PROTECTED_LISTS, true),
       'entries' => $real ? count(readListLines($path)) : 0,
       'size' => $real ? filesize($real) : 0,
       'mtime' => $real ? filemtime($real) : null,
@@ -8109,7 +8110,7 @@ switch ($cmd) {
     $path = editablePath($name);
     foreach (listsInventory(currentProfiles()) as $l) {
       if ($l['name'] === $name && !$l['removable']) {
-        fail('Этот список используется или защищён — удалить нельзя');
+        fail('Этот список читают профили — сначала отключите его от них');
       }
     }
     beforeChange("удалён список $name");
