@@ -329,7 +329,7 @@ const PAGES = {
   backup: ['#/settings/backup', 'Резервные копии'], hist: ['#/settings/hist', 'История изменений'], log: ['#/log', 'Журнал'],
   look: ['#/settings/look', 'Оформление'], about: ['#/settings/about', 'О программе'],
   // ещё не сделаны: в меню видны, но заблокированы и помечены «скоро»
-  diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], comm: ['#/tests/community', 'Стратегии сообщества'], frz: ['#/tests/freeze', 'Обрыв на 16 КБ'], auto: ['#/tests/auto', 'Автоподбор'], asn: ['#/asn', 'Список по ASN'], report: ['#/settings/report', 'Отчёт для помощи'],
+  diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], comm: ['#/tests/community', 'Стратегии сообщества'], frz: ['#/tests/freeze', 'Обрыв на 16 КБ'], cfg: ['#/tests/configs', 'Чужой конфиг'], auto: ['#/tests/auto', 'Автоподбор'], asn: ['#/asn', 'Список по ASN'], report: ['#/settings/report', 'Отчёт для помощи'],
 };
 // Новые функции — метка «новое». КАЖДАЯ новая функция интерфейса записывается сюда:
 // [страница из PAGES или «страница:функция», версия, в которой появилась, подпись для сообщения «Обновлено до…»].
@@ -354,6 +354,7 @@ const FEATURES = [
   ['lists:text', '1.17.0', 'список открывается тем видом, что выбран в прошлый раз; Ctrl+/ в тексте — комментарий'],
   ['over:exclude', '1.19.0', '«Проверить сайт»: сайт не заблокирован, а профиль его ломает — «Исключить из профиля»'],
   ['diag:exclude', '1.19.0', 'диагноз: «Исключить из профиля», когда сайт ломает nfqws2'],
+  ['cfg', '1.20.0', '«Чужой конфиг» — проверить конфиг из чата на своих сайтах и сравнить с текущим, не ставя его'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 // на сколько минорных версий функция старше текущей (у сборки до выпуска — меньше нуля)
@@ -400,16 +401,16 @@ const SOON_HINT = 'Ещё в разработке — появится в одн
 const SYS_PAGES = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 const SYS_NAV = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 // Компоновка «Боковое меню»: группы и их страницы
-const MENU = [[null, ['over']], ['Проверка сайта', ['diag', 'frz', 'pick', 'trace', 'phist', 'comm']], ['Наблюдение', ['mon', 'auto', 'tg']], ['Обход', ['prof', 'lists', 'asn']], ['Система', SYS_NAV]];
+const MENU = [[null, ['over']], ['Проверка сайта', ['diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'cfg']], ['Наблюдение', ['mon', 'auto', 'tg']], ['Обход', ['prof', 'lists', 'asn']], ['Система', SYS_NAV]];
 // Упрощённый вид (галочка в «Оформлении»): шесть разделов, страницы раздела — вкладками над страницей (как в TOP_TABS)
-const MENU_SIMPLE = [['over', 'Обзор', 'home', ['over']], ['pick', 'Проверка сайта', 'tests', ['diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'site']], ['mon', 'Наблюдение', 'pulse', ['mon', 'auto', 'tg']],
+const MENU_SIMPLE = [['over', 'Обзор', 'home', ['over']], ['pick', 'Проверка сайта', 'tests', ['diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'cfg', 'site']], ['mon', 'Наблюдение', 'pulse', ['mon', 'auto', 'tg']],
   ['prof', 'Профили', 'layers', ['prof']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]];
 // Верхние вкладки компоновок: страница по клику, подпись, значок, страницы вкладки, «только на узком экране»
 const TOP_TABS = {
   menu: [],
-  tabs: [['over', 'Обзор', 'home', ['over'], true], ['pick', 'Проверка', 'tests', ['diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'auto', 'tg']],
+  tabs: [['over', 'Обзор', 'home', ['over'], true], ['pick', 'Проверка', 'tests', ['diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'cfg', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'auto', 'tg']],
     ['prof', 'Профили', 'layers', ['prof']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
-  site: [['over', 'Обзор', 'home', ['over']], ['mon', 'Сайты', 'pulse', ['mon', 'diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'auto', 'tg', 'site']],
+  site: [['over', 'Обзор', 'home', ['over']], ['mon', 'Сайты', 'pulse', ['mon', 'diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'cfg', 'auto', 'tg', 'site']],
     ['prof', 'Профили', 'layers', ['prof']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
 };
 // Нижняя панель телефона — одна для всех компоновок; остальное — в меню
@@ -433,7 +434,7 @@ function pageOf(r = parseRoute()) {
   if (r.tab === 'site') return 'site';
   if (r.tab === 'diag') return 'diag';
   if (r.tab === 'asn') return 'asn';
-  if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace', history: 'phist', community: 'comm', freeze: 'frz', auto: 'auto' }[r.arg] || 'pick';
+  if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace', history: 'phist', community: 'comm', freeze: 'frz', configs: 'cfg', auto: 'auto' }[r.arg] || 'pick';
   if (r.tab === 'settings') return SYS_PAGES.includes(r.arg) ? r.arg : ['readme', 'changelog'].includes(r.arg) ? 'about' : 'prof';
   return 'over';
 }
@@ -870,7 +871,7 @@ function placeSide() {
 // Колонка состояния справа — на страницах-формах, проверках и таблицах, когда для неё хватает ширины
 // (показывает CSS по ширине области содержимого). Во «Вкладках» не нужна: обзор и так слева.
 // Списки, профили, конфиг, журнал и мониторинг отдают всю ширину своему содержимому, «Обзор» — карточкам.
-const RAIL_PAGES = ['diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'auto', 'tg', 'asn', 'basic', 'base', 'backup', 'hist', 'report', 'look', 'about', 'site'];
+const RAIL_PAGES = ['diag', 'frz', 'cfg', 'pick', 'trace', 'phist', 'comm', 'auto', 'tg', 'asn', 'basic', 'base', 'backup', 'hist', 'report', 'look', 'about', 'site'];
 function placeRail(main, page) {
   main.classList.toggle('formy', RAIL_PAGES.includes(page));   // строки форм на широком экране — подсказки справа от поля
   if (!isWide() || overviewCol() || !RAIL_PAGES.includes(page)) return;
@@ -2588,8 +2589,9 @@ function parseStrategies(text) {
 }
 
 // Чужой профиль из чата: разбираем текст, отбрасываем лишнее, проверяем у nfqws2, даём испытать на сайте
-function pasteProfile() {
+function pasteProfile(text) {
   const ta = h('textarea', { class: 'input mono', rows: 6, style: 'width:100%;resize:vertical', placeholder: '--filter-tcp=443 --filter-l7=tls --lua-desync=fake:blob=tls_clienthello:tcp_md5 …', spellcheck: 'false' });
+  if (typeof text === 'string') ta.value = text;   // профиль из «Чужого конфига»; из меню приходит событие клика
   const out = h('div', { class: 'stack' });
   const site = h('input', { class: 'input mono', placeholder: 'сайт для проверки, например rutracker.org', style: 'max-width:300px', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Сайт для проверки' });
   let res = null;
@@ -2633,6 +2635,7 @@ function pasteProfile() {
   const bg = modal('Вставить чужой профиль', h('div', { class: 'stack modal-b' },
     h('p', { class: 'sm muted', text: 'Вставьте текст профиля из чата как есть — подписи, кавычки и переносы уберутся сами. Останутся только параметры, которые знает nfqws2 на этом роутере.' }),
     ta, h('div', { class: 'row' }, btn('Разобрать и проверить', check, 'primary small')), out));
+  if (ta.value) check();
 }
 
 async function moveCustom(from, to) {
@@ -3876,6 +3879,7 @@ async function viewTests(main, r, bare = false) {
   if (r.arg === 'auto') return viewAuto(main);
   if (r.arg === 'community') return viewCommunity(main);
   if (r.arg === 'freeze') return viewFreeze(main);
+  if (r.arg === 'configs') return viewCfg(main);
   const tab = ['trace', 'monitor', 'notify'].includes(r.arg) ? r.arg : 'pick';
   if (tab === 'monitor') {
     main.append(h('div', { class: 'vh' }, h('h1', { text: layout() === 'site' ? 'Сайты' : 'Мониторинг' })));
@@ -4016,6 +4020,7 @@ async function viewTests(main, r, bare = false) {
     }
     if (s.state === 'idle') { out.replaceChildren(); return; }
     if (s.type === 'freeze') { out.replaceChildren(running ? notice('info', 'Идёт проба «Обрыв на 16 КБ»', 'Подбор можно запустить, когда она закончится.', h('a', { class: 'btn small', href: PAGES.frz[0] }, 'Открыть')) : null); return; }
+    if (s.type === 'cfg') { out.replaceChildren(running ? notice('info', 'Идёт проверка чужих конфигов', 'Подбор можно запустить, когда она закончится.', h('a', { class: 'btn small', href: PAGES.cfg[0] }, 'Открыть')) : null); return; }
     if ((s.type === 'trace') !== (tab === 'trace') && !running) { out.replaceChildren(); return; }
     const head = running ? h('section', { class: 'panel' },
       h('div', { class: 'row' }, h('span', { class: 'spin' }), h('b', { text: `${s.type === 'trace' ? 'Трассировка' : s.type === 'multi' ? 'Подбор для' : 'Тест'} ${s.host}` }), h('span', { class: 'grow' }),
@@ -4675,6 +4680,164 @@ async function viewFreeze(main) {
     if (!await saveVars({ NFQWS_ARGS_CUSTOM: joinParts([part, ...cur]) }, `профиль для сети AS${n.asn}: обрыв на 16 КБ`)) return;
     await safeRestart();
     go('#/settings/p1');
+  }
+
+  poll();
+}
+
+// ============ Чужой конфиг: проверить целиком, не ставя ============
+// Конфиги из чатов проверяются на проверочной очереди рядом с рабочим nfqws2 и сравниваются с текущим.
+
+const CFG_DRAFT = [];   // добавленные, но ещё не проверенные конфиги: живут, пока открыта вкладка
+
+async function viewCfg(main) {
+  const mon = (S.state.monitor?.sites || []).map((x) => x.host);
+  const sites = h('input', { class: 'input mono grow', value: mon.join(', '), placeholder: 'сайты через запятую, например rutracker.org, youtube.com', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Сайты для проверки' });
+  const chips = h('div', { class: 'row' });
+  const out = h('div', { class: 'stack', style: 'gap:14px' }, spinner('Загрузка…'));
+  const startBtn = btn('Проверить', start, 'primary', 'play');
+  let last = null;
+  let detail = false;
+
+  const drawChips = () => {
+    chips.replaceChildren(...CFG_DRAFT.map((c, i) => h('span', { class: 'chip accent' }, c.name,
+      h('button', { class: 'x', type: 'button', 'aria-label': 'Убрать ' + c.name, onclick: () => { CFG_DRAFT.splice(i, 1); drawChips(); } }, '×'))),
+    CFG_DRAFT.length ? null : h('span', { class: 'sm muted', text: 'Пока ничего не добавлено.' }));
+  };
+  const add = (name, text) => {
+    if (CFG_DRAFT.length >= 10) { toast('Не больше 10 конфигов за раз', { err: true }); return false; }
+    CFG_DRAFT.push({ name: name.trim() || 'Конфиг ' + (CFG_DRAFT.length + 1), text });
+    drawChips();
+    return true;
+  };
+  const addText = () => {
+    const ta = h('textarea', { class: 'input mono', rows: 10, style: 'width:100%;resize:vertical', placeholder: 'Вставьте содержимое nfqws2.conf целиком', spellcheck: 'false' });
+    const nm = h('input', { class: 'input', placeholder: 'Имя, например «из чата» (необязательно)', style: 'max-width:320px' });
+    const bg = modal('Конфиг текстом', h('div', { class: 'stack modal-b' }, ta, nm,
+      h('p', { class: 'sm faint', text: 'Пути под этот роутер поправятся сами. Конфиг, в котором кроме переменных есть команды, проверяться не будет.' })),
+    btn('Добавить', () => { if (!ta.value.trim()) { toast('Вставьте текст конфига', { err: true }); return; } if (add(nm.value, ta.value)) bg.close(); }, 'primary'));
+    ta.focus();
+  };
+  const addUrl = () => {
+    const u = h('input', { class: 'input mono', placeholder: 'https://raw.githubusercontent.com/…/nfqws2.conf', style: 'width:100%', autocapitalize: 'off', spellcheck: 'false' });
+    const bg = modal('Конфиг по ссылке', h('div', { class: 'stack modal-b' }, u,
+      h('p', { class: 'sm faint', text: 'Ссылка на сам файл. Для GitHub подойдёт и ссылка на страницу файла (…/blob/…) — роутер возьмёт его текст.' })),
+    btn('Скачать', async () => {
+      const r = await guarded(() => api('cfg_fetch', { url: u.value.trim() }));
+      if (r && add('', r.text)) bg.close();
+    }, 'primary'));
+    u.focus();
+  };
+
+  main.append(
+    h('div', { class: 'vh' }, h('h1', { text: 'Чужой конфиг' })),
+    panel(null, null,
+      h('p', { text: 'Проверьте конфиг из чата раньше, чем ставить его вместо своего. Роутер запустит каждый отдельным nfqws2 на проверочных соединениях, откроет одни и те же сайты и сравнит с вашим текущим конфигом. Ваш конфиг и трафик при этом не меняются.' }),
+      h('div', { class: 'row' }, h('b', { class: 'grow', text: 'Конфиги для проверки' }), btn('Текстом', addText, 'small', 'plus'), btn('По ссылке', addUrl, 'small', 'plus')),
+      chips,
+      h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Сайты' }), sites),
+      h('div', { class: 'row' }, startBtn, h('span', { class: 'sm muted grow note-wide', text: 'Каждый сайт — до трёх раз. Обычно 1–3 минуты на конфиг. Ваш конфиг проверяется тоже — для сравнения.' }))),
+    out);
+  drawChips();
+
+  async function start() {
+    if (!CFG_DRAFT.length) { toast('Добавьте хотя бы один конфиг', { err: true }); return; }
+    const hosts = sites.value.split(/[\s,;]+/).map((x) => x.trim().replace(/^[a-z]+:\/\//i, '').replace(/[/?#].*$/, '')).filter(Boolean);
+    if (!hosts.length) { toast('Укажите сайты для проверки', { err: true }); return; }
+    if (!await guarded(() => api('cfg_start', { configs: CFG_DRAFT, hosts }))) return;
+    poll();
+  }
+  function poll() {
+    pollTest(async () => {
+      if (!out.isConnected) return false;
+      const s = await api('cfg_get').catch(() => null);
+      if (!s) return true;
+      draw(s);
+      return ['running', 'starting'].includes(s.state);
+    }, 2000);
+  }
+
+  const score = (c) => c.skip ? -1 : c.opened;
+  function draw(s) {
+    last = s;
+    const running = ['running', 'starting'].includes(s.state);
+    startBtn.disabled = running || !!s.busy;
+    if (s.busy && !running) { out.replaceChildren(notice('info', 'Сейчас идёт подбор или другая проверка', 'Проверку конфигов можно запустить, когда она закончится.')); return; }
+    if (s.state === 'idle') { out.replaceChildren(); return; }
+    if (s.state === 'error') { out.replaceChildren(notice('bad', 'Проверка не удалась', s.error || '')); return; }
+    const all = s.configs || [];
+    const mine = all.find((c) => c.mine);
+    const theirs = all.filter((c) => !c.mine).sort((a, b) => score(b) - score(a) || (a.ms ?? 1e9) - (b.ms ?? 1e9));
+    const hosts = (s.sites || []).map((x) => x.host);
+    const total = hosts.length;
+    const failed = (c) => hosts.filter((x) => c.per?.[x] && !(c.per[x].ok > 0 && c.per[x].ok === c.per[x].tries));
+    const card = (c) => {
+      const bad = failed(c);
+      const why = (x) => `${x} (${c.per[x].reason || c.per[x].ok + ' из ' + c.per[x].tries})`;
+      const better = mine && !c.mine && !c.skip && !mine.skip ? hosts.filter((x) => failed(mine).includes(x) && !bad.includes(x)) : [];
+      const worse = mine && !c.mine && !c.skip && !mine.skip ? bad.filter((x) => !failed(mine).includes(x)) : [];
+      const tag = c.mine || c.skip || !mine || mine.skip ? null
+        : c.opened > mine.opened ? h('span', { class: 'chip ok', text: 'лучше вашего' }) : c.opened === mine.opened ? h('span', { class: 'chip', text: 'как ваш' }) : h('span', { class: 'chip bad', text: 'хуже вашего' });
+      return h('div', { class: 'cfg-card' + (tag && c.opened > mine.opened ? ' best' : '') },
+        h('div', { class: 'stack', style: 'gap:2px;min-width:0' },
+          h('div', { class: 'row', style: 'gap:8px' }, h('b', { text: c.name }), tag),
+          c.skip ? h('div', { class: 'sm', style: 'color:var(--warn)', text: c.skip }) : [
+            // что не открылось: то, что хуже вашего, — отдельной красной строкой; общее с вашим — серым
+            !bad.length ? h('div', { class: 'sm muted', text: 'Открылись все сайты' }) : null,
+            worse.length ? h('div', { class: 'sm', style: 'color:var(--bad)', text: 'У вас открываются, а с ним нет: ' + worse.map(why).join(', ') }) : null,
+            bad.length > worse.length ? h('div', { class: 'sm muted', text: (c.mine || !mine || mine.skip ? 'Не открылись: ' : 'Не открылись, как и у вас: ') + bad.filter((x) => !worse.includes(x)).map(why).join(', ') }) : null,
+            better.length ? h('div', { class: 'sm', style: 'color:var(--ok)', text: 'Открылись, а у вас нет: ' + better.join(', ') }) : null],
+          c.changes?.length ? h('div', { class: 'sm faint', text: 'Поправлено под этот роутер: ' + plural(c.changes.length, 'изменение', 'изменения', 'изменений'), title: c.changes.join('\n') }) : null,
+          !c.mine && !c.skip && c.warnings ? h('div', { class: 'sm faint', text: `Проверка конфига: ${plural(c.warnings, 'замечание', 'замечания', 'замечаний')} — видны после применения на странице «Конфиг целиком»` }) : null),
+        h('div', { class: 'row cfg-act' },
+          c.skip ? null : h('div', { class: 'cfg-score' }, h('b', { text: `${c.opened}/${total}` }), h('span', { class: 'cfg-bar' }, h('i', { style: `width:${total ? Math.round(c.opened / total * 100) : 0}%` })),
+            c.ms ? h('span', { class: 'sm faint', text: c.ms + ' мс' }) : null),
+          !c.mine && !c.skip && c.text ? btn('Применить', () => apply(c), 'small' + (tag && c.opened > mine.opened ? ' primary' : ''), 'ok') : null,
+          !c.mine && c.profiles?.length ? btn('Профили…', () => profiles(c), 'small') : null));
+    };
+    const table = () => h('div', { class: 'scroll' }, h('table', { class: 'tbl cfg-tbl' },
+      h('thead', {}, h('tr', {}, h('th', { text: 'Сайт' }), h('th', { text: 'без обхода' }), [mine, ...theirs].filter(Boolean).map((c) => h('th', { text: c.name })))),
+      h('tbody', {}, (s.sites || []).map((x) => h('tr', {}, h('td', { class: 'mono', text: x.host }),
+        h('td', { class: 'sm ' + (x.baseline?.ok ? 'ok' : 'muted'), text: x.baseline?.ok ? 'открывается' : (x.baseline?.reason || '—') }),
+        [mine, ...theirs].filter(Boolean).map((c) => {
+          const p = c.per?.[x.host];
+          if (!p) return h('td', { class: 'sm faint', text: c.skip ? 'не проверен' : '—' });
+          const ok = p.ok > 0 && p.ok === p.tries;
+          return h('td', { class: 'sm ' + (ok ? 'ok' : 'bad'), text: ok ? `${p.ok}/${p.tries}` + (p.ms ? ` · ${p.ms} мс` : '') : (p.reason || `${p.ok}/${p.tries}`) });
+        }))))));
+    out.replaceChildren(
+      running ? h('section', { class: 'panel' }, h('div', { class: 'row' }, h('span', { class: 'spin' }), h('b', { text: 'Проверяю конфиги' }), h('span', { class: 'grow' }),
+        h('span', { class: 'sm muted num', text: s.total ? `${s.done} из ${s.total}` : 'запуск…' }), btn('Остановить', () => api('test_stop'), 'small danger', 'stop')),
+        s.current ? h('p', { class: 'sm muted', text: 'Сейчас: ' + s.current }) : null) : null,
+      all.length ? panel('Итог', h('span', { class: 'row' }, h('span', { class: 'sm muted', text: (s.finished ? fmtDate(s.finished) + ' · ' : '') + plural(total, 'сайт', 'сайта', 'сайтов') }),
+        btn(detail ? 'Скрыть таблицу' : 'Подробно по сайтам', () => { detail = !detail; draw(last); }, 'small ghost')),
+      h('div', { class: 'stack', style: 'gap:10px' }, ...theirs.map(card), mine ? card(mine) : null),
+      detail ? table() : null,
+      h('p', { class: 'sm faint', text: 'Сайт считается открытым, если открылся каждый раз. «Применить» ставит конфиг целиком: снимок, перезапуск с проверкой мониторинга и откат, если сайты перестанут открываться или вы не подтвердите за 3 минуты. «Профили…» — взять из конфига отдельный профиль, остальное у вас не меняется.' })) : null);
+  }
+
+  async function apply(c) {
+    if (!confirm(`Поставить «${c.name}» вместо вашего конфига?\n\nПеред этим сохранится снимок. nfqws2 перезапустится с проверкой: если сайты мониторинга перестанут открываться или вы не подтвердите за 3 минуты, вернётся ваш конфиг. Вернуть вручную — «Отменить» в шапке или «История изменений».`)) return;
+    if (!await guarded(() => api('conf_save_raw', { content: c.text, force: true, note: 'чужой конфиг: ' + c.name }))) return;
+    S.conf = null;
+    await safeRestart();
+    go(PAGES.raw[0]);
+  }
+
+  function profiles(c) {
+    const label = (pt) => {
+      const nm = pt.find((t) => t.startsWith('--name='));
+      const f = pt.filter((t) => /^--filter-(tcp|udp|l7)=/.test(t)).map((t) => t.replace(/^--filter-/, '')).join(' ');
+      const d = pt.filter((t) => t.startsWith('--lua-desync=')).map((t) => t.slice(13).split(':')[0]);
+      // для кого: списки сайтов и адресов (у одинаковых по фильтру профилей отличаются именно они)
+      const base = (t) => t.split('=')[1].split(/[,/]/).pop();
+      const who = [...pt.filter((t) => /^--(hostlist|ipset|hostlist-auto)=/.test(t)).map(base), ...pt.filter((t) => /^--(hostlist|ipset)-exclude=/.test(t)).map((t) => 'кроме ' + base(t))];
+      return (nm ? nm.slice(7) + ' · ' : '') + (f || 'без фильтра') + (who.length ? ' · ' + who.join(', ') : '') + (d.length ? ' → ' + [...new Set(d)].join(', ') : '');
+    };
+    const bg = modal(`Профили «${c.name}»`, h('div', { class: 'stack modal-b' },
+      h('p', { class: 'sm muted', text: 'Возьмите профиль, который открыл нужный сайт: он добавится в ваши «свои профили» первым, остальное у вас не изменится.' }),
+      ...c.profiles.map((pt, i) => h('div', { class: 'row', style: 'flex-wrap:nowrap' }, h('span', { class: 'mono sm grow', style: 'min-width:0;overflow-wrap:anywhere', text: `#${i + 1} ${label(pt)}` }),
+        btn('Взять', () => { bg.close(); pasteProfile(pt.join('\n')); }, 'small')))));
   }
 
   poll();
