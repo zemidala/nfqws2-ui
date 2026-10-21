@@ -356,6 +356,7 @@ const FEATURES = [
   ['over:exclude', '1.19.0', '«Проверить сайт»: сайт не заблокирован, а профиль его ломает — «Исключить из профиля»'],
   ['diag:exclude', '1.19.0', 'диагноз: «Исключить из профиля», когда сайт ломает nfqws2'],
   ['cfg', '1.20.0', '«Чужой конфиг» — проверить конфиг из чата на своих сайтах и сравнить с текущим, не ставя его'],
+  ['over:leftovers', '1.21.0', '«Проблемы»: файлы -opkg от обновления nfqws2 — посмотреть и удалить'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 // на сколько минорных версий функция старше текущей (у сборки до выпуска — меньше нуля)
@@ -1024,6 +1025,10 @@ function problemItems() {
       text: `${f.name} — ${fmtBytes(f.used)} оперативной памяти роутера (${LOG_DIR_HINT})` + (low ? `, свободно всего ${fmtBytes(st.logs.free)}` : '') + '.'
         + (st.logs.debug ? ' Отладка включена — журнал продолжит расти; больше 50 МБ программа сама подрезает его до последнего 1 МБ.' : ''),
       href: PAGES.log[0], fix: logActions(f.name, st.logs.debug) });
+  }
+  if (st.leftovers?.length) {
+    items.push({ level: 'info', title: 'Остались файлы от обновления nfqws2', text: `${plural(st.leftovers.length, 'файл', 'файла', 'файлов')} с новой стандартной версией конфига или списков (${st.leftovers.slice(0, 3).map((x) => x.replace(/^lists\//, '')).join(', ')}${st.leftovers.length > 3 ? ', …' : ''}). nfqws2 их не читает — можно сравнить со своими и удалить.`,
+      href: PAGES.raw[0], fix: [btn('Посмотреть', openLeftovers, 'small', 'search'), newTag('over:leftovers')] });
   }
   if (!st.running && st.stop) items.push({ level: 'error', title: 'nfqws2 остановлен', text: st.stop.text, href: st.stop.kind === 'conf' ? PAGES.raw[0] : '#/' });
   for (const o of st.auto?.offers || []) {
@@ -5523,6 +5528,57 @@ async function openHistory(name, onRestored) {
     h('small', { text: it.kind === 'history' ? `${it.source}${it.name && it.name !== it.source ? ' · ' + it.name : ''}` : `${it.name} · ${fmtDate(it.mtime)}` }))));
   body.replaceChildren(h('div', { class: 'hist' }, versions, diffBox));
   select(hist.items[0]);
+  // шаблон пакета (имя-opkg, имя.apk-new) можно удалить прямо отсюда
+  const leftover = (it) => it.kind === 'template' && /(-opkg|\.apk-new)$/.test(it.name) ? (isConf ? '' : 'lists/') + it.name : null;
+  const delBtn = btn('Удалить шаблон', async () => {
+    const path = selected && leftover(selected);
+    if (!path || !confirm(`Удалить ${selected.name}? Это новая стандартная версия файла из пакета nfqws2 — ваш ${name} не изменится.`)) return;
+    const r = await guarded(() => api('leftovers_delete', { names: [path] }));
+    if (!r) return;
+    toast('Шаблон удалён');
+    bg.close();
+    await loadState().catch(() => {});
+    route();
+  }, 'ghost', 'trash', { hidden: true });
+  restoreBtn.before(delBtn);
+  versions.addEventListener('click', () => { delBtn.hidden = !(selected && leftover(selected)); });
+  delBtn.hidden = !leftover(hist.items[0]);
+}
+
+// Файлы, которые менеджер пакетов положил при обновлении nfqws2 рядом с изменёнными вами: новые стандартные версии
+async function openLeftovers() {
+  const body = h('div', { class: 'modal-b' }, spinner('Загрузка…'));
+  const allBtn = btn('Удалить все', null, 'warn', 'trash', { disabled: true });
+  const bg = modal('Файлы от обновления nfqws2', body, allBtn);
+  const del = async (names) => {
+    const r = await guarded(() => api('leftovers_delete', { names }));
+    if (!r) return;
+    toast(r.deleted === 1 ? 'Файл удалён' : `Удалено файлов: ${r.deleted}`);
+    await loadState().catch(() => {});
+    route();
+    draw();
+  };
+  const row = (x) => {
+    const editable = x.base === 'nfqws2.conf' || (x.name.startsWith('lists/') && /\.list$/.test(x.base));
+    const state = !x.own ? 'вашего файла с таким именем нет' : x.same ? 'совпадает с вашим' : 'отличается от вашего';
+    return h('div', { class: 'item' }, h('div', { class: 'item-main' },
+      h('span', { class: 'item-title', text: x.name }),
+      h('span', { class: 'sm muted', text: `${fmtDate(x.mtime)} · ${fmtBytes(x.size)} · ${state}` }),
+      h('div', { class: 'row', style: 'margin-top:6px' },
+        editable && x.own && !x.same ? btn('Сравнить', () => { bg.close(); openHistory(x.base, () => route()); }, 'small', 'history', { title: `Открыть историю ${x.base} — там шаблон можно сравнить с вашим файлом` }) : null,
+        btn('Удалить', () => del([x.name]), 'small', 'trash'))));
+  };
+  const draw = async () => {
+    const r = await api('leftovers').catch((e) => { body.replaceChildren(notice('bad', e.message)); });
+    if (!r) return;
+    allBtn.disabled = !r.items.length;
+    if (!r.items.length) { body.replaceChildren(h('p', { class: 'muted', text: 'Таких файлов больше нет.' })); return; }
+    allBtn.onclick = () => { if (confirm(`Удалить ${plural(r.items.length, 'файл', 'файла', 'файлов')}? Ваши конфиг и списки не изменятся.`)) del(r.items.map((x) => x.name)); };
+    body.replaceChildren(
+      h('p', { class: 'sm muted', text: 'Когда вы меняли конфиг или список, менеджер пакетов при обновлении nfqws2 его не трогает, а кладёт рядом новую стандартную версию с припиской -opkg (на OpenWrt 25 — .apk-new). nfqws2 эти файлы не читает. Если они не нужны для сравнения, их можно удалить; при следующем обновлении пакет может положить их снова.' }),
+      h('div', {}, r.items.map(row)));
+  };
+  draw();
 }
 
 // ============ старт ============

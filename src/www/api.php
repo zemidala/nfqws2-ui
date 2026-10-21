@@ -882,6 +882,41 @@ function historyContent(string $path, string $id): ?string
   return null;
 }
 
+// Новые стандартные версии файлов, которые менеджер пакетов положил рядом с изменёнными вручную
+// при обновлении nfqws2: opkg — «имя-opkg», apk — «имя.apk-new». nfqws2 их не читает.
+function pkgLeftovers(bool $full = false): array
+{
+  $r = [];
+  foreach ([CONF_DIR => '', LISTS_DIR => 'lists/'] as $dir => $pre) {
+    foreach (@scandir($dir) ?: [] as $f) {
+      if (!preg_match('/^(.+?)(-opkg|\.apk-new)$/', $f, $m) || !is_file("$dir/$f")) {
+        continue;
+      }
+      $e = ['name' => $pre . $f, 'base' => $m[1], 'mtime' => filemtime("$dir/$f")];
+      if ($full) {
+        $own = "$dir/{$m[1]}";
+        $e['size'] = filesize("$dir/$f");
+        $e['own'] = is_file($own);
+        $e['same'] = $e['own'] && md5_file($own) === md5_file("$dir/$f");
+      }
+      $r[] = $e;
+    }
+  }
+  return $r;
+}
+
+function pkgLeftoversDelete(array $names): int
+{
+  $known = array_column(pkgLeftovers(), 'name');
+  $n = 0;
+  foreach ($names as $name) {
+    if (is_string($name) && in_array($name, $known, true) && @unlink(CONF_DIR . '/' . $name)) {
+      $n++;
+    }
+  }
+  return $n;
+}
+
 // Путь к редактируемому файлу по имени: nfqws2.conf или список
 function editablePath(string $name): string
 {
@@ -7191,6 +7226,7 @@ function state(): array
       return $i;
     })(),
     'logs' => nfqLogs(),
+    'leftovers' => array_column(pkgLeftovers(), 'name'),
     'curl' => curlCmdError(),
     'lint' => lintCurrent(),
     'conf_tokens' => array_map('tokens', array_intersect_key(confRawVars(file_get_contents(CONF_FILE)), array_flip(ARG_VARS))),
@@ -8195,6 +8231,12 @@ switch ($cmd) {
       fail('Версия не найдена', 404);
     }
     respond(['content' => $c]);
+
+  case 'leftovers':
+    respond(['items' => pkgLeftovers(true)]);
+
+  case 'leftovers_delete':
+    respond(['deleted' => pkgLeftoversDelete(is_array($in['names'] ?? null) ? $in['names'] : [])]);
 
   case 'fix_apply':
     // Находим то же замечание в свежей проверке текущего конфига и применяем его исправление
