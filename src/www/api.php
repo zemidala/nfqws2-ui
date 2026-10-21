@@ -644,8 +644,9 @@ function snapReadFile(string $id, string $rel): ?string
 // Проверяет архив и раскладывает его поверх текущих файлов (файлы, которых нет в архиве, не трогает).
 // Пути в архиве — etc/… (OpenWrt) или opt/etc/… (Keenetic); файлы ложатся туда, где они у этой системы,
 // так что копию с одного роутера можно восстановить и на другом.
-// $nfqOnly — только конфиг, списки и блобы nfqws2, без настроек интерфейса (откат пакета nfqws2)
-function restoreArchive(string $archive, string $reason, bool $nfqOnly = false): array
+// $nfqOnly — только конфиг, списки и блобы nfqws2, без настроек интерфейса (откат пакета nfqws2);
+// $keep — пути файлов (как на роутере), которые не трогать
+function restoreArchive(string $archive, string $reason, bool $nfqOnly = false, array $keep = []): array
 {
   exec('tar -tzf ' . escapeshellarg($archive) . ' 2>&1', $list, $rc);
   if ($rc !== 0 || !$list) {
@@ -674,7 +675,7 @@ function restoreArchive(string $archive, string $reason, bool $nfqOnly = false):
       continue;
     }
     $dst = ROOT . '/' . preg_replace('#^opt/#', '', $e);
-    if (is_file($dst) && md5_file($dst) === md5_file($src)) {
+    if (in_array($dst, $keep, true) || (is_file($dst) && md5_file($dst) === md5_file($src))) {
       continue;
     }
     @mkdir(dirname($dst), 0755, true);
@@ -2751,6 +2752,33 @@ function lintConf(array $raw, string $text): array
       }
       $add($var, $ti ?? $tok, 'warning', "$label: {$parts[0]} не сработает — у профиля --payload=" . implode(',', $pl) . ", а функция без своего payload= берёт только известные протоколы",
         $ti !== null ? ['op' => 'replace', 'to' => "$t:payload=all", 'label' => 'Добавить payload=all'] : null);
+    }
+
+    // tls_mod=…dupsid копирует session id из настоящего ClientHello. Профилю приходит только не-TLS нагрузка
+    // (игры, свои протоколы) — копировать неоткуда: nfqws2 на каждом соединении пишет в журнал
+    // «cannot apply dupsid tls mod. payload is not valid tls», остальное tls_mod при этом работает
+    $pl = null;
+    foreach ($e['tokens'] as $t) {
+      if (str_starts_with($t, '--payload=')) {
+        $pl = explode(',', substr($t, 10));
+        continue;
+      }
+      if ($pl === null || array_intersect($pl, ['tls_client_hello', 'known', 'all']) || !str_starts_with($t, '--lua-desync=')
+        || !preg_match('/:tls_mod=([^:]*)/', $t, $tm) || !in_array('dupsid', explode(',', $tm[1]), true)) {
+        continue;
+      }
+      $rest = implode(',', array_filter(explode(',', $tm[1]), fn($x) => $x !== 'dupsid'));
+      $to = str_replace(':tls_mod=' . $tm[1], $rest === '' ? '' : ':tls_mod=' . $rest, $t);
+      $ti = null;
+      foreach (tokens($raw[$var] ?? '') as $i => $rt) {
+        if ($rt === $t && ($tok === null || $i >= $tok)) {
+          $ti = $i;
+          break;
+        }
+      }
+      $add($var, $ti ?? $tok, 'info', "$label: dupsid в tls_mod не сработает — профилю приходит только --payload=" . implode(',', $pl)
+        . ', а не TLS ClientHello, копировать session id неоткуда. nfqws2 на каждом соединении пишет в журнал «cannot apply dupsid tls mod»; остальное в tls_mod работает',
+        $ti !== null ? ['op' => 'replace', 'to' => $to, 'label' => 'Убрать dupsid'] : null);
     }
 
     // tcp_ts=N — единственная маскировка шага: без временной метки TCP в пакете nfqws2 её пропускает
@@ -7204,6 +7232,18 @@ function nfqUpdateStart(string $ver, bool $rollback): void
   exec('(env -i PATH=' . JOB_PATH . ' NFQWS_UI_CLI=nfqupd php-cgi -q -f ' . escapeshellarg(__FILE__) . ' >/dev/null 2>&1 &)');
 }
 
+// Суммы конфига, списков и блобов nfqws2 — чтобы при откате не затереть то, что правили после обновления
+function nfqFileSums(): array
+{
+  $r = [];
+  foreach (array_merge([CONF_FILE], glob(LISTS_DIR . '/*') ?: [], glob(CONF_DIR . '/blobs/*') ?: []) as $f) {
+    if (is_file($f)) {
+      $r[$f] = md5_file($f);
+    }
+  }
+  return $r;
+}
+
 function nfqLog(string $s): void
 {
   file_put_contents(NFQ_UPDATE_LOG, $s . "\n", FILE_APPEND);
@@ -7328,12 +7368,26 @@ function nfqUpdateJob(): void
     $fail($rc === null ? 'установка не уложилась в 5 минут' : "менеджер пакетов завершился с кодом $rc");
   }
   $now = nfqVer(packageVersion('nfqws2-keenetic', true));
+  $postSums = nfqFileSums();   // как стало сразу после установки
   if ($now !== $to) {
     $fail("после установки стоит " . ($now ?? 'ничего') . ", а не $to");
   }
   if ($job['rollback'] && $job['snap']) {
     nfqLog('Возвращаю конфиг и списки из снимка ' . $job['snap']);
-    $changed = restoreArchive(snapArchive($job['snap']), 'возврат nfqws2 ' . $to, true);
+    // правленное после обновления оставляем: возвращаем только то, что с установки не менялось
+    // суммы «сразу после установки» есть с 1.21.0; у обновлений раньше — по времени изменения файла
+    $post = $d['result']['post'] ?? [];
+    $after = (int)($d['result']['ts'] ?? 0);
+    $keep = [];
+    foreach (nfqFileSums() as $f => $sum) {
+      if ($post ? ($post[$f] ?? null) !== $sum : ($after && filemtime($f) > $after)) {
+        $keep[] = $f;
+      }
+    }
+    if ($keep) {
+      nfqLog('Оставляю как есть (менялись после обновления): ' . implode(', ', array_map('basename', $keep)));
+    }
+    $changed = restoreArchive(snapArchive($job['snap']), 'возврат nfqws2 ' . $to, true, $keep);
     nfqLog($changed ? 'Изменилось: ' . implode(', ', array_map('basename', $changed)) : 'Конфиг и списки и так совпадали со снимком');
   }
   // пакет перезапускает nfqws2 сам; ждём его, при необходимости запускаем
@@ -7366,7 +7420,7 @@ function nfqUpdateJob(): void
   $d['result'] = ['from' => $from, 'to' => $to, 'rollback' => $job['rollback'], 'ts' => time(), 'running' => (bool)$pid,
     'snap' => $job['rollback'] ? null : ($snap['id'] ?? null), 'checks' => $checks,
     'worse' => array_values(array_column(array_filter($checks, fn($c) => !$c['ok'] && $c['was_ok']), 'host')),
-    'leftovers' => count(pkgLeftovers())];
+    'leftovers' => count(pkgLeftovers()), 'post' => $job['rollback'] ? [] : $postSums];
   nfqUpdSave($d);
   historyScan('auto');
   nfqLog('[exit 0]');
