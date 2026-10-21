@@ -2201,13 +2201,17 @@ async function drawList(content, name) {
   // переключатель «Списком / Текстом» и число записей рисует draw()
   const viewSlot = h('span', { class: 'row' });
   const moreList = h('div', { class: 'menu-list', hidden: true, role: 'menu', style: 'right:0;left:auto' });
-  const more = h('span', { class: 'menu' }, btn('', () => { moreList.hidden = !moreList.hidden; }, 'small icon', 'down', { 'aria-haspopup': 'menu', title: 'Ещё: переименовать, копия, удалить', 'aria-label': 'Ещё' }), moreList);
+  const more = h('span', { class: 'menu' }, btn('', () => { moreList.hidden = !moreList.hidden; }, 'small icon', 'down', { 'aria-haspopup': 'menu', title: 'Ещё: переименовать, копия, очистить, удалить', 'aria-label': 'Ещё' }), moreList);
   const moreItem = (label, fn, attrs = {}) => h('button', { type: 'button', role: 'menuitem', text: label, onclick: () => { moreList.hidden = true; fn(); }, ...attrs });
-  moreList.append(moreItem('Переименовать', () => renameList()), moreItem('Сделать копию', () => copyList()),
+  // недоступный пункт — серый, причина прямо в нём: подсказку при наведении на телефоне не увидеть
+  const offItem = (label, why) => h('button', { type: 'button', role: 'menuitem', disabled: true },
+    h('span', { class: 'stack', style: 'gap:2px' }, label, h('span', { class: 'sm faint', style: 'white-space:normal', text: why })));
+  const STOCK_WHY = 'Стандартный список nfqws2-keenetic: на него ссылается стандартный конфиг, без файла nfqws2 не запустится. Очистить можно';
+  moreList.append(meta.stock ? offItem('Переименовать', 'Стандартный список — сделайте копию под новым именем') : moreItem('Переименовать', () => renameList()),
+    moreItem('Сделать копию', () => copyList()),
+    moreItem('Очистить список', () => clearList()),
     meta.removable ? moreItem('Удалить список', () => deleteList())
-      // причина — прямо в пункте: подсказку при наведении на телефоне не увидеть
-      : h('button', { type: 'button', role: 'menuitem', class: 'off', disabled: true }, h('span', { class: 'stack', style: 'gap:2px' }, 'Удалить список',
-        h('span', { class: 'sm faint', style: 'white-space:normal', text: 'Список читают профили — сначала отключите его от них' }))));
+      : offItem('Удалить список', meta.stock ? STOCK_WHY : 'Список читают профили — сначала отключите его от них'));
   const head = h('div', { class: 'lhead' },
     h('div', { class: 'row' }, h('h2', { class: 'mono ltitle', text: name }), LIST_NAMES[name] ? h('span', { class: 'muted', text: LIST_NAMES[name] }) : null, readers,
       h('span', { class: 'grow' }), viewSlot, btn('История', () => openHistory(name, reload), 'small', 'history'), more),
@@ -2269,9 +2273,15 @@ async function drawList(content, name) {
     const r = await guarded(() => api('list_copy', { name, to }), 'Копия создана');
     if (r) { await loadState(); go('#/sites/' + encodeURIComponent(r.name)); }
   }
+  // очистить: файл остаётся (на стандартные ссылается конфиг nfqws2-keenetic), записи уходят
+  async function clearList() {
+    if (!data.content.trim()) { toast('Список и так пуст'); return; }
+    if (!confirm(`Очистить ${name}? Файл останется пустым.` + (meta.used.length ? ' Профили, которые его читают, перестанут учитывать его записи сразу, без перезапуска.' : '')
+      + ' Перед этим делается снимок, вернуть записи можно из «Истории».')) return;
+    if (await guarded(() => api('list_save', { name, content: '', note: 'список очищен' }), 'Список очищен')) { await loadState(); reload(); }
+  }
   async function deleteList() {
-    if (!confirm(`Удалить ${name}? Перед удалением делается снимок, вернуть можно из истории.`
-      + (meta.stock ? '\n\nЭто стандартный список nfqws2-keenetic: на него ссылается стандартный конфиг. Если потом вернёте стандартный конфиг вручную, nfqws2 без этого файла не запустится — тогда создайте пустой список с тем же именем. «Вернуть как при установке» и восстановление снимка вернут его сами.' : ''))) return;
+    if (!confirm(`Удалить ${name}? Перед удалением делается снимок, вернуть можно из истории.`)) return;
     if (await guarded(() => api('list_delete', { name }), 'Список удалён')) { await loadState(); go('#/sites'); }
   }
 

@@ -1439,8 +1439,9 @@ function listsInventory(array $profiles): array
       'kind' => listUse()[$path] ?? listKind($name),
       'exists' => $real !== null,
       'editable' => $real === $path && dirname($path) === LISTS_DIR,
-      // удалить можно любой список, который не читает ни один профиль; стандартный — с предупреждением в интерфейсе
-      'removable' => empty($usage[$path]), 'stock' => in_array($name, PROTECTED_LISTS, true),
+      // стандартные списки nfqws2-keenetic не удаляются и не переименовываются: на них ссылается стандартный конфиг
+      // (MODE_LIST, MODE_AUTO, NFQWS_ARGS_IPSET) — без файла nfqws2 после возврата к нему не запустится. Очистить можно
+      'removable' => !in_array($name, PROTECTED_LISTS, true) && empty($usage[$path]), 'stock' => in_array($name, PROTECTED_LISTS, true),
       'entries' => $real ? count(readListLines($path)) : 0,
       'size' => $real ? filesize($real) : 0,
       'mtime' => $real ? filemtime($real) : null,
@@ -8062,6 +8063,9 @@ switch ($cmd) {
     if (!is_file($from)) {
       fail('Файл не найден', 404);
     }
+    if (in_array(basename($from), PROTECTED_LISTS, true)) {
+      fail('Стандартный список nfqws2-keenetic переименовать нельзя — на него ссылается стандартный конфиг. Сделайте копию под новым именем');
+    }
     if (file_exists($toPath)) {
       fail('Список с таким именем уже есть');
     }
@@ -8110,7 +8114,8 @@ switch ($cmd) {
     $path = editablePath($name);
     foreach (listsInventory(currentProfiles()) as $l) {
       if ($l['name'] === $name && !$l['removable']) {
-        fail('Этот список читают профили — сначала отключите его от них');
+        fail(in_array($name, PROTECTED_LISTS, true) ? 'Стандартный список nfqws2-keenetic удалить нельзя — его можно очистить'
+          : 'Этот список читают профили — сначала отключите его от них');
       }
     }
     beforeChange("удалён список $name");
