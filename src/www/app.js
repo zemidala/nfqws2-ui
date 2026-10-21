@@ -38,6 +38,7 @@ const ICONS = {
   download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
   upload: '<path d="M12 20V9M7 14l5-5 5 5M5 4h14"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/>',
+  lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   share: '<path d="M12 15V3M7 8l5-5 5 5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/>',
   pin: '<path d="M9 4h6l-1 6 4 4H6l4-4z"/><path d="M12 14v7"/>',
   undo: '<path d="M9 14 4 9l5-5"/><path d="M4 9h11a5 5 0 0 1 0 10h-3"/>',
@@ -2053,7 +2054,10 @@ function drawListNav(nav, current) {
       h('span', { class: 'nm' }, nice ? [h('span', { class: 't', text: nice }), h('i', { class: 'mono', text: file })] : h('span', { class: 't mono', text: file })),
       h('span', { class: 'tail num' },
         l.used.map((u) => h('span', { class: 'pchip' + (u.role === 'exclude' ? ' exc' : ''), text: '#' + u.profile })),
-        pr.error ? h('span', { class: 'errdot' }) : pr.warning ? h('span', { class: 'warndot' }) : null, fmtNum(l.entries)));
+        pr.error ? h('span', { class: 'errdot' }) : pr.warning ? h('span', { class: 'warndot' }) : null,
+        // стандартный список nfqws2-keenetic: не удаляется и не переименовывается — замок у числа записей
+        l.stock ? h('span', { class: 'lk', title: 'Стандартный список nfqws2-keenetic: удалить и переименовать нельзя, очистить можно', 'aria-label': 'стандартный список' }, icon('lock')) : null,
+        fmtNum(l.entries)));
   };
   const section = (kind, title) => {
     const all = S.state.lists.filter((l) => l.kind === kind);

@@ -676,6 +676,8 @@ a.over-row:hover { background: var(--soft); }
 @media (min-width: 1200px) { .split.lists { grid-template-columns: 300px minmax(0, 1fr); } }
 .nav a.lrow.off:not(.on) { color: var(--muted); }
 .lrow .tail { gap: 3px; }
+.lrow .lk { flex: none; display: inline-flex; color: var(--faint); }
+.lrow .lk svg { width: 12px; height: 12px; }
 .pchip { font: 600 10.5px/16px var(--mono); color: var(--muted); background: var(--soft); border-radius: 4px; padding: 0 4px; }
 .pchip.exc { color: var(--warn); background: var(--warn-soft); }
 .lrow .tail .errdot, .lrow .tail .warndot { margin-left: 3px; }
