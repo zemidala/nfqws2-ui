@@ -1108,6 +1108,62 @@ function confRawVars(string $text): array
   return $r;
 }
 
+// «Оформить» в «Конфиге целиком»: меняются только пробелы и переносы. У многострочных значений в кавычках —
+// параметр на строку, выравнивание под кавычку, пустая строка перед --new; строка с комментарием «#» внутри
+// кавычек остаётся целой (комментарий — до конца строки). Вне кавычек — без пробелов в конце строк и без
+// лишних пустых строк. Если аргументы nfqws2 после этого хоть в чём-то другие — отказ (null).
+function confFormat(string $text): ?string
+{
+  $text = str_replace(["\r\n", "\r", "\t"], ["\n", "\n", ' '], $text);
+  $out = preg_replace_callback('/^([A-Z_][A-Z0-9_]*)="([^"]*)"/m', function ($m) {
+    $val = $m[2];
+    if (!str_contains($val, "\n") || trim($val) === '') {
+      return $m[0];
+    }
+    $items = [];
+    foreach (explode("\n", preg_replace('/\\\\[ \t]*\n/', "\n", $val)) as $line) {
+      $line = trim($line);
+      $code = $line;
+      $comment = null;
+      if (preg_match('/(^|\s)(#.*)$/', $line, $c, PREG_OFFSET_CAPTURE)) {
+        $code = trim(substr($line, 0, $c[2][1]));
+        $comment = $c[2][0];
+      }
+      foreach ($code === '' ? [] : preg_split('/\s+/', $code) as $t) {
+        $items[] = $t;
+      }
+      if ($comment !== null) {
+        $items[] = $comment;
+      }
+    }
+    $pad = str_repeat(' ', strlen($m[1]) + 2);
+    $lines = [];
+    foreach ($items as $t) {
+      if ($lines && isNewArg($t)) {
+        $lines[] = '';
+      }
+      $lines[] = $t;
+    }
+    $body = '';
+    foreach ($lines as $i => $l) {
+      $body .= $i === 0 ? $l : "\n" . ($l === '' ? '' : $pad . $l);
+    }
+    return $m[1] . '="' . $body . '"';
+  }, $text);
+  $out = preg_replace('/[ ]+$/m', '', $out);
+  $out = preg_replace("/\n{3,}/", "\n\n", trim($out, "\n")) . "\n";
+  // проверка: те же присваивания в том же порядке (переменная может быть присвоена и дважды),
+  // у каждого — те же аргументы; вне присваиваний — те же строки, кроме пустых
+  $sig = function (string $s): array {
+    preg_match_all('/^([A-Z_][A-Z0-9_]*)=("([^"]*)"|[^\n]*)/m', $s, $m, PREG_SET_ORDER);
+    $r = array_map(fn($x) => [$x[1], tokens(isset($x[3]) && ($x[2][0] ?? '') === '"' ? $x[3] : $x[2])], $m);
+    $rest = preg_replace('/^[A-Z_][A-Z0-9_]*=("[^"]*"|[^\n]*)/m', '', $s);
+    $r[] = array_values(array_filter(array_map('rtrim', explode("\n", $rest)), fn($l) => $l !== ''));
+    return $r;
+  };
+  return $sig($text) === $sig($out) ? $out : null;
+}
+
 function confSetVar(string $text, string $name, string $value): string
 {
   $quoted = preg_match('/^[A-Za-z0-9_.:,\/-]*$/', $value) && !str_contains($value, "\n") && $value !== ''
@@ -8580,6 +8636,17 @@ switch ($cmd) {
   case 'conf_save_raw':
     $text = normalizeText($str('content'));
     saveConf($text, confRawVars($text), !empty($in['force']), (string)($in['note'] ?? 'правка конфига текстом'));
+
+  case 'conf_format':
+    $src = normalizeText($str('content'));
+    if (substr_count($src, '"') % 2) {
+      fail('В конфиге незакрытая кавычка — оформлять нельзя, сначала исправьте её (подсветка в редакторе покажет, где текст «съехал»)');
+    }
+    $f = confFormat($src);
+    if ($f === null) {
+      fail('Оформить не получилось: после оформления nfqws2 получил бы другие аргументы. Текст не изменён — это ошибка интерфейса, пришлите нам конфиг');
+    }
+    respond(['content' => $f, 'same' => $f === $src, 'lines' => count(array_diff_assoc(explode("\n", $f), explode("\n", $src)))]);
 
   case 'catalog':
     respond(['help' => helpInfo(), 'lua' => luaCatalog()]);

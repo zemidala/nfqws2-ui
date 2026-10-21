@@ -358,6 +358,7 @@ const FEATURES = [
   ['cfg', '1.20.0', '«Чужой конфиг» — проверить конфиг из чата на своих сайтах и сравнить с текущим, не ставя его'],
   ['over:leftovers', '1.21.0', '«Проблемы»: файлы -opkg от обновления nfqws2 — посмотреть и удалить'],
   ['pick:podkop', '1.21.0', 'подбор и проверки предупреждают, если сайт идёт через podkop'],
+  ['raw:format', '1.21.0', '«Конфиг целиком»: кнопка «Оформить» — отступы и пустые строки к одному виду'],
   ['over:nfqupdate', '1.21.0', 'обновление nfqws2 из интерфейса: метка с новой версией в верхней панели, возврат прежней'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
@@ -3446,14 +3447,23 @@ async function paneRaw(content) {
   const outlineBtn = btn('Структура', () => { setLook({ nooutline: !getLook().nooutline }); outlineBtn.classList.toggle('on', !getLook().nooutline); }, 'small' + (getLook().nooutline ? '' : ' on'), 'layers',
     { title: 'Показать или скрыть колонку «Структура» — без неё больше места под текст конфига' });
   const tools = h('div', { class: 'cfg-tools' }, outlineBtn, find, findN, counts,
-    btn('По аргументу на строку', () => {
-      let text = ed.ta.value;
-      for (const [name, rg] of Object.entries(confVarRanges(text)).filter(([n]) => ARG_VARS.includes(n)).sort((a, b) => b[1].start - a[1].start)) {
-        const indent = ' '.repeat(name.length + 2);
-        text = text.slice(0, rg.start) + tokensOf(text.slice(rg.start, rg.end)).join('\n' + indent) + text.slice(rg.end);
-      }
-      ed.setValue(text); setDirty(text !== conf.content); relint(text); drawOutline();
-    }, 'small'),
+    // меняются только пробелы и переносы; сервер сверяет, что аргументы nfqws2 те же, иначе отказывает
+    btn('Оформить', async () => {
+      const r = await guarded(() => api('conf_format', { content: ed.ta.value }));
+      if (!r) return;
+      if (r.same) { toast('Конфиг уже оформлен'); return; }
+      const ta = ed.ta;
+      ta.focus();
+      ta.setSelectionRange(0, ta.value.length);
+      // insertText — чтобы Ctrl+Z вернул прежний вид
+      if (!document.execCommand('insertText', false, r.content)) ed.setValue(r.content);
+      ta.setSelectionRange(0, 0);
+      ta.scrollTop = 0;
+      const text = ta.value;
+      setDirty(text !== conf.content); relint(text); drawOutline();
+      toast(`Оформлено: ${plural(r.lines, 'строка', 'строки', 'строк')} — только пробелы и переносы, аргументы nfqws2 те же. Ещё не сохранено; Ctrl+Z — вернуть как было`);
+    }, 'small', 'wand', { title: 'Привести конфиг к одному виду: параметр на строку, выравнивание под кавычку, пустая строка перед --new. Меняются только пробелы и переносы — nfqws2 получит те же аргументы. Текст попадает в редактор, сохранение — как обычно' }),
+    newTag('raw:format'),
     h('span', { class: 'grow' }),
     btn('Сравнить с сохранённым', () => openDiff('nfqws2.conf: изменения', conf.content, ed.ta.value), 'small'),
     btn('История', () => openHistory('nfqws2.conf', () => route(true)), 'small', 'history'),
