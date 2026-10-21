@@ -8433,7 +8433,14 @@ switch ($cmd) {
     respond(['text' => reportText($sites, !empty($in['hide']), preg_replace('/[^0-9a-f]/', '', (string)($in['build'] ?? '')))]);
 
   case 'asn_get':
-    respond(['items' => uiSettings()['asn']]);
+    // Список удалили (на странице «Списки» или вручную) — запись о нём больше не нужна.
+    $s = uiSettings();
+    $keep = array_values(array_filter($s['asn'], fn($x) => is_file(LISTS_DIR . '/' . $x['list'])));
+    if (count($keep) !== count($s['asn'])) {
+      $s['asn'] = $keep;
+      saveUiSettings($s);
+    }
+    respond(['items' => $keep]);
 
   case 'asn_lookup':
     session_write_close();
