@@ -358,6 +358,7 @@ const FEATURES = [
   ['cfg', '1.20.0', '«Чужой конфиг» — проверить конфиг из чата на своих сайтах и сравнить с текущим, не ставя его'],
   ['over:leftovers', '1.21.0', '«Проблемы»: файлы -opkg от обновления nfqws2 — посмотреть и удалить'],
   ['pick:podkop', '1.21.0', 'подбор и проверки предупреждают, если сайт идёт через podkop'],
+  ['over:nfqupdate', '1.21.0', 'обновление nfqws2 из интерфейса: метка с новой версией в верхней панели, возврат прежней'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 // на сколько минорных версий функция старше текущей (у сборки до выпуска — меньше нуля)
@@ -533,6 +534,7 @@ function renderShell() {
           quick, h('button', { class: 'btn primary icon', type: 'submit', title: 'Проверить: открывается ли сайт и каким профилем nfqws2 он пойдёт', 'aria-label': 'Проверить' }, icon('arrow'))),
         h('span', { class: 'grow' }),
         h('span', { class: 'svc-box' }, h('span', { class: 'svc-name', title: 'Версия nfqws2 на роутере' }, 'nfqws2', h('small', { id: 'ver' })),
+          h('button', { id: 'nfq-up', class: 'nfq-up', type: 'button', hidden: true, onclick: () => openNfqUpdate() }),
           h('span', { id: 'svc', class: 'pill muted' }, h('span', { class: 'dot' }), '…'),
           h('span', { id: 'svc-ctl', class: 'svc-ctl' })))),
     h('div', { id: 'banner' }),
@@ -596,6 +598,14 @@ function updateChrome() {
         btn(h('span', { class: 'ctl-label', text: 'Остановить' }), () => service('stop'), 'small ghost danger', 'stop', { title: 'Остановить nfqws2 — обход блокировок перестанет работать', 'aria-label': 'Остановить', disabled: busy })]
       : btn(h('span', { class: 'ctl-label', text: 'Запустить' }), () => service('start'), 'small primary', 'play', { title: 'Запустить nfqws2', 'aria-label': 'Запустить' }));
   document.getElementById('ver').textContent = st.version ? 'v' + st.version : '';
+  // вышла новая версия nfqws2 — метка за номером версии (на узком экране — значок с точкой)
+  const nu = st.nfq_update, upB = document.getElementById('nfq-up');
+  if (upB) {
+    upB.hidden = !(nu?.available || nu?.running);
+    upB.title = nu?.running ? 'Идёт обновление nfqws2' : `Вышла nfqws2 ${nu?.latest} — обновить`;
+    upB.setAttribute('aria-label', upB.title);
+    upB.replaceChildren(icon('upload'), h('span', { class: 't', text: nu?.running ? '…' : '↑ ' + (nu?.latest || '') }));
+  }
   document.getElementById('ui-ver').textContent = st.ui?.version ? 'v' + st.ui.version : '';
   const need = st.running && (st.restart_needed || !st.in_sync) && !pendingActive();
   const u = st.ui?.update;
@@ -1026,6 +1036,10 @@ function problemItems() {
       text: `${f.name} — ${fmtBytes(f.used)} оперативной памяти роутера (${LOG_DIR_HINT})` + (low ? `, свободно всего ${fmtBytes(st.logs.free)}` : '') + '.'
         + (st.logs.debug ? ' Отладка включена — журнал продолжит расти; больше 50 МБ программа сама подрезает его до последнего 1 МБ.' : ''),
       href: PAGES.log[0], fix: logActions(f.name, st.logs.debug) });
+  }
+  if (st.nfq_update?.available && !st.nfq_update.running) {
+    items.push({ level: 'info', title: `Вышла nfqws2 ${st.nfq_update.latest}`, text: `Установлена ${st.version}. Обновление ставит пакет из выпуска на GitHub, перед ним делается снимок, после — проверка сайтов; прежнюю версию можно вернуть кнопкой.`,
+      href: PAGES.about[0], fix: [btn('Обновить…', openNfqUpdate, 'small', 'download'), newTag('over:nfqupdate')] });
   }
   if (st.leftovers?.length) {
     items.push({ level: 'info', title: 'Остались файлы от обновления nfqws2', text: `${plural(st.leftovers.length, 'файл', 'файла', 'файлов')} с новой стандартной версией конфига или списков (${st.leftovers.slice(0, 3).map((x) => x.replace(/^lists\//, '')).join(', ')}${st.leftovers.length > 3 ? ', …' : ''}). nfqws2 их не читает — можно сравнить со своими и удалить.`,
@@ -5494,6 +5508,93 @@ function openUpdate(u, run = false) {
   }
   if (u.running) poll();
   if (run && u.available && u.can_update && !u.running) start();
+}
+
+// Обновление самого nfqws2 (пакет nfqws2-keenetic) и возврат прежней версии
+async function openNfqUpdate() {
+  const status = h('div');
+  const log = h('pre', { class: 'box', style: 'max-height:40vh', hidden: true });
+  const head = h('div', { class: 'stack', style: 'gap:12px' }, spinner('Проверяю…'));
+  const body = h('div', { class: 'modal-b stack', style: 'gap:12px' }, head, status, log);
+  const go = btn('Обновить', null, 'primary', 'download', { hidden: true });
+  const back = btn('Вернуть', null, 'warn', 'undo', { hidden: true });
+  const recheck = btn('Проверить снова', () => draw(true), 'ghost', 'refresh');
+  const dlg = modal('Обновление nfqws2', body, [recheck, back, go]);
+  let timer = null;
+  let u = null;
+
+  const result = (r) => {
+    const worse = r.worse || [];
+    const ok = (r.checks || []).filter((c) => c.ok).length;
+    return h('div', { class: 'stack', style: 'gap:8px' },
+      notice(!r.running ? 'bad' : worse.length ? 'warn' : 'ok',
+        !r.running ? `nfqws2 ${r.to} не запустился` : worse.length ? `nfqws2 ${r.to} работает, но часть сайтов перестала открываться` : `Готово: nfqws2 ${r.to} работает`,
+        (r.checks?.length ? `Сайты мониторинга: открываются ${ok} из ${r.checks.length}.` : 'Сайтов мониторинга нет — проверьте нужные сайты сами.')
+          + (worse.length ? ` До ${r.rollback ? 'возврата' : 'обновления'} открывались, а теперь нет: ${worse.join(', ')}. Сбой бывает и разовым — проверьте ещё раз через минуту.` : '')
+          + (!r.rollback && (worse.length || !r.running) ? ` Вернуть ${r.from} можно кнопкой ниже: прежний пакет и ваш конфиг со списками из снимка.` : '')),
+      r.leftovers ? h('p', { class: 'sm' }, 'Менеджер пакетов положил рядом с вашими файлами новые стандартные версии (-opkg). ',
+        h('a', { href: '#', onclick: (e) => { e.preventDefault(); openLeftovers(); }, text: 'Посмотреть и сравнить' })) : null);
+  };
+
+  const draw = async (force = false) => {
+    recheck.disabled = true;
+    const c = force ? await api('nfq_update_check', { force: true }).catch((e) => { toast(e.message, { err: true }); return null; }) : null;
+    u = await api('nfq_update_status').catch((e) => { head.replaceChildren(notice('bad', e.message)); return null; });
+    recheck.disabled = false;
+    if (!u || !dlg.isConnected) return;
+    if (c?.error) toast('GitHub не ответил: ' + c.error, { err: true });
+    head.replaceChildren(
+      !u.installed ? notice('warn', 'nfqws2 стоит не пакетом', 'Пакета nfqws2-keenetic в системе нет — обновляйте nfqws2 тем же способом, каким ставили.') : null,
+      h('p', {}, 'Установлено: ', h('b', { text: u.current || '—' }), ' · последняя: ', h('b', { text: u.latest || '—' }),
+        u.date ? ` · вышла ${fmtDate(u.date).split(',')[0]}` : '', ' · ', h('a', { href: u.url, target: '_blank', rel: 'noopener', text: 'выпуск на GitHub' })),
+      u.available && u.notes ? h('div', { class: 'release-notes' }, md(u.notes.replace(/\r/g, ''))) : null,
+      !u.available && u.latest && !u.rollback ? h('p', { class: 'sm muted', text: 'У вас последняя версия.' }) : null,
+      u.available || u.rollback ? h('p', { class: 'sm muted', text: 'Ставится пакет из выпуска на GitHub, его контрольная сумма сверяется. Перед обновлением делается снимок. Ваши конфиг и списки менеджер пакетов не трогает: если стандартные изменились, рядом появятся файлы -opkg. После установки nfqws2 перезапустится, и интерфейс проверит сайты мониторинга. Прежнюю версию можно вернуть кнопкой — вместе с конфигом и списками из снимка.' }) : null,
+      u.error ? h('p', { class: 'sm muted', text: 'Последняя проверка не удалась: ' + u.error }) : null);
+    go.hidden = !(u.available && u.installed);
+    go.replaceChildren(icon('download'), 'Обновить до ' + u.latest);
+    go.onclick = () => run(u.latest, false);
+    back.hidden = !u.rollback;
+    back.replaceChildren(icon('undo'), 'Вернуть ' + u.rollback);
+    back.onclick = () => run(u.rollback, true);
+    if (u.running) poll();
+    // итог прошлого обновления — пока можно вернуть прежнюю версию (после возврата он уже не нужен)
+    else if (u.result && u.rollback) status.replaceChildren(h('p', { class: 'sm muted', text: `Обновление ${u.result.from} → ${u.result.to}, ${fmtDate(u.result.ts)}:` }), result(u.result));
+    else status.replaceChildren();
+  };
+
+  const poll = async () => {
+    clearTimeout(timer);
+    const r = await api('nfq_update_status').catch(() => null);
+    if (!dlg.isConnected) return;
+    if (r) {
+      log.hidden = false;
+      drawLog(log, r.log.trim().split('\n').filter(Boolean));
+      log.scrollTop = log.scrollHeight;
+      if (r.exit !== null && !r.running) {
+        go.disabled = back.disabled = false;
+        status.replaceChildren(r.exit === 0 && r.result ? result(r.result) : notice('bad', 'Не получилось', (r.job?.error || 'Подробности — в журнале ниже.') + ' Установленная версия не менялась, если пакет не успел встать.'));
+        await loadState().catch(() => {});
+        route();
+        draw();
+        return;
+      }
+    }
+    timer = setTimeout(poll, 2000);
+  };
+
+  async function run(ver, rollback) {
+    const q = rollback
+      ? `Вернуть nfqws2 ${ver}?\n\nВстанет прежний пакет, конфиг и списки вернутся из снимка перед обновлением. nfqws2 перезапустится — на несколько секунд обход прервётся.`
+      : `Обновить nfqws2 до ${ver}?\n\nПеред этим делается снимок. nfqws2 перезапустится — на несколько секунд обход прервётся.`;
+    if (!confirm(q)) return;
+    go.disabled = back.disabled = true;
+    const r = await guarded(() => api('nfq_update_run', { version: ver, rollback }));
+    if (!r) { go.disabled = back.disabled = false; return; }
+    status.replaceChildren(h('div', { class: 'row sm' }, h('span', { class: 'spin' }), rollback ? 'Возвращаю… не закрывайте окно' : 'Обновляю… не закрывайте окно'));
+    poll();
+  }
+  draw();
 }
 
 function openDiff(title, a, b) {

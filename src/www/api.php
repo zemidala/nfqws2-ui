@@ -644,7 +644,8 @@ function snapReadFile(string $id, string $rel): ?string
 // Проверяет архив и раскладывает его поверх текущих файлов (файлы, которых нет в архиве, не трогает).
 // Пути в архиве — etc/… (OpenWrt) или opt/etc/… (Keenetic); файлы ложатся туда, где они у этой системы,
 // так что копию с одного роутера можно восстановить и на другом.
-function restoreArchive(string $archive, string $reason): array
+// $nfqOnly — только конфиг, списки и блобы nfqws2, без настроек интерфейса (откат пакета nfqws2)
+function restoreArchive(string $archive, string $reason, bool $nfqOnly = false): array
 {
   exec('tar -tzf ' . escapeshellarg($archive) . ' 2>&1', $list, $rc);
   if ($rc !== 0 || !$list) {
@@ -669,7 +670,7 @@ function restoreArchive(string $archive, string $reason): array
   $changed = [];
   foreach ($list as $e) {
     $src = "$tmp/$e";
-    if (!is_file($src)) {
+    if (!is_file($src) || ($nfqOnly && !preg_match('#^(opt/)?etc/nfqws2/#', $e))) {
       continue;
     }
     $dst = ROOT . '/' . preg_replace('#^opt/#', '', $e);
@@ -1039,7 +1040,17 @@ function sysArch(): string
 }
 
 // Версия установленного пакета: opkg (OpenWrt до 24.10, Entware) или apk (OpenWrt 25+)
-function packageVersion(string $pkg): ?string
+function packageVersion(string $pkg, bool $fresh = false): ?string
+{
+  // в одном запросе версию спрашивают несколько раз (состояние, обновление nfqws2) — opkg на mipsel небыстрый
+  static $memo = [];
+  if (!$fresh && array_key_exists($pkg, $memo)) {
+    return $memo[$pkg];
+  }
+  return $memo[$pkg] = packageVersionRead($pkg);
+}
+
+function packageVersionRead(string $pkg): ?string
 {
   $out = [];
   if (!ROOT && (is_file('/usr/bin/apk') || is_file('/sbin/apk'))) {
@@ -7041,6 +7052,326 @@ function updateStart(string $version): void
   exec('(' . $setsid . 'env -i PATH=' . JOB_PATH . ' sh -c ' . escapeshellarg($cmd) . ' >/dev/null 2>&1 &)');
 }
 
+// ---------- обновление nfqws2 (пакет nfqws2-keenetic) ----------
+// Новая версия — последний выпуск nfqws/nfqws2-keenetic на GitHub (если API отказал — индекс источника пакетов).
+// Ставится файл пакета из выпуска самим opkg / apk: так же делается откат на прежнюю версию, и мёртвые
+// источники Entware обновлению не мешают. Веб-сервер при этом не перезапускается — хватает фонового задания PHP.
+// Перед установкой — закреплённый снимок; после — проверка сайтов мониторинга (откатывает человек, кнопкой).
+
+const NFQ_REPO = 'nfqws/nfqws2-keenetic';
+const NFQ_FEED = 'https://nfqws.github.io/nfqws2-keenetic/';
+define('NFQ_UPDATE_FILE', UI_CONF_DIR . '/nfq-update.json');
+const NFQ_UPDATE_LOG = '/tmp/nfqws-ui-nfq-update.log';
+
+function nfqUpdData(): array
+{
+  return json_decode((string)@file_get_contents(NFQ_UPDATE_FILE), true) ?: [];
+}
+
+function nfqUpdSave(array $d): void
+{
+  putSafe(NFQ_UPDATE_FILE, json_encode($d, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+}
+
+// «1.3.1-1», «1.3.1-r1» → «1.3.1»
+function nfqVer(?string $v): ?string
+{
+  return $v === null ? null : preg_replace('/-r?\d+$/', '', $v);
+}
+
+// Имя файла пакета в выпуске: у пакета под конкретную архитектуру — она же, иначе «all» своей системы
+function nfqAssetName(string $ver): string
+{
+  $arch = null;
+  if (!pkgApk()) {
+    exec((ROOT ? '/opt/bin/' : '') . 'opkg status nfqws2-keenetic 2>/dev/null', $out);
+    foreach ($out as $l) {
+      if (str_starts_with($l, 'Architecture: ')) {
+        $arch = trim(substr($l, 14));
+      }
+    }
+  }
+  if ($arch && $arch !== 'all' && preg_match('/^[\w.-]+$/', $arch)) {
+    return "nfqws2-keenetic_{$ver}_$arch.ipk";
+  }
+  return "nfqws2-keenetic_{$ver}_" . (ROOT ? 'all_entware.ipk' : (pkgApk() ? 'all_openwrt.apk' : 'all_openwrt.ipk'));
+}
+
+function nfqRunning(): bool
+{
+  $j = nfqUpdData()['job'] ?? null;
+  return $j && !empty($j['pid']) && empty($j['done']) && file_exists('/proc/' . $j['pid']);
+}
+
+function nfqUpdateInfo(): array
+{
+  $d = nfqUpdData();
+  $cur = nfqVer(packageVersion('nfqws2-keenetic'));
+  $latest = $d['latest'] ?? null;
+  $prev = $d['result']['from'] ?? null;
+  return ['current' => $cur, 'latest' => $latest, 'available' => $cur && $latest && version_compare($latest, $cur, '>'),
+    'notes' => $d['notes'] ?? '', 'url' => $d['url'] ?? 'https://github.com/' . NFQ_REPO . '/releases', 'date' => $d['date'] ?? null,
+    'checked' => $d['checked'] ?? 0, 'error' => $d['error'] ?? null, 'installed' => $cur !== null,
+    'running' => nfqRunning(), 'result' => $d['result'] ?? null,
+    // вернуть можно ту версию, что стояла до последнего обновления, пока стоит та, на которую обновились
+    'rollback' => $prev && $cur && ($d['result']['to'] ?? null) === $cur && empty($d['result']['rollback']) ? $prev : null];
+}
+
+function nfqUpdateCheck(bool $force): array
+{
+  $d = nfqUpdData();
+  if (!$force && time() - ($d['checked'] ?? 0) < (!empty($d['error']) ? 600 : 12 * 3600)) {
+    return nfqUpdateInfo();
+  }
+  $d['checked'] = time();
+  unset($d['error']);
+  $ch = curl_init('https://api.github.com/repos/' . NFQ_REPO . '/releases/latest');
+  curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_TIMEOUT => 15, CURLOPT_CONNECTTIMEOUT => 8,
+    CURLOPT_HTTPHEADER => ['Accept: application/vnd.github+json', 'User-Agent: nfqws2-ui/' . UI_VERSION]]);
+  $res = curl_exec($ch);
+  $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  $err = curl_error($ch);
+  curl_close($ch);
+  $j = json_decode((string)$res, true);
+  if ($code === 200 && preg_match('/^v?(\d+\.\d+\.\d+)$/', (string)($j['tag_name'] ?? ''), $m)) {
+    $d['latest'] = $m[1];
+    $d['notes'] = preg_match('/^.{0,4000}/su', (string)($j['body'] ?? ''), $nm) ? $nm[0] : '';
+    $d['url'] = (string)($j['html_url'] ?? '');
+    $d['date'] = strtotime((string)($j['published_at'] ?? '')) ?: null;
+    $d['sums'] = [];
+    foreach ($j['assets'] ?? [] as $a) {
+      if (preg_match('/^sha256:([0-9a-f]{64})$/', (string)($a['digest'] ?? ''), $s)) {
+        $d['sums'][(string)$a['name']] = $s[1];
+      }
+    }
+  } elseif (($feed = updateGet(NFQ_FEED . (ROOT ? 'all' : 'openwrt') . '/Packages'))
+    && preg_match('/^Package: nfqws2-keenetic\n(?:[^\n]+\n)*?Version: (\d+\.\d+\.\d+)/m', $feed, $m)) {
+    // API GitHub отказал (лимит на общий адрес) — номер из индекса источника пакетов, без описания
+    if (($d['latest'] ?? null) !== $m[1]) {
+      $d['notes'] = '';
+      $d['sums'] = [];
+      $d['url'] = 'https://github.com/' . NFQ_REPO . '/releases/tag/v' . $m[1];
+      $d['date'] = null;
+    }
+    $d['latest'] = $m[1];
+  } else {
+    $d['error'] = $err ?: "GitHub ответил $code";
+  }
+  nfqUpdSave($d);
+  return nfqUpdateInfo();
+}
+
+// SHA-256 файла выпуска: из прошлой проверки или из API (выпуск по тегу); null — сверить нечем
+function nfqAssetSum(string $ver, string $name): ?string
+{
+  $d = nfqUpdData();
+  if (($d['latest'] ?? null) === $ver && !empty($d['sums'][$name])) {
+    return $d['sums'][$name];
+  }
+  $j = json_decode((string)updateGet('https://api.github.com/repos/' . NFQ_REPO . '/releases/tags/v' . $ver), true);
+  foreach ($j['assets'] ?? [] as $a) {
+    if (($a['name'] ?? '') === $name && preg_match('/^sha256:([0-9a-f]{64})$/', (string)($a['digest'] ?? ''), $s)) {
+      return $s[1];
+    }
+  }
+  return null;
+}
+
+function nfqUpdateStart(string $ver, bool $rollback): void
+{
+  if (!preg_match('/^\d+\.\d+\.\d+$/', $ver)) {
+    fail('Неверная версия');
+  }
+  $cur = nfqVer(packageVersion('nfqws2-keenetic'));
+  if ($cur === null) {
+    fail('nfqws2 установлен не пакетом nfqws2-keenetic — обновите его тем же способом, каким ставили');
+  }
+  if (nfqRunning() || updateRunning()) {
+    fail('Обновление уже идёт');
+  }
+  if (($p = pendingGet()) && in_array($p['state'], ['checking', 'waiting'], true)) {
+    fail('Идёт перезапуск с проверкой — дождитесь его окончания');
+  }
+  if ($rollback ? version_compare($ver, $cur, '>=') : version_compare($ver, $cur, '<=')) {
+    fail($rollback ? "Сейчас стоит $cur — возвращать нечего" : "Уже стоит $cur");
+  }
+  $name = nfqAssetName($ver);
+  $d = nfqUpdData();
+  $d['job'] = ['from' => $cur, 'to' => $ver, 'rollback' => $rollback, 'name' => $name, 'sum' => nfqAssetSum($ver, $name),
+    'snap' => $rollback ? ($d['result']['snap'] ?? null) : null, 'started' => time()];
+  nfqUpdSave($d);
+  file_put_contents(NFQ_UPDATE_LOG, '');
+  exec('(env -i PATH=' . JOB_PATH . ' NFQWS_UI_CLI=nfqupd php-cgi -q -f ' . escapeshellarg(__FILE__) . ' >/dev/null 2>&1 &)');
+}
+
+function nfqLog(string $s): void
+{
+  file_put_contents(NFQ_UPDATE_LOG, $s . "\n", FILE_APPEND);
+}
+
+// Команда с ограничением времени; вывод — в журнал обновления. Возвращает код выхода (null — не уложилась)
+function nfqExec(string $cmd, int $timeout): ?int
+{
+  $p = proc_open('exec ' . $cmd . ' 2>&1', [0 => ['file', '/dev/null', 'r'], 1 => ['file', NFQ_UPDATE_LOG, 'a']], $pipes, null, ['PATH' => JOB_PATH]);
+  if (!is_resource($p)) {
+    return 127;
+  }
+  $deadline = time() + $timeout;
+  do {
+    $st = proc_get_status($p);
+    if (!$st['running']) {
+      proc_close($p);
+      return $st['exitcode'];
+    }
+    usleep(300000);
+  } while (time() < $deadline);
+  proc_terminate($p, 9);
+  proc_close($p);
+  return null;
+}
+
+// Фоновое задание: снимок → скачать пакет → сверить сумму → поставить → nfqws2 работает? → проверить сайты
+function nfqUpdateJob(): void
+{
+  set_time_limit(900);
+  $d = nfqUpdData();
+  $job = $d['job'] ?? null;
+  if (!$job || !empty($job['done'])) {
+    return;
+  }
+  $d['job']['pid'] = getmypid();
+  nfqUpdSave($d);
+  // задание оборвалось (fail() внутри восстановления, нехватка памяти) — окно не должно ждать вечно
+  register_shutdown_function(function (): void {
+    $d = nfqUpdData();
+    if (!empty($d['job']) && empty($d['job']['done'])) {
+      $d['job']['done'] = time();
+      $d['job']['error'] = 'задание прервано';
+      nfqUpdSave($d);
+      nfqLog('ОШИБКА: задание прервано');
+      nfqLog('[exit 1]');
+    }
+  });
+  $fail = function (string $msg) use ($job): void {
+    nfqLog('ОШИБКА: ' . $msg);
+    $d = nfqUpdData();
+    $d['job']['done'] = time();
+    $d['job']['error'] = $msg;
+    nfqUpdSave($d);
+    nfqLog('[exit 1]');
+    exit(0);
+  };
+  $from = $job['from'];
+  $to = $job['to'];
+  nfqLog(($job['rollback'] ? 'Возврат' : 'Обновление') . " nfqws2: $from → $to");
+  // как было до установки — по последней проверке мониторинга
+  $mon = monitorData();
+  $before = [];
+  foreach (uiSettings()['monitor']['sites'] as $h) {
+    $hist = $mon['sites'][$h] ?? [];
+    $before[$h] = $hist ? end($hist)[1] : null;
+  }
+  $snap = null;
+  if (!$job['rollback']) {
+    $snap = snapshotCreate('перед обновлением nfqws2', false, "nfqws2 $from → $to");
+    if ($snap) {
+      // закрепляем: при откате из этого снимка вернутся конфиг и списки
+      $lock = snapLock();
+      $idx = snapIndex();
+      // закреплённым держим только снимок последнего обновления
+      foreach ($idx as &$e) {
+        if ($e['id'] === $snap['id']) {
+          $e['pinned'] = true;
+        } elseif (($e['reason'] ?? '') === 'перед обновлением nfqws2') {
+          $e['pinned'] = false;
+        }
+      }
+      unset($e);
+      snapSaveIndex($idx);
+      fclose($lock);
+      nfqLog('Снимок конфига и списков: ' . $snap['id']);
+    } else {
+      nfqLog('Снимок сделать не удалось — продолжаю без него');
+    }
+  }
+  $url = 'https://github.com/' . NFQ_REPO . '/releases/download/v' . $to . '/' . $job['name'];
+  $file = '/tmp/' . $job['name'];
+  nfqLog('Скачиваю ' . $url);
+  $fh = fopen($file, 'w');
+  $ch = curl_init($url);
+  curl_setopt_array($ch, [CURLOPT_FILE => $fh, CURLOPT_FOLLOWLOCATION => true, CURLOPT_MAXREDIRS => 5, CURLOPT_TIMEOUT => 180,
+    CURLOPT_CONNECTTIMEOUT => 15, CURLOPT_HTTPHEADER => ['User-Agent: nfqws2-ui/' . UI_VERSION]]);
+  curl_exec($ch);
+  $code = curl_getinfo($ch, CURLINFO_HTTP_CODE);
+  $err = curl_error($ch);
+  curl_close($ch);
+  fclose($fh);
+  if ($code !== 200 || filesize($file) < 1000) {
+    @unlink($file);
+    $fail('файл не скачался: ' . ($err ?: "HTTP $code"));
+  }
+  $sum = hash_file('sha256', $file);
+  if ($job['sum'] && $sum !== $job['sum']) {
+    @unlink($file);
+    $fail("сумма файла не сходится с выпуском на GitHub ($sum)");
+  }
+  nfqLog('Скачано ' . round(filesize($file) / 1024) . ' КБ' . ($job['sum'] ? ', сумма SHA-256 сошлась' : ', сумму сверить не с чем (GitHub не ответил)'));
+  if (pkgApk()) {
+    $cmd = 'apk add --allow-untrusted ' . escapeshellarg($file);
+  } else {
+    $cmd = (ROOT ? '/opt/bin/' : '') . 'opkg install ' . ($job['rollback'] ? '--force-downgrade ' : '') . escapeshellarg($file);
+  }
+  nfqLog('$ ' . $cmd);
+  $rc = nfqExec($cmd, 300);
+  @unlink($file);
+  if ($rc !== 0) {
+    $fail($rc === null ? 'установка не уложилась в 5 минут' : "менеджер пакетов завершился с кодом $rc");
+  }
+  $now = nfqVer(packageVersion('nfqws2-keenetic', true));
+  if ($now !== $to) {
+    $fail("после установки стоит " . ($now ?? 'ничего') . ", а не $to");
+  }
+  if ($job['rollback'] && $job['snap']) {
+    nfqLog('Возвращаю конфиг и списки из снимка ' . $job['snap']);
+    $changed = restoreArchive(snapArchive($job['snap']), 'возврат nfqws2 ' . $to, true);
+    nfqLog($changed ? 'Изменилось: ' . implode(', ', array_map('basename', $changed)) : 'Конфиг и списки и так совпадали со снимком');
+  }
+  // пакет перезапускает nfqws2 сам; ждём его, при необходимости запускаем
+  $pid = null;
+  for ($i = 0; $i < 20 && !($pid = findPid()); $i++) {
+    usleep(500000);
+  }
+  if (!$pid || ($job['rollback'] && $job['snap'])) {
+    nfqLog('Перезапускаю nfqws2');
+    serviceRun('restart');
+    for ($i = 0; $i < 20 && !($pid = findPid()); $i++) {
+      usleep(500000);
+    }
+  }
+  nfqLog($pid ? "nfqws2 $to работает (PID $pid)" : 'nfqws2 не запустился');
+  $checks = [];
+  sleep(3);   // nfqws2 только что поднялся: первые соединения сразу после запуска бывают неудачными
+  foreach ($before as $h => $was) {
+    $pr = probe($h);
+    // открывался до установки, а сейчас нет — перепроверяем, разовый сбой не считаем поломкой
+    for ($try = 0; !$pr['ok'] && $was && $try < 2; $try++) {
+      sleep(3);
+      $pr = probe($h);
+    }
+    $checks[] = ['host' => $h, 'ok' => $pr['ok'], 'was_ok' => $was, 'reason' => $pr['ok'] ? null : $pr['reason']];
+    nfqLog(($pr['ok'] ? '✓ ' : '✗ ') . $h . ($pr['ok'] ? '' : ' — ' . $pr['reason']));
+  }
+  $d = nfqUpdData();
+  $d['job']['done'] = time();
+  $d['result'] = ['from' => $from, 'to' => $to, 'rollback' => $job['rollback'], 'ts' => time(), 'running' => (bool)$pid,
+    'snap' => $job['rollback'] ? null : ($snap['id'] ?? null), 'checks' => $checks,
+    'worse' => array_values(array_column(array_filter($checks, fn($c) => !$c['ok'] && $c['was_ok']), 'host')),
+    'leftovers' => count(pkgLeftovers())];
+  nfqUpdSave($d);
+  historyScan('auto');
+  nfqLog('[exit 0]');
+}
+
 // ---------- журналы nfqws2 в /var/log ----------
 // На OpenWrt /var/log — это /tmp, то есть оперативная память. Отладочный журнал (LOG_LEVEL=1) за несколько
 // часов вырастает до сотен мегабайт. Считаем занятое по блокам: после обрезки файл может стать «дырявым».
@@ -7239,6 +7570,7 @@ function state(): array
     })(),
     'logs' => nfqLogs(),
     'leftovers' => array_column(pkgLeftovers(), 'name'),
+    'nfq_update' => (function () { $u = nfqUpdateInfo(); return ['latest' => $u['latest'], 'available' => $u['available'], 'running' => $u['running'], 'rollback' => $u['rollback']]; })(),
     'curl' => curlCmdError(),
     'lint' => lintCurrent(),
     'conf_tokens' => array_map('tokens', array_intersect_key(confRawVars(file_get_contents(CONF_FILE)), array_flip(ARG_VARS))),
@@ -7769,6 +8101,10 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
     remotePush();
     exit(0);
   }
+  if ($cli === 'nfqupd') {
+    nfqUpdateJob();
+    exit(0);
+  }
   seenInfo();   // первым — как и в state()
   historyScan('auto');
   nfqLogsTrim();
@@ -7782,6 +8118,7 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
       subsRun();
     }
     updateCheck(false);
+    nfqUpdateCheck(false);
     asnRun();
   }
   exit(0);
@@ -9057,6 +9394,19 @@ switch ($cmd) {
   case 'update_run':
     updateStart($str('version'));
     respond(['ok' => true]);
+
+  case 'nfq_update_check':
+    session_write_close();
+    respond(nfqUpdateCheck(!empty($in['force'])));
+
+  case 'nfq_update_run':
+    nfqUpdateStart($str('version'), !empty($in['rollback']));
+    respond(['ok' => true]);
+
+  case 'nfq_update_status':
+    $log = (string)@file_get_contents(NFQ_UPDATE_LOG);
+    respond(nfqUpdateInfo() + ['log' => $log, 'exit' => preg_match('/\[exit (\d+)\]\s*$/', $log, $m) ? (int)$m[1] : null,
+      'job' => nfqUpdData()['job'] ?? null]);
 
   case 'update_status':
     $log = (string)@file_get_contents(UPDATE_LOG);
