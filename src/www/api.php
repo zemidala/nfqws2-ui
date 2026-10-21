@@ -2502,31 +2502,16 @@ function lintConf(array $raw, string $text): array
     $add('ISP_INTERFACE', null, 'error', 'Не задан интерфейс провайдера');
   }
 
+  $comments = 0;
   foreach (ARG_VARS as $var) {
     $toks = tokens($raw[$var] ?? '');
     // Комментарий внутри кавычек (так написан стандартный конфиг Keenetic): от «#» до конца строки.
-    // nfqws2 получает эти слова как лишние аргументы и пропускает их
-    $comment = [];
-    $n = 0;
-    foreach (explode("\n", $raw[$var] ?? '') as $line) {
-      $lt = tokens($line);
-      foreach ($lt as $k => $t) {
-        if ($t[0] === '#') {
-          $comment[$n + $k] = count($lt) - $k;
-          for ($j = $k + 1; $j < count($lt); $j++) {
-            $comment[$n + $j] = 0;
-          }
-          break;
-        }
-      }
-      $n += count($lt);
-    }
+    // nfqws2 получает эти слова как лишние аргументы и пропускает их — одно замечание на весь конфиг
+    $comment = commentTokens($raw[$var] ?? '');
+    $comments += count(array_filter($comment));
     $pic = false;   // в этом профиле уже был per_instance_condition — у следующих шагов законны cond / cond_neg
     foreach ($toks as $i => $t) {
       if (isset($comment[$i])) {
-        if ($comment[$i]) {
-          $add($var, $i, 'info', 'Комментарий внутри кавычек — nfqws2 получит его слова как лишние аргументы и пропустит; надёжнее вынести над переменной', ['op' => 'remove_comment', 'count' => $comment[$i], 'label' => 'Удалить комментарий']);
-        }
         continue;
       }
       if (str_starts_with($t, '--dpi-desync')) {
@@ -2626,6 +2611,11 @@ function lintConf(array $raw, string $text): array
           break;
       }
     }
+    lintCircular($var, $toks, $comment, $issues, $add);
+  }
+  if ($comments) {
+    $add(null, null, 'info', ($comments === 1 ? 'Комментарий' : "Комментарии ($comments)") . ' внутри кавычек — nfqws2 получает их слова как лишние аргументы и пропускает. '
+      . 'На работу это не влияет (так написан стандартный конфиг Keenetic), но надёжнее держать комментарии над переменной', ['op' => 'remove_comments', 'label' => $comments === 1 ? 'Удалить комментарий' : 'Удалить все']);
   }
 
   // Проверки на уровне профилей
@@ -2881,7 +2871,123 @@ function lintDesync(string $var, int $i, string $val, array $funcs, array $lua, 
   }
   foreach ($f['required'] as $r) {
     if (!array_key_exists($r, $keys)) {
-      $add($var, $i, 'error', "Функции {$fn} нужен параметр «{$r}» — без него она завершится ошибкой на каждом пакете", ['op' => 'add_param', 'key' => $r, 'choices' => $r === 'blob' ? array_values(array_unique(array_merge(array_keys($blobs), BUILTIN_BLOBS, array_values(array_filter($lua['globals'], fn($g) => preg_match('/^fake_default_/', $g)))))) : [], 'label' => "Добавить $r"]);
+      if ($r === 'blob') {
+        // Без blob шаг падает с ошибкой, и nfqws2 пропускает пакет как есть — стратегия по сути ничего не делает.
+        // Добавить blob = включить её: первым вариантом пустой фейк, как в стоковом конфиге nfqws2-keenetic
+        $choices = array_values(array_unique(array_merge(['0x00000000'], array_keys($blobs), BUILTIN_BLOBS, array_values(array_filter($lua['globals'], fn($g) => preg_match('/^fake_default_/', $g))))));
+        $add($var, $i, 'error', "Функции {$fn} нужен параметр «blob». Сейчас шаг на каждом пакете завершается ошибкой, и nfqws2 пропускает пакет без изменений — "
+          . 'эта стратегия ничего не делает. С blob она начнёт работать, поэтому после исправления проверьте, что всё открывается (голос, звонки, игры — для UDP)',
+          ['op' => 'add_param', 'key' => 'blob', 'choices' => $choices, 'label' => 'Добавить blob']);
+      } else {
+        $add($var, $i, 'error', "Функции {$fn} нужен параметр «{$r}» — без него она завершится ошибкой на каждом пакете", ['op' => 'add_param', 'key' => $r, 'choices' => [], 'label' => "Добавить $r"]);
+      }
+    }
+  }
+}
+
+// Номера токенов-комментариев в значении переменной: от «#» до конца строки.
+// Для первого токена комментария — сколько в нём слов, для остальных — 0
+function commentTokens(string $val): array
+{
+  $comment = [];
+  $n = 0;
+  foreach (explode("\n", $val) as $line) {
+    $lt = tokens($line);
+    foreach ($lt as $k => $t) {
+      if ($t[0] === '#') {
+        $comment[$n + $k] = count($lt) - $k;
+        for ($j = $k + 1; $j < count($lt); $j++) {
+          $comment[$n + $j] = 0;
+        }
+        break;
+      }
+    }
+    $n += count($lt);
+  }
+  return $comment;
+}
+
+// Шаг стратегии без strategy=/final= и с параметрами по порядку — чтобы сравнивать стратегии circular
+function stepSig(string $tok): string
+{
+  $parts = explode(':', substr($tok, strlen('--lua-desync=')));
+  $fn = array_shift($parts);
+  $parts = array_values(array_filter($parts, fn($p) => !in_array(explode('=', $p, 2)[0], ['strategy', 'final'], true)));
+  sort($parts);
+  return implode(':', array_merge([$fn], $parts));
+}
+
+// circular: одинаковые стратегии в одном профиле и варианты «Добавить blob», которые сделали бы стратегию копией соседней
+function lintCircular(string $var, array $toks, array $comment, array &$issues, callable $add): void
+{
+  $parts = [[]];
+  foreach ($toks as $i => $t) {
+    if (isset($comment[$i])) {
+      continue;
+    }
+    if (isNewArg($t)) {
+      $parts[] = [];
+      continue;
+    }
+    $parts[count($parts) - 1][$i] = $t;
+  }
+  foreach ($parts as $part) {
+    if (!array_filter($part, fn($t) => preg_match('/^--lua-desync=circular(:|$)/', $t))) {
+      continue;
+    }
+    $st = [];   // номер стратегии => [токен => шаг]
+    foreach ($part as $i => $t) {
+      if (str_starts_with($t, '--lua-desync=') && preg_match('/:strategy=(\d+)(:|$)/', $t, $m)) {
+        $st[(int)$m[1]][$i] = $t;
+      }
+    }
+    ksort($st);
+    $sig = fn(array $steps) => implode(' ', array_map('stepSig', $steps));
+    $sigs = array_map($sig, $st);
+
+    // «Добавить blob»: убрать варианты, после которых стратегия совпадёт с другой
+    foreach ($issues as &$x) {
+      if ($x['var'] !== $var || ($x['fix']['op'] ?? '') !== 'add_param' || ($x['fix']['key'] ?? '') !== 'blob') {
+        continue;
+      }
+      foreach ($st as $n => $steps) {
+        if (!isset($steps[$x['tok']])) {
+          continue;
+        }
+        $x['fix']['choices'] = array_values(array_filter($x['fix']['choices'], function ($c) use ($steps, $x, $n, $sigs, $sig) {
+          $p = explode(':', $steps[$x['tok']]);
+          array_splice($p, 1, 0, "blob=$c");
+          $steps[$x['tok']] = implode(':', $p);
+          $s = $sig($steps);
+          foreach ($sigs as $k => $other) {
+            if ($k !== $n && $other === $s) {
+              return false;
+            }
+          }
+          return true;
+        }));
+      }
+    }
+    unset($x);
+
+    // Одинаковые стратегии: circular переключается между ними без пользы
+    $seen = [];
+    foreach ($sigs as $n => $s) {
+      if (!isset($seen[$s])) {
+        $seen[$s] = $n;
+        continue;
+      }
+      $first = $seen[$s];
+      $tok = array_key_first($st[$first]);
+      $one = $st[$first][$tok];
+      $fix = null;
+      // Частый случай — стоковый конфиг после «Добавить blob»: у стратегии один fake с тем же блобом, что у соседней.
+      // В nfqws2-keenetic у неё blob=0x00000000 (пустой фейк)
+      if (count($st[$first]) === 1 && str_starts_with($one, '--lua-desync=fake:') && preg_match('/:blob=([^:]+)/', $one, $m) && $m[1] !== '0x00000000') {
+        $fix = ['op' => 'set_param', 'key' => 'blob', 'value' => '0x00000000', 'label' => "Стратегии $first: blob=0x00000000"];
+      }
+      $add($var, $tok, 'warning', "Стратегии $first и $n в circular одинаковые — переключение между ними ничего не даёт"
+        . ($fix ? ". Так бывает после «Добавить blob» на стоковом конфиге: там у стратегии $first пустой фейк blob=0x00000000" : ''), $fix);
     }
   }
 }
@@ -3142,6 +3248,15 @@ function applyConfFix(array $x, ?string $choice): string
   if ($f['op'] === 'set_var') {
     return confSetVar($text, $f['var'], $f['value']);
   }
+  if ($f['op'] === 'remove_comments') {
+    // все комментарии внутри кавычек; с конца, чтобы номера оставшихся токенов не сдвигались
+    foreach (ARG_VARS as $v) {
+      foreach (array_reverse(array_keys(commentTokens(confRawVars($text)[$v] ?? '')), false) as $k) {
+        $text = editTokenInText($text, $v, $k, null);
+      }
+    }
+    return $text;
+  }
   if ($f['op'] === 'declare_blob') {
     if (!in_array((string)$choice, $f['choices'], true)) {
       fail('Выберите файл блоба');
@@ -3169,11 +3284,14 @@ function applyConfFix(array $x, ?string $choice): string
       return appendTokenInText(editTokenInText($text, $var, $i, null), $f['to_var'], $t);
     case 'remove_param':
     case 'rename_param':
+    case 'set_param':
     case 'add_param':
       [$name, $val] = array_pad(explode('=', $t, 2), 2, '');
       $parts = explode(':', $val);
       $fn = array_shift($parts);
-      if ($f['op'] === 'remove_param') {
+      if ($f['op'] === 'set_param') {
+        $parts = array_map(fn($p) => explode('=', $p, 2)[0] === $f['key'] ? "{$f['key']}={$f['value']}" : $p, $parts);
+      } elseif ($f['op'] === 'remove_param') {
         $parts = array_values(array_filter($parts, fn($p) => explode('=', $p, 2)[0] !== $f['key']));
       } elseif ($f['op'] === 'rename_param') {
         $parts = array_map(fn($p) => explode('=', $p, 2)[0] === $f['key'] ? $f['to'] . substr($p, strlen($f['key'])) : $p, $parts);
