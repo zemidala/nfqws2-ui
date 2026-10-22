@@ -1053,10 +1053,11 @@ function problemItems() {
   for (const p of st.profiles) {
     if (p.state === 'dead' || p.state === 'excludes-only') items.push({ level: 'warning', title: `Профиль #${p.index}`, text: p.state === 'dead' ? 'никогда не срабатывает — его порты забирают профили выше' : 'получает только исключения профилей выше', href: `#/settings/p${p.index}` });
   }
-  for (const l of st.lists) {
+  // неподключённые сервер не проверяет (listUsed в api.php)
+  for (const l of st.lists.filter((x) => x.used.length)) {
     const pr = l.problems || {};
-    if (pr.error || pr.warning || (pr.info && l.used.length)) {
-      items.push({ level: pr.error ? 'error' : pr.warning ? 'warning' : 'info', title: listName(l.name) + (l.used.length ? '' : ' (не используется)'),
+    if (pr.error || pr.warning || pr.info) {
+      items.push({ level: pr.error ? 'error' : pr.warning ? 'warning' : 'info', title: listName(l.name),
         text: [pr.error && plural(pr.error, 'ошибка', 'ошибки', 'ошибок'), pr.warning && plural(pr.warning, 'повтор', 'повтора', 'повторов'), pr.info && plural(pr.info, 'лишняя запись', 'лишние записи', 'лишних записей')].filter(Boolean).join(', '),
         href: '#/sites/' + encodeURIComponent(l.name),
         fix: l.editable ? btn('Исправить', async () => {
@@ -1430,7 +1431,7 @@ function overviewExtra() {
   const profs = st.conf_profiles;
   const bad = profs.filter((p) => worst(profIssues(p)) === 'error' || ['dead', 'excludes-only'].includes(p.state)).length;
   const used = st.lists.filter((l) => l.used.length);
-  const withProblems = st.lists.filter((l) => l.problems?.error || l.problems?.warning).length;
+  const withProblems = used.filter((l) => l.problems?.error || l.problems?.warning).length;
   const changes = h('div', { class: 'over-rows' }, h('span', { class: 'sm muted', text: 'загрузка…' }));
   const picks = h('div', { class: 'over-rows' }, h('span', { class: 'sm muted', text: 'загрузка…' }));
   const u = st.ui?.update || {};
@@ -2240,7 +2241,7 @@ async function drawList(content, name) {
   const head = h('div', { class: 'lhead' },
     h('div', { class: 'row' }, h('h2', { class: 'mono ltitle', text: name }), LIST_NAMES[name] ? h('span', { class: 'muted', text: LIST_NAMES[name] }) : null, readers,
       h('span', { class: 'grow' }), viewSlot, btn('История', () => openHistory(name, reload), 'small', 'history'), more),
-    h('div', { class: 'row sm' }, meta.used.length ? null : h('span', { class: 'muted', text: 'Ни один профиль не читает этот список — правки в нём ничего не меняют.' }), attachMenu(meta)),
+    h('div', { class: 'row sm' }, meta.used.length ? null : h('span', { class: 'muted', text: 'Ни один профиль не читает этот список — правки в нём ничего не меняют. Записи проверяются, когда список подключён к профилю.' }), attachMenu(meta)),
     subRow());
 
   function subRow() {

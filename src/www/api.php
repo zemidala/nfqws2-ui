@@ -1493,6 +1493,18 @@ function listUse(?array $profiles = null): array
   return $use;
 }
 
+// Подключён ли список к профилю. Неподключённые не проверяются: в той же папке лежат и чужие списки
+// (для XKeen и т. п.) со своим форматом — проверять их незачем, а большие ещё и читать долго
+function listUsed(string $path): bool
+{
+  foreach (array_keys(listUse()) as $p) {
+    if (basename($p) === basename($path)) {
+      return true;
+    }
+  }
+  return false;
+}
+
 // Вид списка: как его подключают профили; неподключённый — по содержимому (больше половины строк —
 // адреса и подсети); пустой — по имени. $lines — записи, если они уже прочитаны или ещё не сохранены
 function listKind(string $name, ?array $lines = null): string
@@ -1549,7 +1561,7 @@ function listsInventory(array $profiles): array
       'size' => $real ? filesize($real) : 0,
       'mtime' => $real ? filemtime($real) : null,
       'used' => $usage[$path] ?? [],
-      'problems' => $real === $path ? listProblems($path) : ['error' => 0, 'warning' => 0, 'info' => 0],
+      'problems' => $real === $path && !empty($usage[$path]) ? listProblems($path) : ['error' => 0, 'warning' => 0, 'info' => 0],
     ];
   }
   usort($res, fn($a, $b) => [!$a['used'], $a['kind'] !== 'host', $a['name']] <=> [!$b['used'], $b['kind'] !== 'host', $b['name']]);
@@ -8437,7 +8449,7 @@ switch ($cmd) {
       fail('Файл не найден', 404);
     }
     $content = file_get_contents($path);
-    respond(['name' => basename($path), 'content' => $content, 'mtime' => filemtime($path), 'issues' => lintList(basename($path), $content)]);
+    respond(['name' => basename($path), 'content' => $content, 'mtime' => filemtime($path), 'issues' => listUsed($path) ? lintList(basename($path), $content) : []]);
 
   case 'list_add':
   case 'list_remove':
@@ -8667,7 +8679,7 @@ switch ($cmd) {
 
   case 'list_lint':
     $path = editablePath($str('name'));
-    respond(['issues' => lintList(basename($path), is_string($in['content'] ?? null) ? $in['content'] : (string)@file_get_contents($path))]);
+    respond(['issues' => listUsed($path) ? lintList(basename($path), is_string($in['content'] ?? null) ? $in['content'] : (string)@file_get_contents($path)) : []]);
 
   case 'list_fix':
     $path = editablePath($str('name'));
