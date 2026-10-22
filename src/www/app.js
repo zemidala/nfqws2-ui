@@ -3661,7 +3661,8 @@ async function paneAbout(content) {
     panel(null, null,
       h('div', { class: 'about-brand' }, logo(48), h('div', {}, h('h2', { text: 'nfqws2-ui' }), h('div', { class: 'sm muted', text: 'веб-интерфейс для nfqws2 · zemidala' }))),
       row('Версия', h('b', { text: st.ui?.version || '?' }), BUILD.includes('-') ? h('span', { class: 'muted mono', title: 'Хеш файлов интерфейса, загруженных в браузер', text: '  сборка ' + BUILD.split('-').pop() }) : null),
-      row('nfqws2', st.version ? 'v' + st.version : 'не определена'),
+      row('nfqws2', st.version ? 'v' + st.version : 'не определена',
+        ...(st.version ? [' · ', h('a', { href: '#', onclick: (e) => { e.preventDefault(); openNfqUpdate(); }, text: st.nfq_update?.available ? `вышла ${st.nfq_update.latest} — обновить` : 'проверить обновление' })] : [])),
       row('Исходный код', link(REPO, REPO.replace('https://', ''))),
       row('Описание и помощь', h('a', { href: '#/settings/readme', text: 'справка (README)' }), ' · ', link(REPO + '/wiki/nfqws2%E2%80%90ui', 'инструкция (Wiki)'), ' · ', h('a', { href: '#/settings/changelog', text: 'изменения по версиям' }), ' · ', link(REPO + '/discussions/categories/q-a', 'задать вопрос'), ' · ', link(REPO + '/issues/new/choose', 'сообщить о проблеме'), ' · ', link('https://t.me/nfqws2_ui', 'чат в Telegram')),
       row('Лицензия', 'MIT')),
@@ -5552,6 +5553,7 @@ async function openNfqUpdate() {
     u = await api('nfq_update_status').catch((e) => { head.replaceChildren(notice('bad', e.message)); return null; });
     recheck.disabled = false;
     if (!u || !dlg.isConnected) return;
+    if (!force && !u.checked) return draw(true);   // ни разу не проверяли (только что обновились) — спросить GitHub сразу
     if (c?.error) toast('GitHub не ответил: ' + c.error, { err: true });
     head.replaceChildren(
       !u.installed ? notice('warn', 'nfqws2 стоит не пакетом', 'Пакета nfqws2-keenetic в системе нет — обновляйте nfqws2 тем же способом, каким ставили.') : null,

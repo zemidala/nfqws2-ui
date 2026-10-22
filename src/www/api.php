@@ -8221,6 +8221,9 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
   monitorRun(false);
   autoTick();
   notifyFlush();   // то, что не ушло в прошлые проходы
+  // новая версия nfqws2: в сети не чаще раза в 12 ч (после ошибки — 10 мин); в каждом проходе, а не раз в сутки,
+  // иначе после обновления интерфейса метка «↑» появлялась только наутро
+  nfqUpdateCheck(false);
   if ($cli === 'daily') {
     snapshotCreate('ежедневный', true);
     remotePush();   // раз в сутки — дослать то, что не ушло (NAS был выключен)
@@ -8228,7 +8231,6 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
       subsRun();
     }
     updateCheck(false);
-    nfqUpdateCheck(false);
     asnRun();
   }
   exit(0);
