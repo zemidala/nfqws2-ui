@@ -469,6 +469,7 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .pending { border-bottom: 1px solid var(--line); }
 .pending.warn { background: var(--warn-soft); } .pending.bad { background: var(--bad-soft); }
 .pending-in { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 16px; }
+.pending-in .item-main { flex: 1 1 260px; }   /* с основой 0 текст сжимался в столбик по букве, а кнопки не уходили на свою строку */
 .pending-in .item-main b { color: var(--fg); }
 .pending .chip.ok { background: var(--surface); }
 /* проблемы с кнопкой исправления */
