@@ -534,11 +534,14 @@ apply)
 		fi
 	fi
 	# Пакет зависит от curl, но его могли удалить, а установленному может не хватать библиотеки (тогда тоже код 127)
-	if ! PATH=$JOB_PATH curl --version >/dev/null 2>&1; then
+	if ! curl_err=$(PATH=$JOB_PATH curl --version 2>&1 >/dev/null); then
 		say ""
 		say "ВНИМАНИЕ: программа curl не запускается — без неё не работают подбор стратегий и проверки сайтов."
-		if [ -n "$R" ]; then hint='opkg install curl'
-		elif command -v apk >/dev/null 2>&1 && ! command -v opkg >/dev/null 2>&1; then hint='apk update && apk add curl'
+		[ -n "$curl_err" ] && say "Система ответила: $(echo "$curl_err" | head -n 2)"
+		# пакет стоит, а программа не запускается — «install» ответит «up to date», нужна переустановка вместе с библиотекой
+		if command -v apk >/dev/null 2>&1 && ! command -v opkg >/dev/null 2>&1; then
+			if apk info -e curl >/dev/null 2>&1; then hint='apk fix curl libcurl'; else hint='apk update && apk add curl'; fi
+		elif opkg list-installed 2>/dev/null | grep -q '^curl '; then hint='opkg update && opkg install --force-reinstall curl libcurl'
 		else hint='opkg update && opkg install curl'; fi
 		say "Поставьте её: $hint"
 		say ""

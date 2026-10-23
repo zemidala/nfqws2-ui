@@ -2096,7 +2096,8 @@ function curlCmdHint(string $err): string
   return (curlMissing($err) ? 'Программа curl не установлена' : 'Программа curl установлена, но не запускается')
     . ' — без неё подбор и проверки не могут открыть ни одного сайта (система ответила: «' . $err . '»). '
     . 'Нажмите «Установить curl» в «Проблемах» на «Обзоре» или выполните на роутере: '
-    . (pkgApk() ? 'apk add curl' : 'opkg install curl') . '.';
+    // установлен, но не запускается — простой install ответит «up to date», нужна переустановка вместе с библиотекой
+    . (pkgApk() ? (curlMissing($err) ? 'apk add curl' : 'apk fix curl libcurl') : (curlMissing($err) ? 'opkg install curl' : 'opkg install --force-reinstall curl libcurl')) . '.';
 }
 
 function pkgApk(): bool
