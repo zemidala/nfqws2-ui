@@ -4766,8 +4766,8 @@ function testJob(): void
     $status['community'] = $info;
   }
   // Что нашла проба «Обрыв на 16 КБ»: в каталоге и стандартном наборе фейков с именем нет, а обрыв снимают только они
-  // (когда наборы не выбраны — проверяют только свою или вставленную стратегию, — находки пробы тоже не берём)
-  foreach ($http || $quic || !$job['sets'] ? [] : freezeCandidates($job['host']) as $fc) {
+  // — поэтому берём их только вместе со стандартным набором или каталогом (выбран один конфиг — только конфиг)
+  foreach ($http || $quic || !array_intersect(['std', 'ext', 'full'], $job['sets']) ? [] : freezeCandidates($job['host']) as $fc) {
     $key = implode(' ', $fc['steps']);
     if (isset($byKey[$key])) {
       $cands[$byKey[$key]]['rank'] = min($cands[$byKey[$key]]['rank'] ?? 2, $fc['rank']);
@@ -4979,7 +4979,7 @@ function multiCandidates(array $job, array $hosts, string $proto, array &$status
     array_map($add, communityCandidates($hosts[0], $proto, $info));
     $status['community'] = $info;
   }
-  foreach ($http ? [] : $hosts as $h) {
+  foreach ($http || !in_array('std', $job['sets'], true) ? [] : $hosts as $h) {
     array_map($add, freezeCandidates($h));
   }
   $funcs = luaCatalog()['functions'];
