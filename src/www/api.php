@@ -3640,17 +3640,42 @@ function guardJob(): void
     doRollback($p, 'nfqws2 не запустился');
     return;
   }
-  while (time() < $p['deadline']) {
-    sleep(2);
-    $cur = pendingGet();
-    if (!$cur || $cur['state'] !== 'waiting' || ($cur['id'] ?? '') !== $p['id']) {
-      return;
-    }
+  // Срок ждёт оболочка со sleep, а не этот процесс: PHP занимает 10–15 МБ, и на роутере со 128 МБ три минуты
+  // ожидания вместе с открытой страницей уводили память в ноль (NFQ-L130)
+  $left = max(1, $p['deadline'] - time());
+  exec('(sleep ' . $left . '; env -i PATH=' . JOB_PATH . ' NFQWS_UI_CLI=guard_deadline php-cgi -q -f ' . escapeshellarg(__FILE__) . ' >/dev/null 2>&1) >/dev/null 2>&1 &');
+}
+
+// Откат, если срок вышел, а изменения так и не подтвердили. $grace — запас после срока: оболочка со sleep
+// откатывает ровно в срок (0), а state и cron — только если она не справилась (задание убила нехватка памяти)
+function pendingExpire(int $grace): void
+{
+  $p = pendingGet();
+  if (!$p || !in_array($p['state'], ['checking', 'waiting'], true) || time() < (int)($p['deadline'] ?? 0) + $grace) {
+    return;
+  }
+  $l = @fopen('/tmp/nfqws-ui-pending.lock', 'c');
+  if (!$l || !flock($l, LOCK_EX | LOCK_NB)) {
+    return;   // откатывает другой процесс
   }
   $p = pendingGet();
-  if ($p && $p['state'] === 'waiting') {
-    doRollback($p, 'изменения не подтверждены за отведённое время');
+  if ($p && in_array($p['state'], ['checking', 'waiting'], true) && time() >= (int)($p['deadline'] ?? 0) + $grace) {
+    doRollback($p, $p['state'] === 'checking' ? 'проверка сайтов не завершилась (возможно, роутеру не хватило памяти)'
+      : 'изменения не подтверждены за отведённое время');
   }
+  flock($l, LOCK_UN);
+}
+
+// Состояние проверки для страницы — без списка версий и прежних итогов
+function pendingView(): ?array
+{
+  $p = pendingGet();
+  if (!$p) {
+    return null;
+  }
+  $p['files'] = array_map('basename', array_keys($p['versions'] ?? []));
+  unset($p['versions'], $p['before']);
+  return $p;
 }
 
 // ---------- дубликаты и конфликты между списками ----------
@@ -5282,6 +5307,16 @@ function cfgPrepare(string $name, string $text, int $k, bool $mine = false): arr
 function memFreeMb(): ?int
 {
   return preg_match('/^MemAvailable:\s+(\d+)/m', (string)@file_get_contents('/proc/meminfo'), $m) ? (int)((int)$m[1] / 1024) : null;
+}
+
+const LOWMEM_TOTAL_MB = 300;   // 128 и 256 МБ (Keenetic Viva и т. п.)
+const LOWMEM_RESTART_MB = 30;  // перед перезапуском с проверкой: меньше — предупредить
+
+// Слабый роутер: каждый запрос к api.php — отдельный php-cgi на 10–15 МБ, и несколько разом съедают всю память
+// (NFQ-L130). Страница тогда шлёт запросы по одному
+function lowMem(): bool
+{
+  return preg_match('/^MemTotal:\s+(\d+)/m', (string)@file_get_contents('/proc/meminfo'), $m) === 1 && (int)$m[1] / 1024 <= LOWMEM_TOTAL_MB;
 }
 
 function cfgJob(array $job, array &$status, ?array &$nfq, string $iface): void
@@ -7753,14 +7788,10 @@ function state(): array
       return $u ? ['ts' => $u['ts'], 'files' => $u['files'], 'note' => $u['note']] : null;
     })(),
     'pending' => (function () {
-      $p = pendingGet();
-      if (!$p) {
-        return null;
-      }
-      $p['files'] = array_map('basename', array_keys($p['versions'] ?? []));
-      unset($p['versions'], $p['before']);
-      return $p;
+      pendingExpire(60);
+      return pendingView();
     })(),
+    'lowmem' => lowMem(),
     'rollback' => (function () {
       $T = confirmPoint();
       return ['since' => $T, 'files' => array_values(array_unique(array_map('basename', array_keys(rollbackVersions($T)))))];
@@ -8263,6 +8294,10 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
     guardJob();
     exit(0);
   }
+  if ($cli === 'guard_deadline') {
+    pendingExpire(0);
+    exit(0);
+  }
   if ($cli === 'push') {
     remotePush();
     exit(0);
@@ -8272,6 +8307,7 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
     exit(0);
   }
   seenInfo();   // первым — как и в state()
+  pendingExpire(60);   // задание проверки после перезапуска могло погибнуть — откат не должен потеряться
   historyScan('auto');
   nfqLogsTrim();
   monitorRun(false);
@@ -8808,11 +8844,17 @@ switch ($cmd) {
     }
     $minutes = max(1, min(15, (int)($in['minutes'] ?? 3)));
     $p = ['id' => bin2hex(random_bytes(4)), 'state' => 'checking', 'T' => $T, 'versions' => rollbackVersions($T), 'started' => time(),
-      'deadline' => time() + $minutes * 60, 'before' => $before, 'checks' => null];
+      'deadline' => time() + $minutes * 60, 'before' => $before, 'checks' => null, 'mem' => memFreeMb()];
+    $p['mem_low'] = $p['mem'] !== null && $p['mem'] < LOWMEM_RESTART_MB;
     pendingSave($p);
     [$rc, $out, $fixed] = serviceRun('restart');
     exec('(env -i PATH=' . JOB_PATH . ' NFQWS_UI_CLI=guard php-cgi -q -f ' . escapeshellarg(__FILE__) . ' >/dev/null 2>&1 &)');
     respond(['ok' => $rc === 0, 'output' => $out, 'fixed' => $fixed, 'files' => array_map('basename', array_keys($p['versions']))]);
+
+  case 'pending_get':
+    // Опрос плашки «проверяю сайты»: раньше раз в 3 с шёл полный state — самый тяжёлый запрос
+    pendingExpire(60);
+    respond(['pending' => pendingView(), 'now' => time()]);
 
   case 'safe_confirm':
     $p = pendingGet();

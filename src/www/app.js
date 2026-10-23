@@ -196,12 +196,29 @@ class ApiError extends Error {
   constructor(msg, data) { super(msg); this.data = data; }
 }
 
+// На слабом роутере (state.lowmem) — по одному запросу за раз: каждый запрос там — отдельный php-cgi на 10–15 МБ,
+// и страница, разом запросившая несколько, вместе с проверкой сайтов съедала всю память роутера (NFQ-L130)
+let apiBusy = 0;
+const apiWaiting = [];
+function apiTake() {
+  if (apiBusy < (S.state?.lowmem ? 1 : 8)) { apiBusy++; return Promise.resolve(); }
+  return new Promise((ok) => apiWaiting.push(ok));
+}
+function apiGive() {
+  const next = apiWaiting.shift();
+  if (next) next(); else apiBusy--;
+}
+
 async function api(cmd, data = {}) {
-  const r = await fetch('api.php', {
-    method: 'POST', credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ cmd, ...data }),
-  });
+  await apiTake();
+  let r;
+  try {
+    r = await fetch('api.php', {
+      method: 'POST', credentials: 'same-origin',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ cmd, ...data }),
+    });
+  } finally { apiGive(); }
   let j = {};
   try { j = await r.json(); } catch { /* пусто */ }
   if (r.status === 401 && cmd !== 'login') {
@@ -637,6 +654,21 @@ function updateChrome() {
 
 const pendingActive = () => ['checking', 'waiting'].includes(S.state?.pending?.state);
 
+async function pollPending() {
+  const was = S.state?.pending;
+  const r = await api('pending_get');
+  const p = r.pending;
+  if (p && p.id === was?.id && p.state === was?.state && JSON.stringify(p.checks) === JSON.stringify(was?.checks)) return;
+  if (['checking', 'waiting'].includes(p?.state) && p.id === was?.id) {
+    S.state.pending = p;
+    S.state.now = r.now;
+    renderPending();
+    return;
+  }
+  if (p?.state === 'rolled_back') S.conf = null;   // конфиг вернулся к прежнему
+  await loadState();
+}
+
 async function undoLast(ask = true) {
   const u = S.state?.undo;
   if (ask && u && !confirm(`Отменить последнее изменение?\n\n${u.note || 'изменение'}\nФайлы: ${u.files.join(', ')}\n\nФайлы вернутся к состоянию до него. Саму отмену тоже можно отменить через «Историю изменений».`)) return;
@@ -704,11 +736,12 @@ function renderPending() {
     const timer = h('b', { class: 'num' });
     const tick = () => { const s = left(); timer.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; };
     tick();
-    // новый запрос — только когда прошлый вернулся: на слабом роутере state идёт дольше секунды
+    // новый запрос — только когда прошлый вернулся: на слабом роутере запрос идёт дольше секунды.
+    // Опрашиваем только ход проверки (pending_get), полное состояние — когда она закончилась (NFQ-L130)
     let busy = false;
     pendingTimer = setInterval(() => {
       tick();
-      if (left() % 3 === 0 && !busy) { busy = true; loadState().catch(() => {}).finally(() => { busy = false; }); }
+      if (left() % 3 === 0 && !busy) { busy = true; pollPending().catch(() => {}).finally(() => { busy = false; }); }
     }, 1000);
     const checks = p.checks || [];
     const regressed = checks.filter((c) => c.regressed);
@@ -716,6 +749,7 @@ function renderPending() {
       h('div', { class: 'item-main' },
         h('b', { text: p.state === 'checking' ? 'nfqws2 перезапущен — проверяю сайты…' : regressed.length ? `После изменений перестали открываться: ${regressed.map((c) => c.host).join(', ')}` : 'nfqws2 перезапущен. Всё работает?' }),
         h('span', { class: 'sm' }, 'Если не подтвердить, через ', timer, ' изменения откатятся сами' + (p.files?.length ? ` (${p.files.join(', ')})` : '') + '.'),
+        p.mem_low ? h('span', { class: 'sm', text: `На роутере мало свободной памяти (${p.mem} МБ). Пока идёт проверка, лучше не открывать другие страницы интерфейса.` }) : null,
         checks.length ? h('div', { class: 'chips', style: 'margin-top:4px' }, checks.map((c) => chip((c.ok ? '✓ ' : '✗ ') + c.host, c.ok ? 'ok' : 'bad'))) : null),
       p.state === 'checking' ? h('span', { class: 'spin' }) : null,
       btn('Всё работает — оставить', async () => { if (await guarded(() => api('safe_confirm'), 'Изменения подтверждены')) loadState(); }, regressed.length ? 'small' : 'small primary', 'ok'),
@@ -5746,7 +5780,8 @@ async function start() {
 }
 
 setInterval(() => {
-  if (S.auth && document.visibilityState === 'visible' && !document.querySelector('.modal-bg') && !document.activeElement?.matches('textarea, input, select')) {
+  // во время проверки после перезапуска состояние опрашивает плашка — лёгким pending_get
+  if (S.auth && !pendingActive() && document.visibilityState === 'visible' && !document.querySelector('.modal-bg') && !document.activeElement?.matches('textarea, input, select')) {
     loadState().catch(() => {});
   }
 }, 30000);
