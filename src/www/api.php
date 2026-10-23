@@ -5543,6 +5543,49 @@ function freezeJob(array $job, array &$status, ?array &$nfq, string $iface, arra
   putSafe(FREEZE_FILE, json_encode(array_intersect_key($status, array_flip(['state', 'started', 'finished', 'nets'])), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
 }
 
+// Шаг без порядка параметров и без strategy=N: «hostfakesplit:tcp_md5:repeats=4» и «hostfakesplit:repeats=4:tcp_md5» — одно и то же
+function stepNorm(string $tok): string
+{
+  $s = stepParse($tok);
+  unset($s['p']['strategy']);
+  ksort($s['p']);
+  return stepBuild($s);
+}
+
+// Найденное пробой уже стоит в конфиге? Считается при каждом чтении итога: конфиг мог измениться после пробы.
+// in_conf: profiles — профили с той же стратегией; route — через какой профиль на самом деле идёт TLS к адресу сети
+function freezeInConf(array $nets): array
+{
+  $norm = fn(array $steps) => implode(' ', array_map('stepNorm', $steps));
+  $same = [];
+  foreach (configCandidates('https') as $c) {
+    preg_match_all('/#(\d+)/', $c['from'], $m);
+    $k = $norm($c['steps']);
+    $same[$k] = array_values(array_unique(array_merge($same[$k] ?? [], array_map('intval', $m[1]))));
+  }
+  $profiles = null;
+  $cache = new ListCache();
+  foreach ($nets as &$n) {
+    if (empty($n['found']['steps'])) {
+      continue;
+    }
+    $profiles ??= currentProfiles();
+    $r = matchRoute($profiles, $n['host'], array_filter([$n['ip'] ?? null]), 'tcp', 443, 'tls', $cache);
+    $in = $same[$norm($n['found']['steps'])] ?? [];
+    $why = '';
+    // профиль с этой стратегией есть, но адрес до него не доходит — почему именно
+    foreach ($r['steps'] as $st) {
+      if (in_array($st['profile'], $in, true) && !$st['ok']) {
+        $why = $st['why'];
+        break;
+      }
+    }
+    $n['in_conf'] = ['profiles' => $in, 'route' => $r['profile'], 'why' => $why];
+  }
+  unset($n);
+  return $nets;
+}
+
 // Находки последней пробы для подбора: сначала найденное в сети этого сайта, затем в остальных сетях
 function freezeCandidates(string $host): array
 {
@@ -8994,6 +9037,9 @@ switch ($cmd) {
       respond($s);
     }
     $f = json_decode((string)@file_get_contents(FREEZE_FILE), true);
+    if (is_array($f) && !empty($f['nets'])) {
+      $f['nets'] = freezeInConf($f['nets']);
+    }
     respond(is_array($f) ? $f + ['type' => 'freeze'] : ['state' => 'idle', 'type' => 'freeze']);
 
   case 'test_status':

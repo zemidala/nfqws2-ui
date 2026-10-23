@@ -360,6 +360,7 @@ const FEATURES = [
   ['pick:podkop', '1.21.0', 'подбор и проверки предупреждают, если сайт идёт через podkop'],
   ['raw:format', '1.21.0', '«Конфиг целиком»: кнопка «Оформить» — отступы и пустые строки к одному виду'],
   ['over:nfqupdate', '1.21.0', 'обновление nfqws2 из интерфейса: метка с новой версией в верхней панели, возврат прежней'],
+  ['frz:inconf', '1.22.0', '«Обрыв на 16 КБ»: видно, что найденная стратегия уже стоит в конфиге и работает для этой сети'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 // на сколько минорных версий функция старше текущей (у сборки до выпуска — меньше нуля)
@@ -4692,8 +4693,20 @@ async function viewFreeze(main) {
     if (n.baseline?.ok) return [levelIcon('ok'), h('span', { text: 'обрыва нет' })];
     if (!n.freeze) return [levelIcon('info'), h('span', { class: 'muted', text: 'не проверить: ' + (n.baseline?.reason || 'нет ответа') })];
     const what = n.stall ? 'замирает ещё до ответа' : 'обрыв есть';
-    if (n.found) return [levelIcon('warning'), h('span', {}, what + ' · снимает имя ', h('b', { class: 'mono', text: n.found.name }), h('div', { class: 'sm muted', text: n.found.via ? `найдено на ${n.found.via} — та же сеть` : n.found.strategy + (n.found.ms ? `, ${n.found.ms} мс` : '') }))];
+    if (n.found) return [levelIcon(inConfWorks(n) ? 'ok' : 'warning'), h('span', {}, what + ' · снимает имя ', h('b', { class: 'mono', text: n.found.name }), h('div', { class: 'sm muted', text: n.found.via ? `найдено на ${n.found.via} — та же сеть` : n.found.strategy + (n.found.ms ? `, ${n.found.ms} мс` : '') }), inConfNote(n))];
     return [levelIcon('error'), h('span', { text: n.tried?.length ? `${what} · не снялся (проверено ${plural(n.tried.length, 'вариант', 'варианта', 'вариантов')})` : what })];
+  }
+
+  // Найденная стратегия уже в конфиге: сервер сверяет при каждом чтении итога (конфиг мог поменяться после пробы)
+  const profLabel = (k) => { const p = prof(k); return `#${k}` + (p ? ` «${profName(p)}»` : ''); };
+  const inConfWorks = (n) => !!n.in_conf?.route && n.in_conf.profiles.includes(n.in_conf.route);
+  function inConfNote(n) {
+    const c = n.in_conf;
+    if (!c?.profiles?.length) return null;
+    if (inConfWorks(n)) return h('div', { class: 'sm' }, `Уже работает: адреса сети идут через профиль ${profLabel(c.route)} с этой стратегией`, newTag('frz:inconf'));
+    const list = c.profiles.map(profLabel).join(', ');
+    return h('div', { class: 'sm' }, `Эта стратегия уже есть в ${c.profiles.length > 1 ? 'профилях' : 'профиле'} ${list}, но адреса сети `
+      + (c.route ? `перехватывает профиль ${profLabel(c.route)}` : 'туда не попадают') + (c.why ? ` (${c.why})` : ''), newTag('frz:inconf'));
   }
 
   function draw(s) {
@@ -4707,13 +4720,17 @@ async function viewFreeze(main) {
     const frozen = byAs(nets.filter((n) => n.freeze));
     const found = frozen.filter((n) => byAs(nets).length && nets.some((x) => (x.asn || x.host) === (n.asn || n.host) && x.found));
     const total = byAs(nets).length;
+    const working = found.filter((n) => nets.some((x) => (x.asn || x.host) === (n.asn || n.host) && inConfWorks(x))).length;
+    const foundText = !found.length ? 'Ни одно имя обрыв не сняло.'
+      : `Для ${found.length} из них имя нашлось` + (working === found.length ? ', и эта стратегия уже работает в вашем конфиге — применять ничего не нужно.'
+        : ' — его можно применить для всей сети.' + (working ? ` В ${plural(working, 'сети', 'сетях', 'сетях')} эта стратегия уже работает в вашем конфиге.` : ''));
     out.replaceChildren(
       running ? h('section', { class: 'panel' }, h('div', { class: 'row' }, h('span', { class: 'spin' }), h('b', { text: s.phase === 'names' ? 'Подбираю имена для сетей с обрывом' : 'Проверяю сети без обхода' }), h('span', { class: 'grow' }),
         h('span', { class: 'sm muted num', text: s.total ? `${s.done} из ${s.total}` : 'запуск…' }), btn('Остановить', () => api('test_stop'), 'small danger', 'stop')),
         s.current ? h('p', { class: 'sm muted', text: 'Сейчас: ' + s.current }) : null) : null,
       !running && nets.length ? (frozen.length
         ? notice(found.length === frozen.length ? 'ok' : 'warn', `Обрыв есть в ${plural(frozen.length, 'сети', 'сетях', 'сетях')} из ${total}`,
-          (found.length ? `Для ${found.length} из них имя нашлось — его можно применить для всей сети.` : 'Ни одно имя обрыв не сняло.')
+          foundText
           + (found.length < frozen.length ? ' Где не снялось: опорные адреса самой компании-хостинга провайдер иногда режет строже, чем сайты её клиентов, — впишите в «Свои сайты» сайт, который живёт в этой сети и не открывается у вас, или запустите на нём подбор с уточнением.' : ''))
         : notice('ok', 'Обрыва на 16 КБ не видно', 'Ни одна из проверенных сетей не замораживает соединение — значит, у вашего провайдера сейчас этого ограничения нет (или оно касается других сетей).')) : null,
       !running && s.state === 'time' ? notice('warn', 'Проба остановлена по времени', 'На подбор имён отведено 10 минут; ниже — что успели проверить.') : null,
@@ -4724,7 +4741,7 @@ async function viewFreeze(main) {
           h('div', { class: 'row', style: 'gap:6px;flex-wrap:nowrap;align-items:flex-start' }, ...verdict(n)),
           // кнопки — один раз на сеть: у адреса, где имя нашлось
           h('div', { class: 'row frz-act' }, n.found && n.asn && !n.found.via ? [
-            btn('Применить для сети', () => applyNet(n), 'small primary', 'ok', { title: `Список адресов AS${n.asn} и профиль с найденным именем — для всех сайтов этой сети` }),
+            inConfWorks(n) ? null : btn('Применить для сети', () => applyNet(n), 'small primary', 'ok', { title: `Список адресов AS${n.asn} и профиль с найденным именем — для всех сайтов этой сети` }),
             shareBtn({ steps: n.found.steps, ok: 3, tries: 3, name: n.found.strategy }, { host: '', proto: 'https', asn: n.asn })] : null))))) : null);
   }
 
