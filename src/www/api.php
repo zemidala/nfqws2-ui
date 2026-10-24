@@ -4,6 +4,15 @@
 // Вход — логин и пароль root роутера; сессия общая с nfqws-keenetic-web, если он установлен.
 
 ini_set('memory_limit', '64M');
+// В php.ini Entware display_errors = On: любое предупреждение печаталось прямо в ответ, JSON ломался,
+// и страница падала с «Cannot read properties of undefined». Ошибки — в свой журнал, он попадает в отчёт
+const PHP_LOG = '/tmp/nfqws-ui-php.log';
+ini_set('display_errors', '0');
+ini_set('log_errors', '1');
+ini_set('error_log', PHP_LOG);
+if (@filesize(PHP_LOG) > 262144) {
+  @file_put_contents(PHP_LOG, substr((string)@file_get_contents(PHP_LOG), -65536));
+}
 // Время как на роутере. date() с именованным поясом в PHP для OpenWrt падает (segfault),
 // поэтому берём смещение из системы и форматируем через gmdate()
 $m = [];
@@ -67,7 +76,14 @@ function respond(array $data, int $code = 200): void
   http_response_code($code);
   header('Content-Type: application/json; charset=utf-8');
   header('Cache-Control: no-store');
-  echo json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+  // недопустимый UTF-8 (имя из DNS, сообщение системы) раньше давал пустой ответ — теперь заменяется на «�»
+  $json = json_encode($data, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES | JSON_INVALID_UTF8_SUBSTITUTE);
+  if ($json === false) {
+    error_log('respond: ' . json_last_error_msg());
+    http_response_code(500);
+    $json = json_encode(['error' => 'Ответ не удалось собрать: ' . json_last_error_msg()], JSON_UNESCAPED_UNICODE);
+  }
+  echo $json;
   exit();
 }
 
@@ -8174,6 +8190,12 @@ function reportText(array $sites, bool $hide, string $build): string
         . '; через текущий конфиг — ' . ($pr['ok'] ? 'открывается, HTTP ' . $pr['code'] . ', ' . $pr['ms'] . ' мс' : 'НЕ открывается: ' . $pr['reason'])
         . ($pk && !empty($pk['proxy']) ? '; идёт через podkop' : '');
     }
+  }
+  $php = array_slice(array_filter(explode("\n", (string)@file_get_contents(PHP_LOG))), -20);
+  $L[] = '';
+  $L[] = '== Ошибки PHP (последние ' . count($php) . ') ==';
+  foreach ($php as $l) {
+    $L[] = substr($l, 0, 300);
   }
   $text = implode("\n", $L) . "\n";
   if ($hide) {

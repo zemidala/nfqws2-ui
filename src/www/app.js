@@ -219,14 +219,21 @@ async function api(cmd, data = {}) {
       body: JSON.stringify({ cmd, ...data }),
     });
   } finally { apiGive(); }
-  let j = {};
-  try { j = await r.json(); } catch { /* пусто */ }
+  let j = null;
+  const raw = await r.text().catch(() => '');
+  try { j = JSON.parse(raw); } catch { /* не JSON */ }
   if (r.status === 401 && cmd !== 'login') {
     S.auth = false;
     renderLogin();
-    throw new ApiError('Нужно войти', j);
+    throw new ApiError('Нужно войти', j || {});
   }
-  if (!r.ok) throw new ApiError(j.error || 'Ошибка ' + r.status, j);
+  if (!r.ok) throw new ApiError(j?.error || 'Ошибка ' + r.status, j || {});
+  // пустой или не-JSON ответ — запрос не удался (процесс PHP погиб, сервер напечатал ошибку), а не «пустые данные»:
+  // иначе страница падала дальше на отсутствующем поле с непонятным «Cannot read properties of undefined»
+  if (!j || typeof j !== 'object') {
+    const txt = raw.replace(/<[^>]+>/g, ' ').replace(/\s+/g, ' ').trim();
+    throw new ApiError(txt ? 'Роутер ответил не так, как ожидалось: ' + txt.slice(0, 200) : 'Роутер прислал пустой ответ — возможно, не хватило памяти', {});
+  }
   return j;
 }
 
