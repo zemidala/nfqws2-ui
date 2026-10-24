@@ -13,6 +13,26 @@ ini_set('error_log', PHP_LOG);
 if (@filesize(PHP_LOG) > 262144) {
   @file_put_contents(PHP_LOG, substr((string)@file_get_contents(PHP_LOG), -65536));
 }
+
+// Текст фатальной ошибки PHP, которой закончился запрос или задание; null — фатальной не было
+function fatalText(): ?string
+{
+  $e = error_get_last();
+  if (!$e || !in_array($e['type'], [E_ERROR, E_PARSE, E_CORE_ERROR, E_COMPILE_ERROR, E_USER_ERROR], true)) {
+    return null;
+  }
+  if (!function_exists('curl_init') && strpos($e['message'], 'curl_') !== false) {
+    return phpCurlHint(phpCurlError() ?? '');
+  }
+  return 'Ошибка PHP: ' . $e['message'] . ' (' . basename($e['file']) . ':' . $e['line'] . ')';
+}
+
+// Запрос, упавший фатальной ошибкой, отвечает обычной ошибкой в JSON — страница покажет её текст
+register_shutdown_function(function () {
+  if (getenv('NFQWS_UI_CLI') === false && !headers_sent() && ($t = fatalText()) !== null) {
+    respond(['error' => $t], 500);
+  }
+});
 // Время как на роутере. date() с именованным поясом в PHP для OpenWrt падает (segfault),
 // поэтому берём смещение из системы и форматируем через gmdate()
 $m = [];
@@ -2174,8 +2194,52 @@ function curlInstall(): array
   return ['ok' => false, 'error' => $why, 'log' => $log, 'code' => $rc];
 }
 
+// Модуль curl для PHP (php8-mod-curl): через него идут DoH, RIPEstat, GitHub, Telegram, база сообщества.
+// Без него каждый такой запрос падал фатальной ошибкой «Call to undefined function curl_init()», а страница
+// показывала «Cannot read properties of undefined (reading 'filter')». null — модуль работает, иначе — что ответил PHP
+function phpCurlError(): ?string
+{
+  if (function_exists('curl_init')) {
+    return null;
+  }
+  // почему не загрузился: PHP пишет это при старте (нет библиотеки, другая версия), а без display_startup_errors молчит
+  $bin = PHP_BINARY !== '' && is_executable(PHP_BINARY) ? PHP_BINARY : 'php-cgi';
+  [, $out] = runTimeout(['sh', '-c', 'exec env -i PATH=' . JOB_PATH . ' ' . escapeshellarg($bin) . ' -d display_startup_errors=1 -d display_errors=1 -m 2>&1'], 5);
+  foreach (explode("\n", strip_tags($out)) as $l) {
+    if (stripos($l, 'curl') !== false && preg_match('/warning|error|unable|cannot/i', $l)) {
+      return trim(preg_replace('/\s+/', ' ', $l));
+    }
+  }
+  return 'модуль curl для PHP не загружен';
+}
+
+function phpCurlHint(string $err): string
+{
+  return 'В PHP нет модуля curl (php8-mod-curl) — без него диагноз, подбор, мониторинг и проверка обновлений не работают '
+    . '(PHP ответил: «' . $err . '»). Нажмите «Установить модуль curl» в «Проблемах» на «Обзоре» или выполните на роутере: '
+    . (pkgApk() ? 'apk add php8-mod-curl' : 'opkg install --force-reinstall php8-mod-curl libcurl') . '.';
+}
+
+// Ставит (или переставляет) модуль curl для PHP. Новый php-cgi запускается на каждый запрос — перезапуск lighttpd не нужен
+function phpCurlInstall(): array
+{
+  set_time_limit(200);
+  $cmd = pkgApk() ? 'apk add php8-mod-curl && apk fix php8-mod-curl libcurl'
+    : 'opkg install --force-reinstall php8-mod-curl libcurl || { opkg update >/dev/null 2>&1; opkg install --force-reinstall php8-mod-curl libcurl; }';
+  [$rc, $out] = runTimeout(['sh', '-c', 'PATH=' . JOB_PATH . '; ' . $cmd], 190);
+  $log = trim(implode("\n", array_slice(explode("\n", trim($out)), -15)));
+  // в этом процессе модуль уже не появится — проверяем новым php-cgi
+  $bin = PHP_BINARY !== '' && is_executable(PHP_BINARY) ? PHP_BINARY : 'php-cgi';
+  $ok = (bool)preg_match('/^curl$/mi', (string)runTimeout(['sh', '-c', 'exec env -i PATH=' . JOB_PATH . ' ' . escapeshellarg($bin) . ' -m 2>/dev/null'], 5)[1]);
+  return $ok ? ['ok' => true, 'log' => $log]
+    : ['ok' => false, 'error' => $rc === 124 ? 'источник пакетов не ответил' : 'модуль curl всё ещё не загружается', 'log' => $log, 'code' => $rc];
+}
+
 function curlRequire(): void
 {
+  if (($e = phpCurlError()) !== null) {
+    fail(phpCurlHint($e));
+  }
   if (($e = curlCmdError()) !== null) {
     fail(curlCmdHint($e));
   }
@@ -4638,7 +4702,7 @@ function testJob(): void
     testRules('off', $iface);
     if ($status['state'] === 'running') {
       $status['state'] = 'error';
-      $status['error'] = $status['error'] ?? 'задание прервано';
+      $status['error'] = $status['error'] ?? fatalText() ?? 'задание прервано';
       testSaveStatus($status);
     }
   });
@@ -7466,9 +7530,9 @@ function nfqUpdateJob(): void
     $d = nfqUpdData();
     if (!empty($d['job']) && empty($d['job']['done'])) {
       $d['job']['done'] = time();
-      $d['job']['error'] = 'задание прервано';
+      $d['job']['error'] = fatalText() ?? 'задание прервано';
       nfqUpdSave($d);
-      nfqLog('ОШИБКА: задание прервано');
+      nfqLog('ОШИБКА: ' . $d['job']['error']);
       nfqLog('[exit 1]');
     }
   });
@@ -7806,6 +7870,8 @@ function state(): array
     'leftovers' => array_column(pkgLeftovers(), 'name'),
     'nfq_update' => (function () { $u = nfqUpdateInfo(); return ['latest' => $u['latest'], 'available' => $u['available'], 'running' => $u['running'], 'rollback' => $u['rollback']]; })(),
     'curl' => curlCmdError(),
+    'php_curl' => phpCurlError(),
+    'pkg_apk' => pkgApk(),
     'lint' => lintCurrent(),
     'conf_tokens' => array_map('tokens', array_intersect_key(confRawVars(file_get_contents(CONF_FILE)), array_flip(ARG_VARS))),
     // Профили по конфигу (для редактора) — могут отличаться от запущенных до перезапуска
@@ -9134,6 +9200,9 @@ switch ($cmd) {
 
   case 'curl_install':
     respond(curlInstall());
+
+  case 'php_curl_install':
+    respond(phpCurlInstall());
 
   case 'test_stop':
     @touch(TEST_DIR . '/stop');

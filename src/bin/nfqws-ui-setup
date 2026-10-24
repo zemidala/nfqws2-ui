@@ -546,6 +546,16 @@ apply)
 		say "Поставьте её: $hint"
 		say ""
 	fi
+	# Модуль curl для PHP: пакет в зависимостях, но мог не встать или не загружаться (другая версия PHP, нет библиотеки).
+	# Без него интерфейс открывается, а диагноз, подбор и мониторинг падают. opkg здесь не вызвать — apply идёт и из postinst
+	if PATH=$JOB_PATH command -v php-cgi >/dev/null 2>&1 && ! env -i PATH="$JOB_PATH" php-cgi -m 2>/dev/null | grep -qix curl; then
+		say ""
+		say "ВНИМАНИЕ: в PHP нет модуля curl — без него не работают диагноз, подбор стратегий и мониторинг."
+		if command -v apk >/dev/null 2>&1 && ! command -v opkg >/dev/null 2>&1; then hint='apk add php8-mod-curl'
+		else hint='opkg install --force-reinstall php8-mod-curl libcurl'; fi
+		say "Поставьте его: $hint (или кнопкой «Установить модуль curl» в «Проблемах» на «Обзоре»)"
+		say ""
+	fi
 	[ "$MANAGED" = true ] && apply_web
 	cron_apply; save
 	status
