@@ -104,19 +104,36 @@ function sessionLife(): int
   return in_array($v, SESSION_LIVES, true) ? $v : 604800;
 }
 
-// Вход только под root и только с паролем: без пароля у root интерфейс не пускает
+// Вход только под учётной записью с uid 0 и только с паролем: без пароля интерфейс не пускает.
+// Обычно это root; на Asuswrt-Merlin у неё имя администратора роутера (admin или своё)
 function authenticate(string $username, string $password): bool
 {
-  if ($username !== 'root' || $password === '') {
+  if ($password === '' || !preg_match('/^[A-Za-z0-9._-]{1,32}$/', $username)) {
     return false;
   }
-  // На Keenetic это root из Entware (/opt/etc/shadow), а не учётная запись прошивки
-  $users = @file(file_exists(ROOT . '/etc/shadow') ? ROOT . '/etc/shadow' : ROOT . '/etc/passwd') ?: [];
-  $user = preg_grep('/^root:/', $users);
-  if (!$user) {
+  // На Keenetic это root из Entware (/opt/etc/passwd, /opt/etc/shadow), а не учётная запись прошивки
+  $passwd = ROOT . '/etc/passwd';
+  $pw = preg_grep('/^' . preg_quote($username, '/') . ':[^:]*:0:/', @file($passwd) ?: []);
+  if (!$pw) {
     return false;
   }
-  list(, $hash) = explode(':', array_pop($user));
+  $hash = explode(':', array_pop($pw))[1] ?? '';
+  if (strlen($hash) < 13) {
+    $shadows = [ROOT . '/etc/shadow'];
+    // Merlin: Entware ссылается на системные passwd/shadow, а /opt/etc/shadow может не быть.
+    // На Keenetic /opt/etc/passwd — свой файл Entware, туда системный shadow не попадает
+    if (ROOT !== '' && is_link($passwd) && @readlink($passwd) === '/etc/passwd') {
+      $shadows[] = '/etc/shadow';
+    }
+    $hash = '';
+    foreach ($shadows as $f) {
+      $sh = preg_grep('/^' . preg_quote($username, '/') . ':/', @file($f) ?: []);
+      if ($sh) {
+        $hash = explode(':', array_pop($sh))[1] ?? '';
+        break;
+      }
+    }
+  }
   if (strlen($hash) < 13) {
     return false;
   }
@@ -8415,7 +8432,7 @@ if ($cmd === 'login') {
   if (!authenticate($str('user'), $str('password'))) {
     loginBlocked($ip, true);
     sleep(2);
-    fail('Неверный логин или пароль. Вход — под root с его паролем; если у root нет пароля, задайте его командой passwd.', 401);
+    fail('Неверный логин или пароль. Вход — под root с его паролем (на Asuswrt-Merlin — под логином администратора роутера); если у root нет пароля, задайте его командой passwd.', 401);
   }
   session_regenerate_id(true);
   $_SESSION['auth'] = true;
