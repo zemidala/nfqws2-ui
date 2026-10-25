@@ -551,9 +551,15 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 /* строки «подпись — значение»: подпись по базовой линии первой строки значения (поле, чипы, текст) */
 .frow { align-items: baseline; }
 .frow > .lbl { padding-top: 0; }
-.cmd-row { grid-template-columns: 290px minmax(0, 1fr); }
-.cmd-row > code.lbl { white-space: nowrap; color: var(--fg); }
-@media (max-width: 759px) { .cmd-row { grid-template-columns: 1fr; gap: 2px; } }
+.cmd-row { grid-template-columns: minmax(0, 290px) minmax(0, 1fr); }
+.cmd-row > code.lbl { min-width: 0; white-space: normal; overflow-wrap: anywhere; color: var(--fg); }
+/* Компактная раскладка сводит обычные строки формы к равным колонкам. Для
+   команд оставляем ограниченную колонку, чтобы длинный текст не заходил
+   на описание. */
+:root[data-variant="k"] .cmd-row { grid-template-columns: minmax(0, 290px) minmax(0, 1fr); }
+@media (max-width: 759px) {
+  .cmd-row, :root[data-variant="k"] .cmd-row { grid-template-columns: minmax(0, 1fr); gap: 2px; }
+}
 .tbl td.date { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 /* поиск в списке: на узком экране уходит на свою строку, а не сжимается рядом с сортировкой */
