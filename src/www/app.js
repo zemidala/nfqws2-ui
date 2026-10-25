@@ -385,6 +385,7 @@ const FEATURES = [
   ['raw:format', '1.21.0', '«Конфиг целиком»: кнопка «Оформить» — отступы и пустые строки к одному виду'],
   ['over:nfqupdate', '1.21.0', 'обновление nfqws2 из интерфейса: метка с новой версией в верхней панели, возврат прежней'],
   ['frz:inconf', '1.22.0', '«Обрыв на 16 КБ»: видно, что найденная стратегия уже стоит в конфиге и работает для этой сети'],
+  ['frz:join', '1.23.0', '«Обрыв на 16 КБ»: сеть добавляется в профиль с той же стратегией одной строкой, а не новым профилем'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 // на сколько минорных версий функция старше текущей (у сборки до выпуска — меньше нуля)
@@ -4768,6 +4769,7 @@ async function viewFreeze(main) {
     const c = n.in_conf;
     if (!c?.profiles?.length) return null;
     if (inConfWorks(n)) return h('div', { class: 'sm' }, `Уже работает: адреса сети идут через профиль ${profLabel(c.route)} с этой стратегией`, newTag('frz:inconf'));
+    if (c.join) return h('div', { class: 'sm' }, `Эта стратегия уже есть в профиле ${profLabel(c.join)} — сеть можно добавить в него, без нового профиля: в конфиг допишется одна строка`);
     const list = c.profiles.map(profLabel).join(', ');
     return h('div', { class: 'sm' }, `Эта стратегия уже есть в ${c.profiles.length > 1 ? 'профилях' : 'профиле'} ${list}, но адреса сети `
       + (c.route ? `перехватывает профиль ${profLabel(c.route)}` : 'туда не попадают') + (c.why ? ` (${c.why})` : ''), newTag('frz:inconf'));
@@ -4805,7 +4807,8 @@ async function viewFreeze(main) {
           h('div', { class: 'row', style: 'gap:6px;flex-wrap:nowrap;align-items:flex-start' }, ...verdict(n)),
           // кнопки — один раз на сеть: у адреса, где имя нашлось
           h('div', { class: 'row frz-act' }, n.found && n.asn && !n.found.via ? [
-            inConfWorks(n) ? null : btn('Применить для сети', () => applyNet(n), 'small primary', 'ok', { title: `Список адресов AS${n.asn} и профиль с найденным именем — для всех сайтов этой сети` }),
+            inConfWorks(n) || !n.in_conf?.join ? null : [btn(`В профиль #${n.in_conf.join}`, () => joinNet(n), 'small primary', 'ok', { title: `Список адресов AS${n.asn} — строкой --ipset в профиль ${profLabel(n.in_conf.join)} с той же стратегией, без нового профиля` }), newTag('frz:join')],
+            inConfWorks(n) ? null : btn(n.in_conf?.join ? 'Отдельным профилем' : 'Применить для сети', () => applyNet(n), n.in_conf?.join ? 'small' : 'small primary', n.in_conf?.join ? null : 'ok', { title: `Список адресов AS${n.asn} и профиль с найденным именем — для всех сайтов этой сети` }),
             shareBtn({ steps: n.found.steps, ok: 3, tries: 3, name: n.found.strategy }, { host: '', proto: 'https', asn: n.asn })] : null))))) : null);
   }
 
@@ -4821,6 +4824,18 @@ async function viewFreeze(main) {
     if (!await saveVars({ NFQWS_ARGS_CUSTOM: joinParts([part, ...cur]) }, `профиль для сети AS${n.asn}: обрыв на 16 КБ`)) return;
     await safeRestart();
     go('#/settings/p1');
+  }
+
+  // Та же стратегия уже есть в профиле, который отбирает по IP-спискам, — сеть добавляется в него одной строкой --ipset
+  async function joinNet(n) {
+    const k = n.in_conf.join;
+    if (!confirm(`Добавить сеть AS${n.asn} (${n.label}) в профиль ${profLabel(k)}?\n\nБудет создан список адресов этой сети (по данным RIPEstat, обновляется раз в сутки), а в профиль добавится строка --ipset с этим списком. Стратегия профиля та же, что нашла проба, — нового профиля не будет.\n\nnfqws2 перезапустится с проверкой: если сайты мониторинга перестанут открываться или вы не подтвердите за 3 минуты, всё вернётся как было.`)) return;
+    toast('Получаю адреса сети…');
+    const r = await guarded(() => api('freeze_join', { asn: n.asn, profile: k }));
+    if (!r) return;
+    await loadConf();
+    await safeRestart();
+    go('#/settings/p' + k);
   }
 
   poll();

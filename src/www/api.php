@@ -5713,10 +5713,60 @@ function freezeInConf(array $nets): array
         break;
       }
     }
-    $n['in_conf'] = ['profiles' => $in, 'route' => $r['profile'], 'why' => $why];
+    $n['in_conf'] = ['profiles' => $in, 'route' => $r['profile'], 'why' => $why, 'join' => $r['profile'] !== null && in_array($r['profile'], $in, true) ? null : freezeJoinable($profiles, $in, $r, $n, $cache)];
   }
   unset($n);
   return $nets;
+}
+
+// Профиль с той же стратегией, в который сеть можно влить строкой --ipset=<список сети> вместо нового профиля:
+// «свой» профиль, отбирающий только по IP-спискам (у nfqws2 условия профиля складываются через «и» — со списком сайтов
+// адреса сети прошли бы только для этих сайтов), до которого адрес сети доходит и который с этим адресом его взял бы
+function freezeJoinable(array $profiles, array $in, array $route, array $n, ListCache $cache): ?int
+{
+  $reached = array_column($route['steps'], 'profile');
+  foreach ($profiles as $p) {
+    // список этой сети в профиле уже есть, а адрес в него не входит — вторая такая же строка не поможет
+    if (!in_array($p['index'], $in, true) || !in_array($p['index'], $reached, true)
+      || in_array(LISTS_DIR . "/ipset_as{$n['asn']}.list", $p['ipsets'], true)
+      || ($p['source']['source'] ?? '') !== 'NFQWS_ARGS_CUSTOM' || !$p['ipsets']
+      || $p['hostlists'] || $p['hostlist_domains'] || $p['autolist'] !== null) {
+      continue;
+    }
+    // примерка: тот же профиль, будто адрес сети уже в его IP-списке
+    $try = $p;
+    $try['ipset_ips'][] = $n['ip'] ?? '';
+    if (!empty($n['ip']) && matchRoute([$try], $n['host'], [$n['ip']], 'tcp', 443, 'tls', $cache)['profile'] === $p['index']) {
+      return $p['index'];
+    }
+  }
+  return null;
+}
+
+// Влить сеть в профиль: список адресов AS (обновляется сам) + строка --ipset в профиле; перезапуск — со страницы
+function freezeJoin(int $asn, int $index): array
+{
+  $f = json_decode((string)@file_get_contents(FREEZE_FILE), true);
+  $nets = array_values(array_filter($f['nets'] ?? [], fn($x) => (int)($x['asn'] ?? 0) === $asn && !empty($x['found']['steps']) && empty($x['found']['via'])));
+  // конфиг могли поменять, пока страница была открыта, — условия проверяются заново
+  if (!$nets || (freezeInConf([$nets[0]])[0]['in_conf']['join'] ?? null) !== $index) {
+    fail('Профиль уже не подходит для этой сети — обновите страницу');
+  }
+  $a = asnFetch($asn);
+  if (!$a['prefixes']) {
+    fail("У AS$asn нет анонсированных префиксов");
+  }
+  $w = asnWrite($a, true);
+  $note = "сеть AS$asn добавлена в профиль #$index: обрыв на 16 КБ";
+  $new = profileAddToken((string)file_get_contents(CONF_FILE), profileByIndex($index), '--ipset=' . $w['path']);
+  $lint = lintConf(confRawVars($new), $new);
+  if (!$lint['dry_run'] || !$lint['dry_run']['ok']) {
+    fail('nfqws2 не принимает конфиг с этим списком: ' . ($lint['dry_run']['message'] ?? 'ошибка'), 422);
+  }
+  if (!writeWithBackup(CONF_FILE, $new, $note)) {
+    fail('Не удалось записать конфиг', 500);
+  }
+  return ['list' => $w['name'], 'count' => $w['count'], 'profile' => $index];
 }
 
 // Находки последней пробы для подбора: сначала найденное в сети этого сайта, затем в остальных сетях
@@ -8319,8 +8369,9 @@ function asnFetch(int $asn): array
   foreach ($pf['prefixes'] ?? [] as $p) {
     $x = (string)($p['prefix'] ?? '');
     if (preg_match('#^(\d+\.\d+\.\d+\.\d+)/(\d+)$#', $x, $m) && isIp4($m[1]) && (int)$m[2] <= 32) {
-      $start = ip2long($m[1]);
-      $v4[] = [$start, $start + (1 << (32 - (int)$m[2])) - 1, $x];
+      // без знака и в float: на 32-битном PHP (Keenetic mipsel) ip2long отрицателен от 128.0.0.0, и такие сети выпадали
+      $start = (float)sprintf('%u', ip2long($m[1]));
+      $v4[] = [$start, $start + 2 ** (32 - (int)$m[2]) - 1, $x];
     } elseif ($v6 && preg_match('#^[0-9a-f:]+/\d+$#i', $x)) {
       $six[$x] = true;
     }
@@ -9189,6 +9240,10 @@ switch ($cmd) {
       $f['nets'] = freezeInConf($f['nets']);
     }
     respond(is_array($f) ? $f + ['type' => 'freeze'] : ['state' => 'idle', 'type' => 'freeze']);
+
+  case 'freeze_join':
+    session_write_close();
+    respond(freezeJoin((int)($in['asn'] ?? 0), (int)($in['profile'] ?? 0)));
 
   case 'test_status':
     $s = testStatus();
