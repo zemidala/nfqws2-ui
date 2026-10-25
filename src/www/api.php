@@ -2103,7 +2103,9 @@ function probe(string $host, ?string $ip = null): array
 // ================= справочник и проверка синтаксиса =================
 
 // Результат $fn кэшируется в /tmp, пока не изменятся файлы-зависимости
-function cached(string $key, array $deps, callable $fn)
+// $keep — сохранять ли результат: неполный (программа не успела ответить) не кешируется, иначе он остаётся до
+// следующего обновления
+function cached(string $key, array $deps, callable $fn, ?callable $keep = null)
 {
   // filemtime(__FILE__): после обновления программы прежние результаты проверок не годятся — иначе исправленная
   // проверка продолжала бы показывать старую ошибку, пока не изменится конфиг
@@ -2116,6 +2118,9 @@ function cached(string $key, array $deps, callable $fn)
     }
   }
   $data = $fn();
+  if ($keep && !$keep($data)) {
+    return $data;
+  }
   @mkdir(CACHE_DIR, 0700, true);
   file_put_contents($file, json_encode(['sig' => $sig, 'data' => $data], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
   return $data;
@@ -2277,37 +2282,51 @@ function runTimeout(array $argv, int $sec = 10): array
 // Параметры nfqws2 из его собственной справки
 function helpInfo(): array
 {
-  return cached('help', [NFQWS_BIN], function () {
-    [, $out] = runTimeout([NFQWS_BIN, '--help'], 5);
-    $opts = [];
-    $l7 = [];
-    $payloads = [];
-    $section = 'GLOBAL';
-    foreach (explode("\n", $out) as $line) {
-      if (preg_match('/^([A-Z][A-Z -]+):\s*$/', trim($line), $m)) {
-        $section = $m[1];
-        continue;
-      }
-      if (!preg_match('/^\s*--([a-z0-9-]+)(\S*)\s*(?:;\s*(.*))?$/', $line, $m)) {
-        continue;
-      }
-      $desc = trim($m[3] ?? '');
-      $opts[$m[1]] = [
-        'syntax' => '--' . $m[1] . $m[2],
-        'desc' => $desc,
-        'global' => in_array($section, ['GLOBAL', 'DESYNC ENGINE INIT'], true) || str_contains($desc, 'global parameter'),
-        'value' => $m[2] !== '' && $m[2][0] !== '[',
-      ];
-      if (preg_match('/:\s*([a-z0-9_ ]+)$/', $desc, $x)) {
-        if ($m[1] === 'filter-l7') {
-          $l7 = preg_split('/\s+/', trim($x[1]));
-        } elseif ($m[1] === 'payload') {
-          $payloads = preg_split('/\s+/', trim($x[1]));
-        }
+  static $info = null;
+  return $info ??= cached('help', [NFQWS_BIN], function () {
+    $info = helpParse(runTimeout([NFQWS_BIN, '--help'], 5)[1]);
+    if (!$info['full']) {
+      // на слабом роутере под нагрузкой nfqws2 не всегда успевает за 5 с — тогда справка пустая или обрезана,
+      // и все параметры конфига выглядели
+      // бы неизвестными
+      $info = helpParse(runTimeout([NFQWS_BIN, '--help'], 15)[1]);
+    }
+    return $info;
+  }, fn($d) => $d['full']);
+}
+
+function helpParse(string $out): array
+{
+  $opts = [];
+  $l7 = [];
+  $payloads = [];
+  $section = 'GLOBAL';
+  foreach (explode("\n", $out) as $line) {
+    if (preg_match('/^([A-Z][A-Z -]+):\s*$/', trim($line), $m)) {
+      $section = $m[1];
+      continue;
+    }
+    if (!preg_match('/^\s*--([a-z0-9-]+)(\S*)\s*(?:;\s*(.*))?$/', $line, $m)) {
+      continue;
+    }
+    $desc = trim($m[3] ?? '');
+    $opts[$m[1]] = [
+      'syntax' => '--' . $m[1] . $m[2],
+      'desc' => $desc,
+      'global' => in_array($section, ['GLOBAL', 'DESYNC ENGINE INIT'], true) || str_contains($desc, 'global parameter'),
+      'value' => $m[2] !== '' && $m[2][0] !== '[',
+    ];
+    if (preg_match('/:\s*([a-z0-9_ ]+)$/', $desc, $x)) {
+      if ($m[1] === 'filter-l7') {
+        $l7 = preg_split('/\s+/', trim($x[1]));
+      } elseif ($m[1] === 'payload') {
+        $payloads = preg_split('/\s+/', trim($x[1]));
       }
     }
-    return ['options' => $opts, 'l7' => $l7, 'payloads' => $payloads];
-  });
+  }
+  // полная справка — есть параметры из всех разделов; без неё названия параметров не проверяются
+  $full = !array_diff(['qnum', 'blob', 'lua-init', 'new', 'filter-tcp', 'payload', 'lua-desync'], array_keys($opts));
+  return ['options' => $opts, 'l7' => $l7, 'payloads' => $payloads, 'full' => $full];
 }
 
 // Функции и их параметры — из документации в самих lua-скриптах
@@ -2690,6 +2709,9 @@ function lintConf(array $raw, string $text): array
 
   $help = helpInfo();
   $opts = $help['options'];
+  if (!$help['full']) {
+    $add(null, null, 'warning', 'nfqws2 не ответил на запрос справки (nfqws2 --help) — названия параметров не проверены. Откройте страницу ещё раз через минуту');
+  }
   $lua = luaCatalog();
   $funcs = $lua['functions'];
 
@@ -2754,6 +2776,9 @@ function lintConf(array $raw, string $text): array
         continue;
       }
       if (!isset($opts[$name])) {
+        if (!$help['full']) {
+          continue;   // без справки «неизвестными» оказались бы все параметры
+        }
         $pref = array_values(array_filter(array_keys($opts), fn($o) => str_starts_with($o, $name)));
         if (count($pref) === 1) {
           $add($var, $i, 'warning', "Сокращённое имя — nfqws2 поймёт его как --{$pref[0]}, но лучше написать полностью", ['op' => 'replace', 'to' => '--' . $pref[0] . ($val !== null ? '=' . $val : ''), 'label' => "Написать --{$pref[0]}"]);
@@ -3096,7 +3121,7 @@ function lintDesync(string $var, int $i, string $val, array $funcs, array $lua, 
     }
     if ($k === 'payload' && $v !== null) {
       foreach (explode(',', $v) as $pl) {
-        if (!in_array($pl, $help['payloads'], true)) {
+        if ($help['full'] && !in_array($pl, $help['payloads'], true)) {
           $add($var, $i, 'error', "Неизвестный тип payload «{$pl}»");
         }
       }
@@ -3321,7 +3346,7 @@ function lintCurrent(): array
   return cached('lint-current', $deps, function () {
     $text = file_get_contents(CONF_FILE);
     return lintConf(confRawVars($text), $text);
-  });
+  }, fn() => helpInfo()['full']);
 }
 
 // ---------- проверка списков ----------
