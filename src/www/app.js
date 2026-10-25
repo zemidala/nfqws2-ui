@@ -1040,12 +1040,13 @@ function curlInstallBtn(missing) {
   return h('span', { class: 'row' }, b, note);
 }
 
-// Ставит модуль curl для PHP (php8-mod-curl): без него не работает всё, что ходит в сеть из интерфейса
+// Ставит модуль curl для PHP (php8-mod-curl): без него не работает всё, что ходит в сеть из интерфейса.
+// Если модуль собран под более новый PHP (state.php_upgrade), та же кнопка обновляет PHP со всеми модулями
 function phpCurlInstallBtn() {
   const note = h('span', { class: 'sm muted' });
-  const b = btn('Установить модуль curl', async () => {
+  const b = btn(S.state.php_upgrade ? 'Обновить PHP' : 'Установить модуль curl', async () => {
     b.disabled = true;
-    note.textContent = 'ставлю — до 2–3 минут…';
+    note.textContent = S.state.php_upgrade ? 'обновляю — до 3 минут…' : 'ставлю — до 2–3 минут…';
     const r = await guarded(() => api('php_curl_install'));
     b.disabled = false;
     note.textContent = '';
@@ -1076,7 +1077,12 @@ function problemItems() {
     const p = st.conf_profiles.find((cp) => cp.source?.source === x.var && profIssues(cp).includes(x));
     items.push({ level: x.level, title: p ? `Профиль #${p.index} · ${profName(p)}` : (VAR_INFO[x.var]?.[0] || 'Конфиг'), text: x.msg.replace(/^Профиль #\d+: /, ''), code: tok, href: issueTarget(x), fix: winTs ? winTsActions() : fixButton(x) });
   }
-  if (st.php_curl) {
+  if (st.php_curl && st.php_upgrade) {
+    items.push({ level: 'error', title: 'PHP старее модуля curl',
+      text: 'Модуль php8-mod-curl собран под более новую версию PHP, чем стоит на роутере, поэтому не загружается. Через него роутер ходит в сеть: диагноз, подбор, мониторинг, стратегии сообщества и проверка обновлений без него не работают. '
+        + `PHP ответил: «${st.php_curl}». Переустановка модуля не поможет — нужно обновить сам PHP вместе с модулями и библиотеками. Кнопка делает это; вручную — ${st.php_upgrade}`,
+      href: PAGES.log[0], fix: phpCurlInstallBtn() });
+  } else if (st.php_curl) {
     items.push({ level: 'error', title: 'В PHP нет модуля curl',
       text: 'Модуль php8-mod-curl не установлен или не загружается. Через него роутер ходит в сеть: диагноз, подбор, мониторинг, стратегии сообщества и проверка обновлений без него не работают. '
         + `PHP ответил: «${st.php_curl}». Кнопка ставит модуль заново; вручную — ${S.state.pkg_apk ? 'apk add php8-mod-curl' : 'opkg install --force-reinstall php8-mod-curl libcurl'}.`,

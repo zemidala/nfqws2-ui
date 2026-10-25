@@ -2220,24 +2220,42 @@ function phpCurlError(): ?string
 
 function phpCurlHint(string $err): string
 {
+  if (phpCurlOld($err)) {
+    return 'Модуль curl для PHP собран под более новую версию PHP, чем стоит на роутере, и не загружается — без него диагноз, подбор, '
+      . 'мониторинг и проверка обновлений не работают (PHP ответил: «' . $err . '»). Нажмите «Обновить PHP» в «Проблемах» на «Обзоре» '
+      . 'или выполните на роутере: ' . (pkgApk() ? PHP_UPGRADE_APK : PHP_UPGRADE_OPKG) . '.';
+  }
   return 'В PHP нет модуля curl (php8-mod-curl) — без него диагноз, подбор, мониторинг и проверка обновлений не работают '
     . '(PHP ответил: «' . $err . '»). Нажмите «Установить модуль curl» в «Проблемах» на «Обзоре» или выполните на роутере: '
     . (pkgApk() ? 'apk add php8-mod-curl' : 'opkg install --force-reinstall php8-mod-curl libcurl') . '.';
+}
+
+// Модуль собран под более новый PHP, чем стоит на роутере («undefined symbol …»): так бывает, когда модуль поставили из
+// свежего источника, а сам PHP не обновляли. Переустановка модуля тут не помогает — обновлять нужно PHP со всеми модулями
+// и библиотеки, которые он тянет (у Entware opkg upgrade php8 их сам не обновляет)
+const PHP_UPGRADE_OPKG = 'opkg update >/dev/null 2>&1; P=$(opkg list-upgradable | awk \'/^(php8|libpcre2|libxml2)/{print $1}\'); '
+  . '[ -n "$P" ] || { echo \'в источнике пакетов нет более новой версии PHP\'; exit 3; }; opkg upgrade $P && opkg install php8-mod-curl libcurl';
+const PHP_UPGRADE_APK = 'apk update >/dev/null 2>&1; apk add --upgrade php8-mod-curl libcurl $(apk info 2>/dev/null | grep -E \'^(php8|libpcre2|libxml2)\')';
+
+function phpCurlOld(?string $err): bool
+{
+  return $err !== null && stripos($err, 'undefined symbol') !== false;
 }
 
 // Ставит (или переставляет) модуль curl для PHP. Новый php-cgi запускается на каждый запрос — перезапуск lighttpd не нужен
 function phpCurlInstall(): array
 {
   set_time_limit(200);
-  $cmd = pkgApk() ? 'apk add php8-mod-curl && apk fix php8-mod-curl libcurl'
-    : 'opkg install --force-reinstall php8-mod-curl libcurl || { opkg update >/dev/null 2>&1; opkg install --force-reinstall php8-mod-curl libcurl; }';
+  $cmd = phpCurlOld(phpCurlError()) ? (pkgApk() ? PHP_UPGRADE_APK : PHP_UPGRADE_OPKG)
+    : (pkgApk() ? 'apk add php8-mod-curl && apk fix php8-mod-curl libcurl'
+    : 'opkg install --force-reinstall php8-mod-curl libcurl || { opkg update >/dev/null 2>&1; opkg install --force-reinstall php8-mod-curl libcurl; }');
   [$rc, $out] = runTimeout(['sh', '-c', 'PATH=' . JOB_PATH . '; ' . $cmd], 190);
   $log = trim(implode("\n", array_slice(explode("\n", trim($out)), -15)));
   // в этом процессе модуль уже не появится — проверяем новым php-cgi
   $bin = PHP_BINARY !== '' && is_executable(PHP_BINARY) ? PHP_BINARY : 'php-cgi';
   $ok = (bool)preg_match('/^curl$/mi', (string)runTimeout(['sh', '-c', 'exec env -i PATH=' . JOB_PATH . ' ' . escapeshellarg($bin) . ' -m 2>/dev/null'], 5)[1]);
   return $ok ? ['ok' => true, 'log' => $log]
-    : ['ok' => false, 'error' => $rc === 124 ? 'источник пакетов не ответил' : 'модуль curl всё ещё не загружается', 'log' => $log, 'code' => $rc];
+    : ['ok' => false, 'error' => $rc === 124 ? 'источник пакетов не ответил' : ($rc === 3 ? 'в источнике пакетов нет более новой версии PHP' : 'модуль curl всё ещё не загружается'), 'log' => $log, 'code' => $rc];
 }
 
 function curlRequire(): void
@@ -7945,7 +7963,8 @@ function state(): array
     'leftovers' => array_column(pkgLeftovers(), 'name'),
     'nfq_update' => (function () { $u = nfqUpdateInfo(); return ['latest' => $u['latest'], 'available' => $u['available'], 'running' => $u['running'], 'rollback' => $u['rollback']]; })(),
     'curl' => curlCmdError(),
-    'php_curl' => phpCurlError(),
+    'php_curl' => ($pc = phpCurlError()),
+    'php_upgrade' => phpCurlOld($pc) ? (pkgApk() ? PHP_UPGRADE_APK : PHP_UPGRADE_OPKG) : null,
     'pkg_apk' => pkgApk(),
     'lint' => lintCurrent(),
     'conf_tokens' => array_map('tokens', array_intersect_key(confRawVars(file_get_contents(CONF_FILE)), array_flip(ARG_VARS))),
@@ -8332,6 +8351,29 @@ function reportText(array $sites, bool $hide, string $build): string
         . ($pk && !empty($pk['proxy']) ? '; идёт через podkop' : '');
     }
   }
+  // окружение: по нему видно, почему не грузится модуль или не хватает памяти, — раньше это выясняли командами в чате
+  $L[] = '';
+  $L[] = '== PHP, пакеты, память ==';
+  $L[] = 'PHP ' . PHP_VERSION . ' (' . (PHP_INT_SIZE * 8) . ' бит), memory_limit ' . ini_get('memory_limit') . ', модуль curl: '
+    . ($st['php_curl'] === null ? 'загружен' : 'НЕТ — ' . $st['php_curl']) . ', программа curl: ' . ($st['curl'] === null ? 'работает' : 'НЕТ — ' . $st['curl']);
+  $L[] = 'модули PHP: ' . implode(' ', array_map('strtolower', get_loaded_extensions()));
+  $pk = [];
+  foreach (['php8', 'php8-cgi', 'php8-mod-curl', 'libcurl', 'libcurl4', 'curl', 'libpcre2', 'libxml2', 'lighttpd'] as $n) {
+    if (($v = packageVersion($n)) !== null || $n === 'php8-mod-curl') {
+      $pk[] = $n . ' ' . ($v ?? 'не установлен');
+    }
+  }
+  $L[] = 'пакеты: ' . implode(', ', $pk);
+  $mi = (string)@file_get_contents('/proc/meminfo');
+  $mb = fn($k) => preg_match('/^' . $k . ':\s+(\d+)/m', $mi, $m) ? round((int)$m[1] / 1024) . ' МБ' : '?';
+  $L[] = 'память: всего ' . $mb('MemTotal') . ', доступно ' . $mb('MemAvailable') . ', подкачка свободна ' . $mb('SwapFree');
+  $fs = [];
+  foreach (array_unique([ROOT !== '' ? '/opt' : '/overlay', '/tmp']) as $d) {
+    if (is_dir($d) && ($f = @disk_free_space($d)) !== false) {
+      $fs[] = $d . ' ' . round($f / 1048576, 1) . ' МБ';
+    }
+  }
+  $L[] = 'свободно на диске: ' . ($fs ? implode(', ', $fs) : '?');
   $php = array_slice(array_filter(explode("\n", (string)@file_get_contents(PHP_LOG))), -20);
   $L[] = '';
   $L[] = '== Ошибки PHP (последние ' . count($php) . ') ==';
