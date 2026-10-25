@@ -1101,10 +1101,34 @@ function packageVersion(string $pkg, bool $fresh = false): ?string
   if (!$fresh && array_key_exists($pkg, $memo)) {
     return $memo[$pkg];
   }
-  return $memo[$pkg] = packageVersionRead($pkg);
+  return $memo[$pkg] = packageVersionRead($pkg, $fresh);
 }
 
-function packageVersionRead(string $pkg): ?string
+// Версии установленных пакетов прямо из файла статуса opkg: запуск opkg на mipsel — десятки миллисекунд на каждый пакет,
+// а файл читается один раз (и из кеша, пока не изменился). null — файла нет, спрашиваем opkg
+function opkgVersions(bool $fresh = false): ?array
+{
+  static $v = null;
+  $f = ROOT ? '/opt/lib/opkg/status' : '/usr/lib/opkg/status';
+  if (!is_file($f)) {
+    return null;
+  }
+  if ($v === null || $fresh) {
+    $v = cached('opkg-versions', [$f], function () use ($f) {
+      $out = [];
+      foreach (preg_split('/\n\s*\n/', (string)file_get_contents($f)) as $b) {
+        if (preg_match('/^Package: (\S+)/m', $b, $p) && preg_match('/^Version: (\S+)/m', $b, $ver)
+          && preg_match('/^Status: .*\binstalled\b/m', $b) && !preg_match('/^Status: .*\bnot-installed\b/m', $b)) {
+          $out[$p[1]] = $ver[1];
+        }
+      }
+      return $out;
+    });
+  }
+  return $v;
+}
+
+function packageVersionRead(string $pkg, bool $fresh = false): ?string
 {
   $out = [];
   if (!ROOT && (is_file('/usr/bin/apk') || is_file('/sbin/apk'))) {
@@ -1115,6 +1139,9 @@ function packageVersionRead(string $pkg): ?string
       }
     }
     return null;
+  }
+  if (($all = opkgVersions($fresh)) !== null) {
+    return $all[$pkg] ?? null;
   }
   exec((ROOT ? '/opt/bin/' : '') . 'opkg status ' . escapeshellarg($pkg) . ' 2>/dev/null', $out);
   foreach ($out as $l) {
@@ -7847,23 +7874,23 @@ function nfqLogsTrim(): void
 
 function iptablesCounters(): array
 {
+  // из той же прочитанной таблицы mangle (iptables -v -S), без своих запусков iptables
   $rows = [];
+  $all = mangleRules();
   foreach (['nfqws_post' => 'out', 'nfqws_pre' => 'in'] as $chain => $dir) {
-    $out = [];
-    exec('iptables -w -t mangle -L ' . $chain . ' -v -n -x 2>/dev/null', $out);
-    foreach (array_slice($out, 2) as $line) {
-      $c = preg_split('/\s+/', trim($line));
-      if (count($c) < 4 || $c[2] !== 'NFQUEUE') {
+    foreach (preg_grep('/^-A ' . $chain . ' .*-j NFQUEUE\b/', $all) as $line) {
+      if (!preg_match('/ -c (\d+) (\d+)/', $line, $c)) {
         continue;
       }
-      $rows[] = ['dir' => $dir, 'proto' => ['6' => 'TCP', '17' => 'UDP', 'tcp' => 'TCP', 'udp' => 'UDP'][$c[3]] ?? $c[3],
+      $proto = preg_match('/ -p (\S+)/', $line, $pm) ? $pm[1] : 'all';
+      $rows[] = ['dir' => $dir, 'proto' => ['6' => 'TCP', '17' => 'UDP', 'tcp' => 'TCP', 'udp' => 'UDP'][$proto] ?? $proto,
         'what' => match (true) {
-          str_contains($line, 'flags:0x01/0x01') => 'FIN',
-          str_contains($line, 'flags:0x04/0x04') => 'RST',
-          str_contains($line, 'flags:0x12/0x12') => 'SYN+ACK',
+          (bool)preg_match('/--tcp-flags \S+ FIN\b/', $line) => 'FIN',
+          (bool)preg_match('/--tcp-flags \S+ RST\b/', $line) => 'RST',
+          (bool)preg_match('/--tcp-flags \S+ SYN,ACK\b/', $line) => 'SYN+ACK',
           default => 'data',
         },
-        'pkts' => (int)$c[0], 'bytes' => (int)$c[1]];
+        'pkts' => (int)$c[1], 'bytes' => (int)$c[2]];
     }
   }
   return $rows;
