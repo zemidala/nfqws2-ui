@@ -1566,11 +1566,30 @@ function listKind(string $name, ?array $lines = null): string
   if (isset($use[LISTS_DIR . "/$name"])) {
     return $use[LISTS_DIR . "/$name"];
   }
-  $lines = array_slice($lines ?? readListLines(LISTS_DIR . "/$name"), 0, 200);
-  if ($lines) {
-    return count(array_filter($lines, 'validCidr')) * 2 > count($lines) ? 'ip' : 'host';
+  if ($lines === null) {
+    return listMeta(LISTS_DIR . "/$name")['kind'] ?? (str_starts_with($name, 'ipset') ? 'ip' : 'host');
   }
-  return str_starts_with($name, 'ipset') ? 'ip' : 'host';
+  return listContentKind($lines) ?? (str_starts_with($name, 'ipset') ? 'ip' : 'host');
+}
+
+function listContentKind(array $lines): ?string
+{
+  $lines = array_slice($lines, 0, 200);
+  return $lines ? (count(array_filter($lines, 'validCidr')) * 2 > count($lines) ? 'ip' : 'host') : null;
+}
+
+// Число записей и вид по содержимому — из кеша, пока у файла те же время и размер: опись списков входит в каждое
+// состояние, а читать все списки целиком (бывают и на сотню тысяч строк) на слабом роутере — сотни миллисекунд
+function listMeta(string $path): array
+{
+  $real = is_file($path) ? $path : (is_file("$path.gz") ? "$path.gz" : null);
+  if ($real === null) {
+    return ['entries' => 0, 'kind' => null];
+  }
+  return cached('listmeta-' . md5($path), [$real], function () use ($path) {
+    $lines = readListLines($path);
+    return ['entries' => count($lines), 'kind' => listContentKind($lines)];
+  });
 }
 
 function listsInventory(array $profiles): array
@@ -1610,7 +1629,7 @@ function listsInventory(array $profiles): array
       // стандартные списки nfqws2-keenetic не удаляются и не переименовываются: на них ссылается стандартный конфиг
       // (MODE_LIST, MODE_AUTO, NFQWS_ARGS_IPSET) — без файла nfqws2 после возврата к нему не запустится. Очистить можно
       'removable' => !in_array($name, PROTECTED_LISTS, true) && empty($usage[$path]), 'stock' => in_array($name, PROTECTED_LISTS, true),
-      'entries' => $real ? count(readListLines($path)) : 0,
+      'entries' => $real ? listMeta($path)['entries'] : 0,
       'size' => $real ? filesize($real) : 0,
       'mtime' => $real ? filemtime($real) : null,
       'used' => $usage[$path] ?? [],
@@ -1784,6 +1803,14 @@ function policyProbeEnsure(?array $policy = null, bool $fresh = false): bool
     return $done = false;
   }
   $rule = '-p tcp --sport ' . PROBE_PORTS . ' -j MARK --set-xmark ' . $policy['mark'] . '/0x0fffffff';
+  // быстрый путь: правило уже видно в прочитанной таблице — без четырёх запусков iptables -C (на mipsel это заметно)
+  $all = mangleRules();
+  $mine = preg_grep('/^-A ' . PROBE_CHAIN . ' /', $all);
+  if (count($mine) === 1 && preg_grep('/^-A OUTPUT .*-j ' . PROBE_CHAIN . '\b/', $all)
+    && preg_match('/--sport ' . preg_quote(PROBE_PORTS, '/') . ' .*--set-xmark (0x[0-9a-f]+)\/0x0?fffffff\b/i', reset($mine), $x)
+    && hexdec($x[1]) === hexdec($policy['mark'])) {
+    return $done = true;
+  }
   $ok = fn(string $c): bool => exec($ipt . $c . ' 2>/dev/null', $o, $rc) !== null && $rc === 0;
   if (!$ok('-C ' . PROBE_CHAIN . ' ' . $rule)) {
     exec($ipt . '-N ' . PROBE_CHAIN . ' 2>/dev/null');
@@ -7845,21 +7872,32 @@ function iptablesCounters(): array
 // Подключены ли цепочки nfqws2 и не ограничен ли перехват политикой доступа Keenetic (POLICY_NAME в конфиге).
 // «Только политика»: мимо nfqws2 идёт всё без её метки — в том числе запросы самого роутера, то есть мониторинг и
 // «Проверить сайт»; подбор при этом работает, у него свои правила. $full — ещё и сами правила, для отчёта.
+// Таблица mangle целиком (iptables -v -S), одна на запрос; $fresh — перечитать после своих правок
+function mangleRules(bool $fresh = false): array
+{
+  static $all = null;
+  if ($all === null || $fresh) {
+    $all = [];
+    exec('iptables -w -t mangle -v -S 2>/dev/null', $all);
+  }
+  return $all;
+}
+
 function interceptInfo(bool $full = false): array
 {
   $refs = [];
   $rules = [];
   $policy = null;
+  // вся таблица mangle одним вызовом: на mipsel каждый запуск iptables — десятки миллисекунд, а цепочек нужно четыре
+  $all = mangleRules();
+  $of = fn(string $c) => array_values(preg_grep('/^-[NAP] ' . $c . '( |$)/', $all));
   foreach (['nfqws_post' => 'POSTROUTING', 'nfqws_pre' => 'PREROUTING'] as $chain => $hook) {
-    $out = [];
-    exec("iptables -w -t mangle -v -S $chain 2>/dev/null", $out);
+    $out = $of($chain);
     if (!$out) {
       $refs[$chain] = null;   // цепочки нет
       continue;
     }
-    $jumps = [];
-    exec("iptables -w -t mangle -S $hook 2>/dev/null", $jumps);
-    $refs[$chain] = count(preg_grep('/-j ' . $chain . '\b/', $jumps));
+    $refs[$chain] = count(preg_grep('/-j ' . $chain . '\b/', $of($hook)));
     foreach ($out as $l) {
       if (!str_starts_with($l, '-A ')) {
         continue;
