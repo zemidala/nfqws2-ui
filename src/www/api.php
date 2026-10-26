@@ -2457,6 +2457,20 @@ function luaCatalog(): array
             }
           }
           for ($j = $i + 1; $j < count($lines) && $lines[$j] !== 'end'; $j++) {
+            // Некоторые параметры nfqws2 используются в теле Lua-функции,
+            // но не перечислены в её блоке arg: (например, oob/oob_data/altorder/nofake2).
+            // Читаем фактические обращения desync.arg, чтобы не объявлять такие ключи неизвестными.
+            if (preg_match_all('/\bdesync\s*\.\s*arg\s*(?:\.\s*([a-z][a-z0-9_]*)|\[\s*([\'\"])([a-z][a-z0-9_]*)\2\s*\])/', $lines[$j], $accesses, PREG_SET_ORDER)) {
+              foreach ($accesses as $access) {
+                $key = !empty($access[1]) ? $access[1] : ($access[3] ?? '');
+                if ($key === '') {
+                  continue;
+                }
+                if (!isset($f['args'][$key])) {
+                  $f['args'][$key] = $key . ' — обнаружен в коде функции';
+                }
+              }
+            }
             if (preg_match_all("/'([a-z0-9_]+)' arg required/", $lines[$j], $x)) {
               array_push($f['required'], ...$x[1]);
             }
