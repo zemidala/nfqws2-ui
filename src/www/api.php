@@ -7910,13 +7910,54 @@ function mangleRules(bool $fresh = false): array
   return $all;
 }
 
+// Сколько секунд цепочки должны быть «не подключены», чтобы это считалось поломкой, а не перестройкой правил
+define('INTERCEPT_OFF_GRACE', 20);
+define('INTERCEPT_OFF_FILE', '/tmp/nfqws-ui-intercept-off');
+
 function interceptInfo(bool $full = false): array
+{
+  static $memo = null;
+  if ($memo === null) {
+    $memo = interceptRead(mangleRules());
+    // Скрипт nfqws2-keenetic при каждом вызове сначала очищает свои цепочки, потом добавляет правила заново, а прошивка
+    // Keenetic зовёт его при любой перестройке межсетевого экрана (PPPoE — часто). Чтение в этот момент видит пустые
+    // цепочки без перехода — одно такое чтение ничего не значит: перечитываем и считаем поломкой, только если держится.
+    // в файле: «с какого времени» и «когда видели последний раз»; отметка старше минуты не в счёт — между
+    // чтениями правила могли быть в порядке
+    [$since, $seen] = array_map('intval', explode(' ', (string)@file_get_contents(INTERCEPT_OFF_FILE) . ' 0 0'));
+    if (time() - $seen > 60) {
+      $since = 0;
+    }
+    if ($memo['broken'] && !($since && time() - $since >= INTERCEPT_OFF_GRACE)) {
+      usleep(1500000);
+      $memo = interceptRead(mangleRules(true));
+    }
+    $off = $memo['unhooked'];
+    if (!$off) {
+      is_file(INTERCEPT_OFF_FILE) && @unlink(INTERCEPT_OFF_FILE);
+      $since = 0;
+    } else {
+      $since = $since ?: time();
+      @file_put_contents(INTERCEPT_OFF_FILE, $since . ' ' . time());
+    }
+    // off — цепочки не подключены дольше INTERCEPT_OFF_GRACE; refs остаются сырыми, для отчёта
+    $memo['off'] = $off && time() - $since >= INTERCEPT_OFF_GRACE;
+    $memo['off_since'] = $since ?: null;
+  }
+  $r = $memo;
+  unset($r['broken'], $r['unhooked']);
+  if (!$full) {
+    unset($r['rules']);
+  }
+  return $r;
+}
+
+function interceptRead(array $all): array
 {
   $refs = [];
   $rules = [];
   $policy = null;
-  // вся таблица mangle одним вызовом: на mipsel каждый запуск iptables — десятки миллисекунд, а цепочек нужно четыре
-  $all = mangleRules();
+  $empty = false;
   $of = fn(string $c) => array_values(preg_grep('/^-[NAP] ' . $c . '( |$)/', $all));
   foreach (['nfqws_post' => 'POSTROUTING', 'nfqws_pre' => 'PREROUTING'] as $chain => $hook) {
     $out = $of($chain);
@@ -7925,6 +7966,7 @@ function interceptInfo(bool $full = false): array
       continue;
     }
     $refs[$chain] = count(preg_grep('/-j ' . $chain . '\b/', $of($hook)));
+    $empty = $empty || !preg_grep('/^-A /', $out);
     foreach ($out as $l) {
       if (!str_starts_with($l, '-A ')) {
         continue;
@@ -7940,7 +7982,9 @@ function interceptInfo(bool $full = false): array
   if ($policy) {
     $policy['name'] = preg_match('/^\s*POLICY_NAME=["\']?([^"\'\s#]*)/m', (string)@file_get_contents(CONF_FILE), $m) && $m[1] !== '' ? $m[1] : 'nfqws';
   }
-  return ['refs' => $refs, 'policy' => $policy] + ($full ? ['rules' => $rules] : []);
+  // цепочка есть, но без перехода или пустая — так бывает и посреди перестройки правил
+  $unhooked = in_array(0, $refs, true);
+  return ['refs' => $refs, 'policy' => $policy, 'rules' => $rules, 'broken' => $unhooked || $empty, 'unhooked' => $unhooked];
 }
 
 function restartNeeded(?array $proc): bool
@@ -8373,7 +8417,9 @@ function reportText(array $sites, bool $hide, string $build): string
       . ($pol['passed'] !== null ? '; мимо по этому правилу прошло пакетов: ' . $pol['passed'] : ''));
   foreach (['nfqws_post' => 'POSTROUTING', 'nfqws_pre' => 'PREROUTING'] as $chain => $hook) {
     $n = $ic['refs'][$chain];
-    $L[] = "цепочка $chain: " . ($n === null ? 'НЕТ' : ($n ? "подключена к $hook" : "есть, но к $hook НЕ подключена — пакеты в неё не попадают"));
+    $L[] = "цепочка $chain: " . ($n === null ? 'НЕТ' : ($n ? "подключена к $hook" : ($ic['off']
+      ? "есть, но к $hook НЕ подключена — пакеты в неё не попадают (уже " . (time() - $ic['off_since']) . ' с)'
+      : "есть, но к $hook в момент чтения не подключена — вероятно, правила перестраивались")));
   }
   $L[] = 'правила перехвата (-c пакеты байты; счётчики обнуляются при каждой перезагрузке правил):';
   foreach ($ic['rules'] as $r) {

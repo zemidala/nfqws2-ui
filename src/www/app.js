@@ -1063,8 +1063,8 @@ function problemItems() {
   const items = [];
   const pol = policyOnly();
   if (pol && st.running) items.push({ level: 'warning', title: `Только политика «${pol.name}»`, text: policyText(pol), href: PAGES.raw[0] });
-  const refs = st.intercept?.refs || {};
-  if (st.running && (refs.nfqws_post === 0 || refs.nfqws_pre === 0)) {
+  // off — переходов нет дольше 20 с; одно чтение посреди перестройки правил (Keenetic) ошибкой не считается
+  if (st.running && st.intercept?.off) {
     items.push({ level: 'error', title: 'Правила перехвата не подключены', text: 'Цепочки nfqws2 в iptables есть, но переходов в них из POSTROUTING / PREROUTING нет — пакеты до nfqws2 не доходят, обход не работает. Перезапустите nfqws2; если повторяется — пришлите «Отчёт для помощи».', href: PAGES.log[0] });
   }
   const lint = st.lint || { issues: [] };
