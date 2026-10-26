@@ -2401,7 +2401,59 @@ function helpParse(string $out): array
   return ['options' => $opts, 'l7' => $l7, 'payloads' => $payloads, 'full' => $full];
 }
 
-// Функции и их параметры — из документации в самих lua-скриптах
+// Убирает комментарии и long-string литералы из кода перед извлечением desync.arg.
+// Обычные строки оставляет: luaCatalog отдельно нормализует строковые ключи вида desync.arg['name'].
+function luaCodeWithoutComments(string $source): string
+{
+  $out = '';
+  $length = strlen($source);
+  $blank = static fn(string $value): string => preg_replace('/[^\r\n]/', ' ', $value) ?? '';
+  $longBracketEnd = static function (string $text, int $offset): ?int {
+    if (!preg_match('/\G\[(=*)\[/', $text, $open, 0, $offset)) {
+      return null;
+    }
+    $close = ']' . $open[1] . ']';
+    $end = strpos($text, $close, $offset + strlen($open[0]));
+    return $end === false ? strlen($text) : $end + strlen($close);
+  };
+  for ($i = 0; $i < $length;) {
+    if ($source[$i] === "'" || $source[$i] === '"') {
+      $quote = $source[$i];
+      $out .= $quote;
+      $i++;
+      while ($i < $length) {
+        $out .= $source[$i];
+        if ($source[$i] === '\\' && $i + 1 < $length) {
+          $out .= $source[++$i];
+        } elseif ($source[$i] === $quote) {
+          $i++;
+          break;
+        }
+        $i++;
+      }
+      continue;
+    }
+    if ($source[$i] === '-' && $i + 1 < $length && $source[$i + 1] === '-') {
+      $end = $longBracketEnd($source, $i + 2);
+      if ($end === null) {
+        $newline = strpos($source, "\n", $i + 2);
+        $end = $newline === false ? $length : $newline;
+      }
+      $out .= $blank(substr($source, $i, $end - $i));
+      $i = $end;
+      continue;
+    }
+    if ($source[$i] === '[' && ($end = $longBracketEnd($source, $i)) !== null) {
+      $out .= $blank(substr($source, $i, $end - $i));
+      $i = $end;
+      continue;
+    }
+    $out .= $source[$i++];
+  }
+  return $out;
+}
+
+// Функции и их параметры — из документации и фактических обращений в lua-скриптах
 function luaCatalog(): array
 {
   $files = luaFiles();
@@ -2456,27 +2508,30 @@ function luaCatalog(): array
               $f['doc'][] = $d;
             }
           }
+          $functionBody = [];
           for ($j = $i + 1; $j < count($lines) && $lines[$j] !== 'end'; $j++) {
-            // Некоторые параметры nfqws2 используются в теле Lua-функции,
-            // но не перечислены в её блоке arg: (например, oob/oob_data/altorder/nofake2).
-            // Читаем фактические обращения desync.arg, чтобы не объявлять такие ключи неизвестными.
-            if (preg_match_all('/\bdesync\s*\.\s*arg\s*(?:\.\s*([a-z][a-z0-9_]*)|\[\s*([\'\"])([a-z][a-z0-9_]*)\2\s*\])/', $lines[$j], $accesses, PREG_SET_ORDER)) {
-              foreach ($accesses as $access) {
-                $key = !empty($access[1]) ? $access[1] : ($access[3] ?? '');
-                if ($key === '') {
-                  continue;
-                }
-                if (!isset($f['args'][$key])) {
-                  $f['args'][$key] = $key . ' — обнаружен в коде функции';
-                }
-              }
-            }
+            $functionBody[] = $lines[$j];
             if (preg_match_all("/'([a-z0-9_]+)' arg required/", $lines[$j], $x)) {
               array_push($f['required'], ...$x[1]);
             }
             // Какую нагрузку функция берёт без своего payload=: payload_check(desync) — только известную (known)
             if ($f['payload_def'] === null && preg_match('/payload_check\(desync\s*(?:,\s*"([a-z_,]+)")?\)/', $lines[$j], $x)) {
               $f['payload_def'] = ($x[1] ?? '') ?: 'known';
+            }
+          }
+          // Некоторые ключи (oob/oob_data/altorder/nofake2) используются в коде,
+          // но отсутствуют в блоке arg:. Обрабатываем тело целиком, включая переносы.
+          $functionCode = luaCodeWithoutComments(implode("\n", $functionBody));
+          $functionCode = preg_replace('/(\bdesync\s*\.\s*arg\s*)\[\s*([\'\"])([a-z][a-z0-9_]*)\2\s*\]/', '$1.$3', $functionCode) ?? $functionCode;
+          $quotedStrings = <<<'REGEX'
+~"(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'~s
+REGEX;
+          $functionCode = preg_replace($quotedStrings, ' ', $functionCode) ?? $functionCode;
+          if (preg_match_all('/\bdesync\s*\.\s*arg\s*\.\s*([a-z][a-z0-9_]*)/s', $functionCode, $accesses)) {
+            foreach ($accesses[1] as $key) {
+              if (!isset($f['args'][$key])) {
+                $f['args'][$key] = $key . ' — обнаружен в коде функции';
+              }
             }
           }
           $f['required'] = array_values(array_unique($f['required']));
