@@ -354,7 +354,30 @@ status() {
 		say "Конфиг lighttpd:     $LCONF (написан вручную, не меняется)"
 	fi
 	legacy_ui && say "nfqws-keenetic-web:  установлен$([ "$TAKEOVER" = true ] && echo ', порт 90 отдан nfqws2-ui')"
-	pidof lighttpd >/dev/null && say "lighttpd:            работает" || say "lighttpd:            НЕ РАБОТАЕТ"
+	if ! pidof lighttpd >/dev/null; then
+		say "lighttpd:            НЕ РАБОТАЕТ"
+		return 0
+	fi
+	deaf=$(deaf_ports)
+	if [ -z "$deaf" ]; then
+		say "lighttpd:            работает"
+	else
+		say "lighttpd:            процесс есть, но порт $deaf не слушает"
+		say "  Проверьте конфиг: lighttpd -tt -f $LMAIN"
+		say "  и журнал: $([ -n "$R" ] && echo "cat $R/var/log/lighttpd/error.log" || echo "logread | grep lighttpd")"
+	fi
+}
+
+# Наши порты, которые lighttpd не слушает (пусто — всё в порядке или netstat нет)
+deaf_ports() {
+	command -v netstat >/dev/null 2>&1 || return 0
+	l=$(netstat -ltn 2>/dev/null | awk '{ print $4 }')
+	[ -n "$l" ] || return 0
+	out=
+	for p in $PORT $HTTPS_PORT $LEGACY_PORT; do
+		echo "$l" | grep -q ":$p\$" || out="$out${out:+, }$p"
+	done
+	echo "$out"
 }
 
 # ---------- обновление ----------

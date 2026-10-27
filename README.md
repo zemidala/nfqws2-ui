@@ -313,7 +313,7 @@ nfqws-ui-setup remove               убрать конфиг lighttpd и зад
 
 **Интерфейс не открывается.**
 1. Выполните `nfqws-ui-setup status`: там адрес и состояние lighttpd.
-2. Посмотрите журнал: `logread | grep lighttpd` (на Keenetic — `/opt/var/log/lighttpd/error.log`).
+2. Посмотрите журнал: `logread | grep lighttpd` (на Keenetic — `cat /opt/var/log/lighttpd/error.log`).
 3. Пересоберите конфиг: `nfqws-ui-setup apply`.
 
 **На `:8090` открывается окно входа Keenetic (или другой программы).** Порт 8090 был занят, и интерфейс встал на следующий свободный — адрес печатает установщик и `nfqws-ui-setup status`. Вернуть на нужный порт: `nfqws-ui-setup port N`.
