@@ -1039,6 +1039,8 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
   .formy .frow { grid-template-columns: 170px minmax(0, 560px) minmax(0, 1fr); grid-auto-flow: dense; column-gap: 24px; }
   .formy .frow > :not(.lbl):not(.hint) { grid-column: 2; }
   .formy .frow > .hint { grid-column: 3; margin-top: 0; }
+  /* console commands are wider than a field label: keep their own column, or the command runs over its description */
+  .formy .frow.cmd-row { grid-template-columns: 290px minmax(0, 1fr); }
   :root[data-variant="k"] .formy .frow { grid-template-columns: minmax(0, 560px) minmax(0, 1fr); column-gap: 28px; }
   :root[data-variant="k"] .formy .frow > :not(.hint) { grid-column: 1; }
   :root[data-variant="k"] .formy .frow > .hint { grid-column: 2; align-self: center; }
