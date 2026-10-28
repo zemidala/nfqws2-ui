@@ -2402,6 +2402,15 @@ function helpParse(string $out): array
 }
 
 // Функции и их параметры — из документации в самих lua-скриптах
+// Names from a doc line «arg : name1, name2 - text»; [] if the line is not an arg description
+function luaArgNames(string $doc): array
+{
+  if (!preg_match('/^arg\s*:\s*([a-z][a-z0-9_]*(?:\s*,\s*[a-z][a-z0-9_]*)*)/', $doc, $x)) {
+    return [];
+  }
+  return preg_split('/\s*,\s*/', $x[1]);
+}
+
 function luaCatalog(): array
 {
   $files = luaFiles();
@@ -2433,8 +2442,8 @@ function luaCatalog(): array
         }
         if (preg_match('/^--\s?(.*)$/', $line, $m)) {
           $doc[] = $m[1];
-          if (preg_match('/^arg\s*:\s*([a-z][a-z0-9_]*)/', $m[1], $x)) {
-            $fileKeys[$base][$x[1]] = true;
+          foreach (luaArgNames($m[1]) as $k) {
+            $fileKeys[$base][$k] = true;
           }
           continue;
         }
@@ -2448,8 +2457,11 @@ function luaCatalog(): array
               if (preg_match('/\.\s*(.+)$/', $x[1], $note)) {
                 $f['doc'][] = $note[1];
               }
-            } elseif (preg_match('/^arg\s*:\s*([a-z][a-z0-9_]*)(.*)$/', $d, $x)) {
-              $f['args'][$x[1]] = trim($x[1] . $x[2]);
+            } elseif ($names = luaArgNames($d)) {
+              // «arg : nofake1, nofake2 - …» describes several args at once
+              foreach ($names as $k) {
+                $f['args'][$k] = trim(preg_replace('/^arg\s*:\s*/', '', $d));
+              }
             } elseif (preg_match('/^nfqws1\s*:\s*(.+)$/', $d, $x)) {
               $f['nfqws1'] = trim($x[1], ' "');
             } elseif (trim($d) !== '') {
@@ -2457,6 +2469,13 @@ function luaCatalog(): array
             }
           }
           for ($j = $i + 1; $j < count($lines) && $lines[$j] !== 'end'; $j++) {
+            // args the function reads but does not describe (newer zapret2 has some): desync.arg.x / desync.arg["x"]
+            $code = preg_replace('/--.*$/', '', $lines[$j]);
+            if (preg_match_all('/\bdesync\.arg(?:\.([a-z][a-z0-9_]*)|\[\s*["\']([a-z][a-z0-9_]*)["\']\s*\])/', $code, $x)) {
+              foreach (array_filter(array_merge($x[1], $x[2])) as $k) {
+                $f['args'][$k] ??= "$k — читается в коде функции, в её описании нет";
+              }
+            }
             if (preg_match_all("/'([a-z0-9_]+)' arg required/", $lines[$j], $x)) {
               array_push($f['required'], ...$x[1]);
             }
