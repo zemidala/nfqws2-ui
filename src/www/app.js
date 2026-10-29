@@ -375,6 +375,7 @@ const FEATURES = [
   ['pick:quic', '1.13.0', 'подбор стратегии для QUIC (HTTP/3, UDP 443) и проверка QUIC в диагнозе'],
   ['prof:name', '1.15.0', 'имя профиля (--name, --new=имя): видно в интерфейсе вместо «Свой профиль N»'],
   ['look:wints', '1.15.0', 'напоминание про метки TCP в Windows можно скопировать и скрыть'],
+  ['cfg:file', '1.24.0', '«Из файла» в «Чужом конфиге» — загрузить nfqws2.conf или .txt целиком'],
   ['backup:delete', '1.24.0', 'удаление снимков с роутера — по одному и пачкой'],
   ['hist:initial', '1.16.0', '«Вернуть как при установке» — конфиг и списки к началу истории одним действием'],
   ['lists:text', '1.17.0', 'список открывается тем видом, что выбран в прошлый раз; Ctrl+/ в тексте — комментарий'],
@@ -4961,12 +4962,26 @@ async function viewCfg(main) {
     }, 'primary'));
     u.focus();
   };
+  // Files are read in the browser and go through the same checks as a config fetched by link
+  const CFG_FILE_MAX = 65536;   // = CFG_TEXT_MAX in api.php
+  const fileInput = h('input', { type: 'file', accept: '.conf,.txt,text/plain', multiple: true, hidden: true, onchange: async () => {
+    for (const f of fileInput.files) {
+      const bad = (why) => toast(`«${f.name}»: ${why}`, { err: true });
+      if (f.size > CFG_FILE_MAX) { bad(`больше ${CFG_FILE_MAX / 1024} КБ — это не nfqws2.conf`); continue; }
+      const text = (await f.text()).replace(/^﻿/, '').replace(/\r\n?/g, '\n');
+      if (text.includes('\0') || !/^[ \t]*NFQWS_\w+=/m.test(text)) { bad('не текст конфига nfqws2 (нет переменных NFQWS_…)'); continue; }
+      if (!add(f.name.replace(/\.(conf|txt)$/i, ''), text)) break;
+    }
+    fileInput.value = '';
+  } });
 
   main.append(
     h('div', { class: 'vh' }, h('h1', { text: 'Чужой конфиг' })),
     panel(null, null,
       h('p', { text: 'Проверьте конфиг из чата раньше, чем ставить его вместо своего. Роутер запустит каждый отдельным nfqws2 на проверочных соединениях, откроет одни и те же сайты и сравнит с вашим текущим конфигом. Ваш конфиг и трафик при этом не меняются.' }),
-      h('div', { class: 'row' }, h('b', { class: 'grow', text: 'Конфиги для проверки' }), btn('Текстом', addText, 'small', 'plus'), btn('По ссылке', addUrl, 'small', 'plus')),
+      h('div', { class: 'row cfg-add' }, h('b', { class: 'grow', text: 'Конфиги для проверки' }), newTag('cfg:file'),
+        h('span', { class: 'cfg-btns' }, btn('Текстом', addText, 'small', 'plus'), btn('По ссылке', addUrl, 'small', 'plus'),
+          btn('Из файла', () => fileInput.click(), 'small', 'upload', { title: 'Файл .conf или .txt с компьютера или телефона, можно несколько' })), fileInput),
       chips,
       h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Сайты' }), sites),
       h('div', { class: 'row' }, startBtn, h('span', { class: 'sm muted grow note-wide', text: 'Каждый сайт — до трёх раз. Обычно 1–3 минуты на конфиг. Ваш конфиг проверяется тоже — для сравнения.' }))),

@@ -1085,6 +1085,14 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
   .two { grid-template-columns: minmax(0, 1fr) minmax(340px, 30%); }
 }
 
+/* Add buttons: on a phone the title takes its own line and the three buttons share the next one equally */
+.cfg-btns { display: flex; gap: 8px; }
+@media (max-width: 759px) {
+  .cfg-add > b { flex-basis: 100%; }
+  .cfg-btns { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); width: 100%; }
+  .cfg-btns .btn { padding-left: 4px; padding-right: 4px; }
+  .cfg-btns .btn svg { display: none; }
+}
 /* Чужой конфиг: карточки со счётом */
 .cfg-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
 .cfg-card.best { border-color: var(--ok); box-shadow: inset 4px 0 0 var(--ok); }
