@@ -2218,7 +2218,22 @@ function curlCmdHint(string $err): string
     . ' — без неё подбор и проверки не могут открыть ни одного сайта (система ответила: «' . $err . '»). '
     . 'Нажмите «Установить curl» в «Проблемах» на «Обзоре» или выполните на роутере: '
     // установлен, но не запускается — простой install ответит «up to date», нужна переустановка вместе с библиотекой
-    . (pkgApk() ? (curlMissing($err) ? 'apk add curl' : 'apk fix curl libcurl') : (curlMissing($err) ? 'opkg install curl' : 'opkg install --force-reinstall curl libcurl')) . '.';
+    . (pkgApk() ? (curlMissing($err) ? 'apk add curl' : 'apk fix curl libcurl') : (curlMissing($err) ? 'opkg install curl' : opkgReinstallHint('curl libcurl'))) . '.';
+}
+
+// opkg install --force-reinstall removes the package before downloading it (even with --download-only): with an
+// unreachable feed the package is just gone, and without libpcre2 wget and grep stop too. Download first, then reinstall
+// from that copy. $pkgs is a fixed latin list of package names
+function opkgReinstall(string $pkgs): string
+{
+  return 'D=/tmp/nfqws-ui-pkg; rm -rf $D; mkdir -p $D && cd $D && { opkg download ' . $pkgs . ' || { opkg update >/dev/null 2>&1; '
+    . 'opkg download ' . $pkgs . '; }; } && opkg --cache $D install --force-reinstall ' . $pkgs . '; r=$?; cd /; rm -rf $D; exit $r';
+}
+
+// the same for a person typing it by hand
+function opkgReinstallHint(string $pkgs): string
+{
+  return 'cd /tmp && opkg download ' . $pkgs . ' && opkg --cache /tmp install --force-reinstall ' . $pkgs;
 }
 
 function pkgApk(): bool
@@ -2243,10 +2258,9 @@ function curlInstall(): array
   } else {
     // сначала без обновления списка: он почти всегда уже есть (пакеты ставились), а opkg update — самое долгое место;
     // если curl в списке нет — обновить список и повторить. --force-reinstall: пакет может числиться установленным,
-    // а файла нет (удалили вручную) — тогда простой install ответил бы «уже установлен» и ничего не вернул
-    $inst = 'opkg install --force-reinstall curl libcurl';
-    // в команде только латиница: escapeshellarg при локали C выбрасывает кириллицу
-    $cmd = $lim(150, $inst . ' || { opkg update >/dev/null 2>&1; ' . $inst . '; }');
+    // а файла нет (удалили вручную) — тогда простой install ответил бы «уже установлен» и ничего не вернул.
+    // В команде только латиница: escapeshellarg при локали C выбрасывает кириллицу
+    $cmd = $lim(150, opkgReinstall('curl libcurl'));
   }
   [$rc, $out] = runTimeout(['sh', '-c', 'PATH=' . JOB_PATH . '; ' . $tree . $cmd], 190);
   @unlink(CACHE_DIR . '/curl-cmd.json');
@@ -2290,14 +2304,16 @@ function phpCurlHint(string $err): string
   }
   return 'В PHP нет модуля curl (php8-mod-curl) — без него диагноз, подбор, мониторинг и проверка обновлений не работают '
     . '(PHP ответил: «' . $err . '»). Нажмите «Установить модуль curl» в «Проблемах» на «Обзоре» или выполните на роутере: '
-    . (pkgApk() ? 'apk add php8-mod-curl' : 'opkg install --force-reinstall php8-mod-curl libcurl') . '.';
+    . (pkgApk() ? 'apk add php8-mod-curl' : opkgReinstallHint('php8-mod-curl libcurl')) . '.';
 }
 
 // Модуль собран под более новый PHP, чем стоит на роутере («undefined symbol …»): так бывает, когда модуль поставили из
 // свежего источника, а сам PHP не обновляли. Переустановка модуля тут не помогает — обновлять нужно PHP со всеми модулями
 // и библиотеки, которые он тянет (у Entware opkg upgrade php8 их сам не обновляет)
 const PHP_UPGRADE_OPKG = 'opkg update >/dev/null 2>&1; P=$(opkg list-upgradable | awk \'/^(php8|libpcre2|libxml2)/{print $1}\'); '
-  . '[ -n "$P" ] || { echo \'в источнике пакетов нет более новой версии PHP\'; exit 3; }; opkg upgrade $P && opkg install php8-mod-curl libcurl';
+  . '[ -n "$P" ] || { echo \'в источнике пакетов нет более новой версии PHP\'; exit 3; }; '
+  . 'D=/tmp/nfqws-ui-pkg; rm -rf $D; mkdir -p $D && cd $D && opkg download $P && opkg --cache $D upgrade $P '
+  . '&& opkg install php8-mod-curl libcurl; r=$?; cd /; rm -rf $D; exit $r';
 const PHP_UPGRADE_APK = 'apk update >/dev/null 2>&1; apk add --upgrade php8-mod-curl libcurl $(apk info 2>/dev/null | grep -E \'^(php8|libpcre2|libxml2)\')';
 
 function phpCurlOld(?string $err): bool
@@ -2312,7 +2328,7 @@ function phpCurlInstall(): array
   set_time_limit(200);
   $cmd = phpCurlOld(phpCurlError()) ? (pkgApk() ? PHP_UPGRADE_APK : PHP_UPGRADE_OPKG)
     : (pkgApk() ? 'apk add php8-mod-curl && apk fix php8-mod-curl libcurl'
-    : 'opkg install --force-reinstall php8-mod-curl libcurl || { opkg update >/dev/null 2>&1; opkg install --force-reinstall php8-mod-curl libcurl; }');
+    : opkgReinstall('php8-mod-curl libcurl'));
   [$rc, $out] = runTimeout(['sh', '-c', 'PATH=' . JOB_PATH . '; ' . $cmd], 190);
   $log = trim(implode("\n", array_slice(explode("\n", trim($out)), -15)));
   // в этом процессе модуль уже не появится — проверяем новым php-cgi
@@ -2428,6 +2444,7 @@ function luaCatalog(): array
     $std = [];
     $funcs = [];
     $globals = [];
+    $gfuncs = [];
     $fileKeys = [];
     foreach ($files as $base => $file) {
       $lines = file(str_ends_with($file, '.gz') ? "compress.zlib://$file" : $file, FILE_IGNORE_NEW_LINES) ?: [];
@@ -2456,6 +2473,10 @@ function luaCatalog(): array
             $fileKeys[$base][$k] = true;
           }
           continue;
+        }
+        // every top-level function: fool=<name> calls any of them
+        if (preg_match('/^function ([a-z_][a-z0-9_]*)\s*\(/i', $line, $m)) {
+          $gfuncs[] = $m[1];
         }
         if (preg_match('/^function ([a-z_][a-z0-9_]*)\(ctx,\s*desync\)/', $line, $m)) {
           $f = ['file' => $base, 'doc' => [], 'std' => [], 'args' => [], 'required' => [], 'nfqws1' => null, 'payload_def' => null];
@@ -2507,7 +2528,7 @@ function luaCatalog(): array
       $f['file_keys'] = array_keys($fileKeys[$f['file']] ?? []);
     }
     unset($f);
-    return ['functions' => $funcs, 'std' => $std, 'globals' => array_values(array_unique($globals))];
+    return ['functions' => $funcs, 'std' => $std, 'globals' => array_values(array_unique($globals)), 'gfuncs' => array_values(array_unique($gfuncs))];
   });
 }
 
@@ -3233,6 +3254,12 @@ function lintDesync(string $var, int $i, string $val, array $funcs, array $lua, 
   }
   // tls_mod правит поля TLS ClientHello. Если блоб — не ClientHello (частый случай: blob=0x00000000), nfqws2
   // пишет в журнал «cannot apply tls mod» на каждое соединение и шлёт блоб как есть: параметр не действует
+  // fool=<name> calls a Lua function by that name on every fake; a missing one is an error each time (fool=ts is a typical slip)
+  if (isset($keys['fool']) && $keys['fool'] !== '' && isset($lua['gfuncs']) && !in_array($keys['fool'], $lua['gfuncs'], true)) {
+    $add($var, $i, 'error', "fool={$keys['fool']}: такой lua-функции нет. fool — имя своей функции маскировки, а не вид маскировки; "
+      . 'nfqws2 на каждом фейке пишет ошибку, и шаг не работает. Маскировки задаются отдельными параметрами: tcp_md5, tcp_ts=…, badsum',
+      ['op' => 'remove_param', 'key' => 'fool', 'label' => 'Убрать fool']);
+  }
   if (isset($keys['tls_mod'], $keys['blob']) && blobIsTls($keys['blob'], $blobs) === false) {
     $add($var, $i, 'warning', "tls_mod не подействует: блоб «{$keys['blob']}» — не TLS ClientHello. nfqws2 отправит его как есть и на каждое соединение запишет в журнал «cannot apply tls mod»",
       ['op' => 'remove_param', 'key' => 'tls_mod', 'label' => 'Убрать tls_mod']);
@@ -8434,6 +8461,8 @@ function reportText(array $sites, bool $hide, string $build): string
   // для разбора «в подборе открывается, а в мониторинге нет»: есть ли IPv6 от провайдера и ловят ли правила пакеты
   $v6 = [];
   exec('ip -6 route show default 2>/dev/null', $v6);
+  // Keenetic without IPv6 keeps "unreachable default dev lo" — that is no route at all
+  $v6 = array_values(array_filter($v6, fn($l) => !preg_match('/^(unreachable|prohibit|blackhole)\b|\bdev lo\b/', trim($l))));
   $L[] = 'IPv6 от провайдера: ' . ($v6 ? 'есть (' . preg_replace('/\s+/', ' ', preg_replace('/[0-9a-f]*:[0-9a-f:]+/i', '…', $v6[0])) . ')' : 'нет');
   // политика доступа Keenetic: при «только политика» запросы самого роутера идут мимо nfqws2
   $raw = (string)file_get_contents(CONF_FILE);

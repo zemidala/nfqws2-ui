@@ -1257,7 +1257,7 @@ function problemItems() {
   } else if (st.php_curl) {
     items.push({ level: 'error', title: 'В PHP нет модуля curl',
       text: 'Модуль php8-mod-curl не установлен или не загружается. Через него роутер ходит в сеть: диагноз, подбор, мониторинг, стратегии сообщества и проверка обновлений без него не работают. '
-        + `PHP ответил: «${st.php_curl}». Кнопка ставит модуль заново; вручную — ${S.state.pkg_apk ? 'apk add php8-mod-curl' : 'opkg install --force-reinstall php8-mod-curl libcurl'}.`,
+        + `PHP ответил: «${st.php_curl}». Кнопка ставит модуль заново; вручную — ${S.state.pkg_apk ? 'apk add php8-mod-curl' : 'cd /tmp && opkg download php8-mod-curl libcurl && opkg --cache /tmp install --force-reinstall php8-mod-curl libcurl'}.`,
       href: PAGES.log[0], fix: phpCurlInstallBtn() });
   }
   if (st.curl) {

@@ -564,7 +564,8 @@ apply)
 		# пакет стоит, а программа не запускается — «install» ответит «up to date», нужна переустановка вместе с библиотекой
 		if command -v apk >/dev/null 2>&1 && ! command -v opkg >/dev/null 2>&1; then
 			if apk info -e curl >/dev/null 2>&1; then hint='apk fix curl libcurl'; else hint='apk update && apk add curl'; fi
-		elif opkg list-installed 2>/dev/null | grep -q '^curl '; then hint='opkg update && opkg install --force-reinstall curl libcurl'
+		# --force-reinstall removes the package before downloading: download first, reinstall from /tmp
+		elif opkg list-installed 2>/dev/null | grep -q '^curl '; then hint='opkg update && cd /tmp && opkg download curl libcurl && opkg --cache /tmp install --force-reinstall curl libcurl'
 		else hint='opkg update && opkg install curl'; fi
 		say "Поставьте её: $hint"
 		say ""
@@ -575,7 +576,7 @@ apply)
 		say ""
 		say "ВНИМАНИЕ: в PHP нет модуля curl — без него не работают диагноз, подбор стратегий и мониторинг."
 		if command -v apk >/dev/null 2>&1 && ! command -v opkg >/dev/null 2>&1; then hint='apk add php8-mod-curl'
-		else hint='opkg install --force-reinstall php8-mod-curl libcurl'; fi
+		else hint='cd /tmp && opkg download php8-mod-curl libcurl && opkg --cache /tmp install --force-reinstall php8-mod-curl libcurl'; fi
 		say "Поставьте его: $hint (или кнопкой «Установить модуль curl» в «Проблемах» на «Обзоре»)"
 		say ""
 	fi
