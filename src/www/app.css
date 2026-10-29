@@ -128,6 +128,37 @@ main { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap:
 .input.mono { font-family: var(--mono); font-size: 12.5px; }
 .textarea { font-family: var(--mono); font-size: 12.5px; line-height: 1.55; resize: vertical; min-height: 80px; width: 100%; }
 @media (max-width: 759px) { .input, .select { min-height: 42px; font-size: 16px; } }
+/* Own dropdowns (app.js, «dropdowns»): the button takes the select's classes, the native select stays hidden */
+.dd-native { display: none !important; }
+.dd-btn { display: inline-flex; align-items: center; gap: 6px; text-align: left; cursor: pointer; vertical-align: middle; }
+.dd-btn[hidden] { display: none; }
+.dd-in { display: grid; flex: 1 1 auto; min-width: 0; }
+.dd-in > * { grid-area: 1 / 1; min-width: 0; }
+.dd-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dd-sz { display: grid; height: 0; overflow: hidden; visibility: hidden; }
+.dd-sz > span { grid-area: 1 / 1; white-space: nowrap; }
+.dd-arr { flex: none; width: 7px; height: 7px; margin: 0 3px 3px 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); transition: transform .15s; }
+.dd-btn.dd-on .dd-arr { transform: translateY(3px) rotate(-135deg); }
+.dd-btn:hover:not(:disabled) { border-color: var(--accent); }
+.dd-btn.dd-on, .dd-btn:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.dd-btn:disabled { opacity: .5; cursor: default; }
+.dd-back { position: fixed; inset: 0; z-index: 70; }
+.dd-back.on { background: rgba(10, 12, 16, .45); }
+.dd-pop { position: fixed; z-index: 71; display: flex; flex-direction: column; max-width: min(460px, calc(100vw - 16px)); padding: 4px; background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: calc(var(--radius) * .7 + 2px); box-shadow: 0 8px 24px rgba(0, 0, 0, .18); font-size: 13.5px; }
+.dd-opts { overflow: auto; min-height: 0; }
+.dd-search { padding: 2px 2px 6px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.dd-q { width: 100%; }
+.dd-g { padding: 8px 10px 3px; font-size: 11.5px; font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.dd-o { display: flex; align-items: center; gap: 6px; padding: 7px 12px 7px 8px; border-radius: calc(var(--radius) * .5 + 1px); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dd-o::before { content: ""; width: 14px; flex: none; }
+.dd-o[aria-selected="true"] { color: var(--accent-ink); }
+.dd-o[aria-selected="true"]::before { content: "✓"; font-weight: 700; }
+.dd-o.act { background: var(--soft); }
+.dd-o[aria-disabled="true"] { color: var(--faint); cursor: default; }
+.dd-none { padding: 10px 12px; color: var(--muted); }
+.dd-sh { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 4px 8px 10px; }
+.dd-pop.sheet { left: 0; right: 0; bottom: 0; max-width: none; max-height: 70vh; padding: 0 8px calc(12px + env(safe-area-inset-bottom)); border-radius: 14px 14px 0 0; font-size: 15px; }
+.dd-pop.sheet .dd-o { padding: 12px 12px 12px 8px; white-space: normal; }
 /* Own checkboxes and radio buttons in every style, drawn from theme colors (style K refines them below) */
 input[type="checkbox"], input[type="radio"] { appearance: none; -webkit-appearance: none; width: 18px; height: 18px; margin: 0; flex: none; border: 1.5px solid var(--muted); border-radius: min(calc(var(--radius) * .4 + 1px), 5px); background: var(--surface); display: inline-grid; place-content: center; cursor: pointer; vertical-align: middle; transition: background-color .12s, border-color .12s; }
 input[type="radio"] { border-radius: 50%; }
