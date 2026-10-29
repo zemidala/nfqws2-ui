@@ -186,6 +186,9 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 .act { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
 .act:first-child { border-top: 0; }
 .mon-list { gap: 0; }
+.mon-note { display: grid; gap: 8px; } .mon-note:empty { display: none; }
+/* site that was typed again: shown where it already is */
+.mon-site.mon-dup { background: var(--warn-soft); box-shadow: inset 3px 0 var(--warn); border-radius: 4px; padding-inline: 10px 6px; }
 .act .item-main b { font-weight: 600; font-size: 13.5px; }
 .problems { display: grid; gap: 2px; margin-inline: -6px; }
 .problem { display: flex; gap: 8px; align-items: flex-start; padding: 6px; border-radius: 7px; color: inherit; min-width: 0; }

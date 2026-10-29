@@ -3859,7 +3859,7 @@ async function viewMonitor(main) {
     if (checking.has(host)) {
       return h('div', { class: 'act' }, h('span', { class: 'spin' }), h('div', { class: 'item-main' }, h('b', { class: 'mono', text: host }), h('span', { class: 'sm muted', text: 'проверяю…' })));
     }
-    return h('div', { class: 'act mon-site' },
+    return h('div', { class: 'act mon-site' + (dupHosts.has(host) ? ' mon-dup' : '') },
       levelIcon(!last ? 'info' : !last[1] ? 'error' : last[2] > 5000 ? 'warning' : 'ok'),
       h('div', { class: 'item-main' }, h('b', { class: 'mono', text: host }),
         h('span', { class: 'sm muted', text: last ? (last[1] ? (last[2] > 5000 ? `открывается медленно, ${(last[2] / 1000).toFixed(1).replace(".", ",")} с` : `открывается, ${last[2]} мс`) : `не открывается: ${last[3]}`) + ` · ${fmtAgo(Math.floor(Date.now() / 1000) - last[0])}` + (hist.length ? ` · доступность ${Math.round(okCount / hist.length * 100)}% за ${plural(hist.length, 'проверку', 'проверки', 'проверок')}` : '') : 'ещё не проверялся' })),
@@ -3868,20 +3868,34 @@ async function viewMonitor(main) {
       btn('', () => checkHost(host), 'small icon ghost', 'search', { title: 'Подробно: какой профиль обрабатывает сайт', 'aria-label': 'Подробно о ' + host }),
       btn('', async () => { sites.splice(i, 1); await save(); draw(); }, 'small icon ghost', 'x', { title: 'Убрать из мониторинга', 'aria-label': 'Убрать ' + host }));
   }) : h('p', { class: 'muted', text: 'Сайтов нет — добавьте хотя бы один.' })); };
+  const addNote = h('div', { class: 'mon-note' });
+  let dupHosts = new Set();
+  // same normalization as cleanHost() in api.php: the server drops duplicates, IPs and bad names silently
+  const cleanHost = (x) => x.trim().toLowerCase().replace(/^[a-z]+:\/\//, '').split('/')[0].replace(/:\d+$/, '').replace(/^\*\./, '').replace(/\.+$/, '');
   const addSite = async () => {
     const hs = add.value.split(/[\s,]+/).filter(Boolean);
     if (!hs.length) return;
     const before = new Set(sites);
     sites = [...new Set([...sites, ...hs])];
-    add.value = '';
     if (!await save()) return;
     const mm = await api('monitor_get');
     sites = mm.settings.sites;
+    const now = new Set(sites);
+    const dup = [...new Set(hs.map(cleanHost).filter((x) => before.has(x)))];
+    const lost = [...new Set(hs.filter((x) => !now.has(cleanHost(x)) && !before.has(cleanHost(x))))];
+    add.value = lost.join(' ');
+    dupHosts = new Set(dup);
+    addNote.replaceChildren(...[
+      dup.length && h('div', { class: 'notice warn' }, icon('alert'), h('span', { class: 't grow', text: `Уже в списке: ${dup.join(', ')}. Второй раз сайт не добавляется.` })),
+      lost.length && h('div', { class: 'notice bad' }, icon('alert'), h('span', { class: 't grow', text: `Не добавлено: ${lost.join(', ')}. Нужно имя сайта, например rutracker.org: IP-адреса мониторинг не проверяет${sites.length >= 30 ? ', и в списке уже 30 сайтов — больше нельзя' : ''}.` })),
+    ].filter(Boolean));
     // новые сайты проверяем сразу, не дожидаясь расписания
     const added = sites.filter((x) => !before.has(x));
     if (added.length) checkNow(added); else draw();
+    listBox.querySelector('.mon-dup')?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   };
   add.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addSite(); } });
+  add.addEventListener('input', () => { if (!addNote.childElementCount && !dupHosts.size) return; addNote.replaceChildren(); dupHosts = new Set(); draw(); });
   draw();
   main.append(
     policyNote(), policyProbeHint(),
@@ -3890,7 +3904,7 @@ async function viewMonitor(main) {
       btn('Проверить все сейчас', async () => { toast('Проверяю…'); const r = await guarded(() => api('monitor_run')); if (r) { m.data = r.data; draw(); await loadState(); } }, 'small', 'refresh')),
       h('p', { class: 'sm muted', text: 'Сайты открываются с самого роутера через основной nfqws2. История — последние 96 проверок. При смене состояния «открывается ↔ нет» может прийти сообщение в Telegram — см. «Уведомления».' }),
       nextInfo,
-      h('div', { class: 'row' }, add, btn('Добавить', addSite, 'primary', 'plus')), listBox));
+      h('div', { class: 'row' }, add, btn('Добавить', addSite, 'primary', 'plus')), addNote, listBox));
   [interval, enabled].forEach((x) => x.addEventListener('change', () => { save(); drawNext(); }));
 }
 
