@@ -2302,7 +2302,8 @@ const PHP_UPGRADE_APK = 'apk update >/dev/null 2>&1; apk add --upgrade php8-mod-
 
 function phpCurlOld(?string $err): bool
 {
-  return $err !== null && stripos($err, 'undefined symbol') !== false;
+  // "Unable to initialize module" is PHP's module API mismatch message (module built for another PHP version)
+  return $err !== null && preg_match('/undefined symbol|unable to initialize module/i', $err) === 1;
 }
 
 // Ставит (или переставляет) модуль curl для PHP. Новый php-cgi запускается на каждый запрос — перезапуск lighttpd не нужен
