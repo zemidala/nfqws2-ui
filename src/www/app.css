@@ -128,6 +128,16 @@ main { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap:
 .input.mono { font-family: var(--mono); font-size: 12.5px; }
 .textarea { font-family: var(--mono); font-size: 12.5px; line-height: 1.55; resize: vertical; min-height: 80px; width: 100%; }
 @media (max-width: 759px) { .input, .select { min-height: 42px; font-size: 16px; } }
+/* Own checkboxes and radio buttons in every style, drawn from theme colors (style K refines them below) */
+input[type="checkbox"], input[type="radio"] { appearance: none; -webkit-appearance: none; width: 18px; height: 18px; margin: 0; flex: none; border: 1.5px solid var(--muted); border-radius: min(calc(var(--radius) * .4 + 1px), 5px); background: var(--surface); display: inline-grid; place-content: center; cursor: pointer; vertical-align: middle; transition: background-color .12s, border-color .12s; }
+input[type="radio"] { border-radius: 50%; }
+input[type="checkbox"]:hover:not(:disabled), input[type="radio"]:hover:not(:disabled) { border-color: var(--accent); }
+input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input[type="checkbox"]:checked, input[type="checkbox"]:indeterminate, input[type="radio"]:checked { background: var(--accent); border-color: var(--accent); }
+input[type="checkbox"]:checked::after { content: ""; width: 4px; height: 9px; border: solid var(--accent-fg); border-width: 0 2px 2px 0; transform: translateY(-1px) rotate(45deg); }
+input[type="checkbox"]:indeterminate::after { content: ""; width: 9px; height: 2px; background: var(--accent-fg); }
+input[type="radio"]:checked::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-fg); }
+input[type="checkbox"]:disabled, input[type="radio"]:disabled { opacity: .45; cursor: default; }
 .chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 9px; border-radius: 99px; background: var(--soft); font-size: 12px; white-space: nowrap; color: var(--fg); border: 1px solid transparent; max-width: 100%; }
 .chip.accent { background: var(--accent-soft); color: var(--accent-ink); }
 .chip.ok { background: var(--ok-soft); color: var(--ok); } .chip.warn { background: var(--warn-soft); color: var(--warn); } .chip.bad { background: var(--bad-soft); color: var(--bad); }
