@@ -375,6 +375,7 @@ const FEATURES = [
   ['pick:quic', '1.13.0', 'подбор стратегии для QUIC (HTTP/3, UDP 443) и проверка QUIC в диагнозе'],
   ['prof:name', '1.15.0', 'имя профиля (--name, --new=имя): видно в интерфейсе вместо «Свой профиль N»'],
   ['look:wints', '1.15.0', 'напоминание про метки TCP в Windows можно скопировать и скрыть'],
+  ['backup:delete', '1.24.0', 'удаление снимков с роутера — по одному и пачкой'],
   ['hist:initial', '1.16.0', '«Вернуть как при установке» — конфиг и списки к началу истории одним действием'],
   ['lists:text', '1.17.0', 'список открывается тем видом, что выбран в прошлый раз; Ctrl+/ в тексте — комментарий'],
   ['over:exclude', '1.19.0', '«Проверить сайт»: сайт не заблокирован, а профиль его ломает — «Исключить из профиля»'],
@@ -3570,7 +3571,34 @@ async function paneBackup(content) {
   const R = data.remote;
   // где лежит снимок; у снимка только на NAS неизвестно, чем он отличается от текущего, — сравнение и восстановление доступны
   const where = (e) => e.local && e.remote ? 'роутер и NAS' : e.local ? (R.on ? 'роутер, ждёт отправки' : 'роутер') : 'NAS';
-  const rows = data.items.map((e) => h('tr', {},
+  // Selection for deleting: only snapshots that are on the router. The bar sits in the panel header line,
+  // so selecting does not shift the table.
+  const sel = new Set();
+  const local = data.items.filter((e) => e.local);
+  const boxes = new Map();
+  const all = h('input', { type: 'checkbox', 'aria-label': 'Выбрать все снимки на роутере', disabled: !local.length,
+    onchange: () => { local.forEach((e) => all.checked ? sel.add(e.id) : sel.delete(e.id)); sync(); } });
+  const cnt = h('b', { class: 'cnt' });
+  const freed = h('span', { class: 'sm muted sz' });
+  const selBar = h('div', { class: 'snapsel off', 'aria-hidden': 'true' }, cnt, freed, h('span', { class: 'grow' }),
+    btn('Снять выбор', () => { sel.clear(); sync(); }, 'small ghost clr'),
+    btn(h('span', {}, 'Удалить', h('span', { class: 'lbl-long', text: ' с роутера' })), () => deleteSnapshots(data.items.filter((e) => sel.has(e.id)), R), 'small danger', 'trash'));
+  const sync = () => {
+    for (const [id, [box, tr]] of boxes) { box.checked = sel.has(id); tr.classList.toggle('sel', sel.has(id)); }
+    all.checked = sel.size > 0 && sel.size === local.length;
+    all.indeterminate = sel.size > 0 && !all.checked;
+    selBar.classList.toggle('off', !sel.size);
+    selBar.toggleAttribute('aria-hidden', !sel.size);
+    cnt.textContent = 'Выбрано: ' + sel.size;
+    freed.textContent = '· освободится ' + fmtBytes(local.filter((e) => sel.has(e.id)).reduce((s, e) => s + e.size, 0));
+  };
+  const pick = (e) => {
+    const box = h('input', { type: 'checkbox', 'aria-label': 'Выбрать снимок от ' + fmtDate(e.ts), disabled: !e.local,
+      title: e.local ? null : 'Только на NAS — на роутере удалять нечего', onchange: () => { box.checked ? sel.add(e.id) : sel.delete(e.id); sync(); } });
+    return box;
+  };
+  const rows = data.items.map((e) => { const box = pick(e); const tr = h('tr', {},
+    h('td', { class: 'chk' }, box),
     h('td', { class: 'num nowrap', text: fmtDate(e.ts) }),
     h('td', {}, reasonText[e.reason] || e.reason, e.note ? h('div', { class: 'sm muted ellipsis', style: 'max-width:40ch', text: e.note }) : null),
     h('td', { class: 'sm' }, e.partial ? h('span', { class: 'status-bad', text: 'без конфига и списков (сделан до 1.15.4) — восстановить нечего' }) : e.differs === null ? h('span', { class: 'faint', text: 'неизвестно — снимок на NAS' }) : e.differs.length ? h('span', { class: 'muted', text: 'отличается: ' + e.differs.map(base).slice(0, 4).join(', ') + (e.differs.length > 4 ? ` и ещё ${e.differs.length - 4}` : '') }) : h('span', { class: 'status-ok', text: 'как сейчас' })),
@@ -3585,7 +3613,10 @@ async function paneBackup(content) {
         if (r) { toast(r.changed.length ? `Восстановлено файлов: ${r.changed.length}. Перезапустите nfqws2.` : 'Снимок совпадает с текущим состоянием'); route(true); }
       }, 'small ghost', null, { disabled: e.partial || e.differs !== null && !e.differs.length }),
       h('a', { class: 'btn small ghost icon', href: 'api.php?download=' + e.id, title: 'Скачать', 'aria-label': 'Скачать снимок' }, icon('download')),
-      btn('', async () => { await guarded(() => api('snapshot_pin', { id: e.id, pinned: !e.pinned })); route(); }, 'small ghost icon' + (e.pinned ? ' primary' : ''), 'pin', { title: e.pinned ? 'Закреплён — не удаляется с роутера' : 'Закрепить: оставить на роутере', 'aria-label': 'Закрепить', disabled: !e.local })))));
+      btn('', async () => { await guarded(() => api('snapshot_pin', { id: e.id, pinned: !e.pinned })); route(); }, 'small ghost icon' + (e.pinned ? ' primary' : ''), 'pin', { title: e.pinned ? 'Закреплён — не удаляется с роутера' : 'Закрепить: оставить на роутере', 'aria-label': 'Закрепить', disabled: !e.local }))));
+    boxes.set(e.id, [box, tr]);
+    return tr; });
+  sync();   // fill the hidden bar now, so it already has its final width
   content.append(
     h('div', { class: 'vh' }, h('h1', { text: 'Резервные копии' }), h('span', { class: 'grow' }),
       btn('Создать снимок сейчас', async () => { const note = prompt('Подпись к снимку (необязательно):', ''); if (note === null) return; if (await guarded(() => api('snapshot_create', { note }), 'Снимок создан')) route(true); }, 'primary', 'plus')),
@@ -3595,15 +3626,41 @@ async function paneBackup(content) {
         R.on ? null : h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Хранить' }), h('div', { class: 'row' }, maxDays, h('span', { class: 'sm', text: 'дней, не больше' }), maxCount, h('span', { class: 'sm', text: 'снимков' }),
           btn('Применить', async () => { if (await guarded(() => api('settings_set', { snapshots: { max_count: maxCount.value, max_days: maxDays.value } }), 'Сохранено')) route(); }, 'small'))),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Где' }), h('span', { class: 'mono sm', text: data.dir })),
-        h('p', { class: 'sm faint', text: R.on ? `Включена отправка на NAS: на роутере остаются ${data.settings.remote.keep_local} последних, закреплённые и ещё не отправленные, остальные — только на NAS.` : 'Пять последних снимков и закреплённые не удаляются никогда.' })),
+        h('p', { class: 'sm faint', text: R.on ? `Включена отправка на NAS: на роутере остаются ${data.settings.remote.keep_local} последних, закреплённые и ещё не отправленные, остальные — только на NAS.` : 'Пять последних снимков и закреплённые сами не удаляются — только вручную.' })),
       panel('Вне роутера', null,
         h('div', { class: 'row' }, h('a', { class: 'btn', href: 'api.php?download=current' }, icon('download'), 'Скачать архив'),
           h('label', { class: 'btn' }, icon('upload'), 'Восстановить из файла', fileInput)),
         h('p', { class: 'sm muted', text: 'Архив .tar.gz сохраняется на устройство, с которого открыт интерфейс — ПК или телефон. Из него же можно восстановить: перед этим делается снимок текущего состояния.' }))),
     remotePanel(data),
-    panel(R.stored ? 'Снимки' : 'Снимки на роутере', null, data.items.length ? h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
-      h('thead', {}, h('tr', {}, h('th', { text: 'Когда' }), h('th', { text: 'Почему' }), h('th', { class: 'wide', text: 'По сравнению с текущим' }), h('th', { text: 'Где' }), h('th', { class: 'num', text: 'Размер' }), h('th'))),
+    panel(R.stored ? 'Снимки' : 'Снимки на роутере', data.items.length ? [newTag('backup:delete'), selBar] : null, data.items.length ? h('div', { class: 'scroll' }, h('table', { class: 'tbl snaps' },
+      h('thead', {}, h('tr', {}, h('th', { class: 'chk' }, all), h('th', { text: 'Когда' }), h('th', { text: 'Почему' }), h('th', { class: 'wide', text: 'По сравнению с текущим' }), h('th', { text: 'Где' }), h('th', { class: 'num', text: 'Размер' }), h('th'))),
       h('tbody', {}, rows))) : h('p', { class: 'muted', text: 'Снимков пока нет.' })));
+}
+
+// Confirms and deletes snapshots from the router. Consequences are listed only for the snapshots they apply to.
+function deleteSnapshots(list, R) {
+  if (!list.length) return;
+  const warn = list.flatMap((e) => {
+    const when = fmtDate(e.ts);
+    if (e.rollback && !(e.remote && R.on)) return [`${when} — снимок перед обновлением nfqws2. «Вернуть» nfqws2 вернёт только программу, конфиг и списки останутся как есть.`];
+    if (e.pinned) return [`${when} — закреплён` + (e.remote ? '. Копия на NAS останется.' : '.')];
+    if (!e.remote && R.on) return [`${when} — ещё не отправлен на NAS: после удаления его не будет нигде.`];
+    return [];
+  });
+  const onNas = list.filter((e) => e.remote).length;
+  const tail = !onNas ? (list.length === 1 ? 'Копии на NAS у него нет — удалённое не вернуть.' : 'Копий на NAS у них нет — удалённое не вернуть.')
+    : onNas === list.length ? (list.length === 1 ? 'На NAS копия останется — восстановить из неё можно и потом.' : 'На NAS копии останутся — восстановить из них можно и потом.')
+    : `На NAS останутся копии ${onNas} из ${list.length} — из них можно восстановить и потом. Остальные удаляются насовсем.`;
+  const go = btn('Удалить', async () => {
+    const r = await guarded(() => api('snapshot_delete', { ids: list.map((e) => e.id) }));
+    if (!r) return;
+    bg.close();
+    toast(`Удалено с роутера: ${r.deleted}, освободилось ${fmtBytes(r.freed)}` + (r.on_nas ? `. На NAS остались копии: ${r.on_nas}` : ''));
+    route(true);
+  }, 'danger', 'trash');
+  const bg = modal(list.length === 1 ? `Удалить снимок от ${fmtDate(list[0].ts)}?` : `Удалить снимки: ${list.length}?`, h('div', { class: 'modal-b stack' },
+    warn.length ? h('ul', { class: 'snapwarn' }, warn.map((t) => h('li', { text: t }))) : null,
+    h('p', { class: 'sm muted', text: tail })), go);
 }
 
 // Копии снимков на NAS (или другом устройстве с ssh): куда, ключ роутера, команда для той стороны, проверка

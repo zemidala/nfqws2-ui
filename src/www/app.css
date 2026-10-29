@@ -352,6 +352,20 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 .menu-list .nav-h { padding: 6px 10px 2px; }
 
 /* ---------- копии, история ---------- */
+/* Snapshot selection bar lives in the panel header; when hidden it still takes its place, so the table never shifts */
+.panel-h:has(> .snapsel) > h2 { flex: none; }
+.snapsel { display: flex; align-items: center; gap: 10px; flex: 1 1 auto; min-width: 0; padding-left: 12px; border-left: 1px solid var(--line); }
+.snapsel.off { visibility: hidden; }
+.snapsel .cnt { color: var(--accent-ink); font-weight: 500; white-space: nowrap; }
+.snapsel .sz { white-space: nowrap; }
+.snapsel .btn { white-space: nowrap; }
+@media (max-width: 899px) { .snapsel { flex-basis: 100%; border-left: 0; padding-left: 0; } .snapsel .sz, .snapsel .clr, .snapsel .lbl-long { display: none; } }
+.tbl.snaps .chk { width: 1%; padding-right: 0; }
+.tbl.snaps input[type="checkbox"] { width: 18px; height: 18px; accent-color: var(--accent); margin: 0; vertical-align: middle; }
+.tbl.snaps input[type="checkbox"]:disabled { opacity: .35; }
+.tbl.snaps tr.sel > td { background: var(--accent-soft); }
+.snapwarn { margin: 0; padding: 0; list-style: none; display: grid; gap: 6px; }
+.snapwarn li { padding: 8px 10px; border-radius: var(--radius); background: var(--warn-soft); font-size: 13px; }
 .cards2 { display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 14px; }
 .tday { font-size: 12px; font-weight: 600; color: var(--muted); padding: 10px 0 6px; }
 .tev { display: grid; grid-template-columns: 48px 22px minmax(0, 1fr) auto; gap: 10px; align-items: start; padding: 9px 0; border-top: 1px solid var(--line); }
@@ -940,6 +954,8 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
 :root[data-variant="k"] input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
 :root[data-variant="k"] input[type="checkbox"]:checked::after { content: ""; width: 5px; height: 10px; border: solid #fff; border-width: 0 2px 2px 0; transform: translateY(-1px) rotate(45deg); }
 :root[data-variant="k"] input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
+:root[data-variant="k"] input[type="checkbox"]:indeterminate { background: var(--accent); border-color: var(--accent); }
+:root[data-variant="k"] input[type="checkbox"]:indeterminate::after { content: ""; width: 10px; height: 2px; background: #fff; }
 /* переключатель вида — рамки-кнопки, как «Clients | Categories | Applications» */
 :root[data-variant="k"] .seg { border: 0; padding: 0; background: none; gap: 0; }
 :root[data-variant="k"] .seg button { border: 1px solid var(--line); border-radius: 0; margin-left: -1px; min-height: 36px; padding: 6px 16px; font-size: 15px; font-weight: 400; color: var(--muted); background: var(--surface); }

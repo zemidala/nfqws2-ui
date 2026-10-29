@@ -641,6 +641,15 @@ function snapArchive(string $id): string
   return $tmp;
 }
 
+// Whether a snapshot can be read: a file on the router, or a NAS copy while sending to the NAS is on
+function snapAvailable(string $id): bool
+{
+  if (is_file(snapFileOf($id))) {
+    return true;
+  }
+  return remoteOn() && (bool)array_filter(snapIndex(), fn($e) => $e['id'] === $id && !empty($e['remote']));
+}
+
 // Скрипт той стороны: кладётся в домашнюю папку пользователя, вызывается только из authorized_keys
 function remoteScript(): string
 {
@@ -7782,7 +7791,11 @@ function nfqUpdateJob(): void
   if ($now !== $to) {
     $fail("после установки стоит " . ($now ?? 'ничего') . ", а не $to");
   }
-  if ($job['rollback'] && $job['snap']) {
+  // The snapshot may have been deleted by hand: then only the package goes back (fail() in snapArchive would
+  // abort the job after the package is already installed)
+  if ($job['rollback'] && $job['snap'] && !snapAvailable($job['snap'])) {
+    nfqLog('Снимка ' . $job['snap'] . ' больше нет — конфиг и списки остаются как есть');
+  } elseif ($job['rollback'] && $job['snap']) {
     nfqLog('Возвращаю конфиг и списки из снимка ' . $job['snap']);
     // правленное после обновления оставляем: возвращаем только то, что с установки не менялось
     // суммы «сразу после установки» есть с 1.21.0; у обновлений раньше — по времени изменения файла
@@ -9502,11 +9515,13 @@ switch ($cmd) {
     historyScan('auto');
     $idx = array_reverse(snapIndex());
     $cur = snapHashes();
+    $rbSnap = nfqUpdData()['result']['snap'] ?? null;
     foreach ($idx as &$e) {
       // что отличается от текущего состояния; у снимков только на NAS хешей нет — неизвестно
       $e['local'] = $e['local'] ?? true;
       $e['remote'] = !empty($e['remote']);
       $e['partial'] = ROOT && empty($e['full']);   // Keenetic, до 1.15.4: без конфига и списков
+      $e['rollback'] = $e['id'] === $rbSnap;   // nfqws2 rollback restores config and lists from it
       unset($e['full']);
       if (!isset($e['files'])) {
         $e['differs'] = null;
@@ -9589,6 +9604,36 @@ switch ($cmd) {
     $file = snapArchive($str('id'));
     $changed = restoreArchive($file, 'из снимка ' . $str('id'));
     respond(['changed' => $changed, 'lint' => lintCurrent()]);
+
+  // Deletes snapshots from the router only. A snapshot with a NAS copy stays listed as NAS-only (the router key
+  // cannot delete on the NAS, by design); a router-only snapshot is gone entirely.
+  case 'snapshot_delete':
+    $ids = array_values(array_unique(array_map('strval', (array)($in['ids'] ?? []))));
+    $ids || fail('Не выбрано ни одного снимка');
+    array_map('snapFileOf', $ids);   // validates ids
+    $lock = snapLock();
+    $idx = snapIndex();
+    $keep = [];
+    $deleted = $onNas = $freed = 0;
+    foreach ($idx as $e) {
+      if (!in_array($e['id'], $ids, true) || !($e['local'] ?? true)) {
+        $keep[] = $e;
+        continue;
+      }
+      $f = SNAP_DIR . "/{$e['id']}.tar.gz";
+      $freed += is_file($f) ? filesize($f) : 0;
+      @unlink($f);
+      $deleted++;
+      if (!empty($e['remote'])) {
+        $e['local'] = false;
+        unset($e['files'], $e['pinned']);
+        $keep[] = $e;
+        $onNas++;
+      }
+    }
+    snapSaveIndex($keep);
+    fclose($lock);
+    respond(['deleted' => $deleted, 'on_nas' => $onNas, 'freed' => $freed]);
 
   case 'snapshot_pin':
     $idx = snapIndex();
