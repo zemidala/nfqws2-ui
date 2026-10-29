@@ -313,6 +313,25 @@ function logo(size) {
 
 const btn = (label, onclick, cls = '', ic = null, attrs = {}) =>
   h('button', { class: 'btn ' + cls, type: 'button', onclick, ...attrs }, ic && icon(ic), label);
+// Copy button: copies get() and shows a tick on itself for 1.5 s (label stays — the button keeps its width).
+// No label — icon only, for short texts (commands, code blocks)
+function copyBtn(get, label = 'Копировать', cls = 'small ghost') {
+  const b = btn(label, async () => {
+    if (!await copyText(get(), true)) return;
+    b.classList.add('copied');
+    b.title = 'Скопировано';
+    b.querySelector('svg')?.replaceWith(icon('ok'));
+    clearTimeout(b.tm);
+    b.tm = setTimeout(() => { b.classList.remove('copied'); b.title = label ? '' : 'Скопировать'; b.querySelector('svg')?.replaceWith(icon('copy')); }, 1500);
+  }, cls + (label ? '' : ' icon'), 'copy', label ? {} : { title: 'Скопировать', 'aria-label': 'Скопировать' });
+  return b;
+}
+// Text of a <pre>: log views draw one <div> per line
+const preText = (pre) => (pre.classList.contains('logv') ? [...pre.children].filter((x) => !x.classList.contains('muted')).map((x) => x.textContent).join('\n') : pre.textContent);
+// <pre> with the copy icon in its top-right corner (code blocks, command output)
+const copyBox = (pre) => h('div', { class: 'copybox' }, pre, copyBtn(() => preText(pre), '', 'small'));
+// command with the copy icon right after it
+const copyCode = (text, cls = 'mono') => h('span', { class: 'codewrap' }, h('code', { class: cls, text }), copyBtn(() => text, ''));
 const chip = (text, cls = '') => h('span', { class: 'chip ' + cls, text });
 // Подбор идёт с роутера, а у него временные метки TCP есть; Windows по умолчанию их не шлёт
 const WIN_TS_CMD = 'netsh interface tcp set global timestamps=enabled';
@@ -980,7 +999,7 @@ async function service(action) {
   toast(names[action] + '…');
   const r = await guarded(() => api('service', { action }));
   if (!r) return;
-  if (!r.ok) modal('Не получилось: ' + action, h('div', { class: 'stack modal-b' }, h('p', { class: 'sm muted', text: 'Вот что ответил скрипт запуска:' }), h('pre', { class: 'box', text: r.output || 'без вывода' })));
+  if (!r.ok) modal('Не получилось: ' + action, h('div', { class: 'stack modal-b' }, h('p', { class: 'sm muted', text: 'Вот что ответил скрипт запуска:' }), copyBox(h('pre', { class: 'box', text: r.output || 'без вывода' }))));
   await loadState().catch(() => {});
   if (r.fixed) toast('Исправлено: ' + r.fixed, { long: true });
   else if (r.ok) toast(S.state?.running ? 'nfqws2 работает' : 'nfqws2 остановлен');
@@ -2592,6 +2611,7 @@ async function drawList(content, name) {
       showIss(data.issues);
       body.replaceChildren(tools, ed.el, issBox, h('div', { class: 'row' },
         h('span', { class: 'sm muted grow', text: 'Одна запись на строку, # в начале — комментарий (Ctrl+/ ставит и снимает). Поддомены учитываются автоматически, ^домен — без поддоменов, «*» не поддерживается.' }),
+        copyBtn(() => ed.ta.value, 'Копировать', 'small'),
         btn('Сохранить', async () => {
           if (await guarded(() => api('list_save', { name, content: ed.ta.value }), 'Сохранено')) { setDirty(false); await reload(); }
         }, 'primary')));
@@ -2889,7 +2909,7 @@ function pasteProfile(text) {
     const bad = res.missing.length || !res.steps.length || (res.dry_run && !res.dry_run.ok);
     out.replaceChildren(
       parts.length > 1 ? notice('info', `В тексте ${plural(parts.length, 'профиль', 'профиля', 'профилей')} — взят первый`, 'Остальные вставьте по одному.') : null,
-      res.tokens.length ? h('pre', { class: 'box', style: 'white-space:pre-wrap;word-break:break-all', text: res.tokens.join('\n') }) : null,
+      res.tokens.length ? copyBox(h('pre', { class: 'box', style: 'white-space:pre-wrap;word-break:break-all', text: res.tokens.join('\n') })) : null,
       res.rejected.length ? notice('warn', 'Отброшено', res.rejected.map((x) => `${x.tok} — ${x.why}`).join('; ')) : null,
       res.fixed.length ? notice('info', 'Пути к спискам поправлены под этот роутер', res.fixed.map((x) => `${x.from} → ${x.to}`).join('; ')) : null,
       res.missing.length ? notice('bad', 'Нет файлов, на которые ссылается профиль', res.missing.join(', ') + ' — создайте такие списки или уберите эти параметры из текста.') : null,
@@ -3157,8 +3177,10 @@ async function viewProfile(content, index, r) {
     issBox.replaceChildren(issuesListEl(local.filter((x) => x.tok != null), (x) => { const t = tokenize(textEd.ta.value)[x.tok]; if (t) textEd.select(t.start, t.end); },
       (x) => { const t = tokenize(textEd.ta.value)[x.tok]; return t ? 'строка ' + textEd.ta.value.slice(0, t.start).split('\n').length : ''; }));
     renderHelp(help, null);
-    body.replaceChildren(h('div', { class: 'panel' }, textEd.el, sug.el, issBox, help,
-      h('p', { class: 'sm muted', text: 'По одному аргументу на строку. Tab — принять подсказку. Правки здесь и в конструкторе — одно и то же.' })));
+    body.replaceChildren(h('div', { class: 'panel' },
+      h('div', { class: 'row' }, h('span', { class: 'sm muted grow', text: 'По одному аргументу на строку. Tab — принять подсказку. Правки здесь и в конструкторе — одно и то же.' }),
+        copyBtn(() => textEd.ta.value, 'Копировать', 'small')),
+      textEd.el, sug.el, issBox, help));
   }
 
   // --- Имя: --name=… (nfqws2 пишет его в журнал; интерфейс показывает вместо «Свой профиль N»).
@@ -3548,6 +3570,7 @@ async function paneBase(content) {
         h('span', { class: 'hint', text: 'Имена блобов подставляются в шаги стратегий (blob=…).' })),
       h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Добавить' }), adders,
         h('span', { class: 'hint', text: 'В списках — только то, чего ещё нет. Строка допишется в конец, дальше её можно поправить в редакторе.' })),
+      h('div', { class: 'row' }, h('span', { class: 'grow' }), copyBtn(() => ed.ta.value, 'Копировать', 'small')),
       ed.el, sug.el, issBox, help),
     bar);
 }
@@ -3710,6 +3733,7 @@ async function paneRaw(content) {
       toast(`Оформлено: ${plural(r.lines, 'строка', 'строки', 'строк')} — только пробелы и переносы, аргументы nfqws2 те же. Ещё не сохранено; Ctrl+Z — вернуть как было`);
     }, 'small', 'wand', { title: 'Привести конфиг к одному виду: параметр на строку, выравнивание под кавычку, пустая строка перед --new. Меняются только пробелы и переносы — nfqws2 получит те же аргументы. Текст попадает в редактор, сохранение — как обычно' }),
     newTag('raw:format'),
+    copyBtn(() => ed.ta.value, 'Копировать', 'small'),
     h('span', { class: 'grow' }),
     btn('Сравнить с сохранённым', () => openDiff('nfqws2.conf: изменения', conf.content, ed.ta.value), 'small'),
     btn('История', () => openHistory('nfqws2.conf', () => route(true)), 'small', 'history'),
@@ -3958,7 +3982,7 @@ async function paneAbout(content) {
     toast(r.error ? 'Не удалось проверить: ' + r.error : r.available ? `Есть новая версия: ${r.latest}` : 'У вас последняя версия');
     route();
   };
-  const cmd = (c, text) => h('div', { class: 'frow cmd-row' }, h('code', { class: 'lbl mono', text: c }), h('span', { class: 'sm', text }));
+  const cmd = (c, text) => h('div', { class: 'frow cmd-row' }, h('span', { class: 'lbl' }, copyCode(c)), h('span', { class: 'sm', text }));
   content.append(h('div', { class: 'vh' }, h('h1', { text: 'О программе' })),
     panel(null, null,
       h('div', { class: 'about-brand' }, logo(48), h('div', {}, h('h2', { text: 'nfqws2-ui' }), h('div', { class: 'sm muted', text: 'веб-интерфейс для nfqws2 · zemidala' }))),
@@ -4518,9 +4542,9 @@ async function viewTests(main, r, bare = false) {
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Профиль' }), profile ? h('a', { href: `#/settings/p${profile}`, text: `#${profile} ${p ? profName(p) : ''}` }) : h('span', { text: 'ни один — соединение прошло без обработки' })),
         actions.length ? h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Действия' }), h('ol', { class: 'sm mono', style: 'margin:0;padding-left:18px;display:grid;gap:2px' }, actions.map((a) => h('li', { text: a })))) : null,
         warnings.length ? h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Предупреждения' }), h('div', { class: 'stack', style: 'gap:4px' }, warnings.map((w) => h('div', { class: 'help-iss warning' }, levelIcon('warning'), h('span', { class: 'mono sm', text: w }))))) : null),
-      panel('Журнал обработки', h('span', { class: 'sm muted num', text: plural(work.length, 'строка', 'строки', 'строк') }),
+      panel('Журнал обработки', h('span', { class: 'row', style: 'gap:8px' }, h('span', { class: 'sm muted num', text: plural(work.length, 'строка', 'строки', 'строк') }), copyBtn(() => preText(pre))),
         h('input', { class: 'input', placeholder: 'Фильтр', 'aria-label': 'Фильтр журнала', oninput: (e) => { q = e.target.value.toLowerCase(); draw(); } }), pre,
-        h('details', {}, h('summary', { text: `запуск nfqws2 (${setup.length} строк)` }), (() => { const p = h('pre', { class: 'box', style: 'max-height:40vh' }); drawLog(p, setup); return p; })())));
+        h('details', {}, h('summary', { text: `запуск nfqws2 (${setup.length} строк)` }), (() => { const p = h('pre', { class: 'box', style: 'max-height:40vh' }); drawLog(p, setup); return copyBox(p); })())));
   }
 
   // Куда можно применить стратегию и что это затронет. Для неопытного главный вариант — «только для этого сайта».
@@ -5498,8 +5522,23 @@ async function viewAsn(main) {
       btn(x.auto ? 'Не обновлять' : 'Обновлять', async () => { if (await guarded(() => api('asn_set', { asn: x.asn, auto: !x.auto }))) route(true); }, 'small ghost')))) : null);
 }
 
-async function copyText(text) {
-  try { await navigator.clipboard.writeText(text); toast('Скопировано'); } catch { prompt('Скопируйте:', text); }
+// navigator.clipboard needs a secure context: over plain http by a non-local address it is absent, then the old
+// execCommand('copy') through a hidden field still works. The prompt is the last resort
+async function copyText(text, quiet = false) {
+  let ok = false;
+  try { await navigator.clipboard.writeText(text); ok = true; } catch {
+    const was = document.activeElement;
+    const ta = h('textarea', { readonly: '', style: 'position:fixed;top:0;left:0;width:1px;height:1px;opacity:0' });
+    ta.value = text;
+    document.body.append(ta);
+    ta.select();
+    try { ok = document.execCommand('copy'); } catch { /* not supported */ }
+    ta.remove();
+    was?.focus?.({ preventScroll: true });
+  }
+  if (!ok) prompt('Скопируйте:', text);
+  else if (!quiet) toast('Скопировано');
+  return ok;
 }
 
 // ============ Журнал ============
@@ -5517,10 +5556,11 @@ async function viewLog(main) {
   draw();
   main.append(h('div', { class: 'vh' }, h('h1', { text: 'Журнал' }), h('span', { class: 'grow' }), btn('Обновить', () => route(), 'small', 'refresh')),
     data.syslog
-      ? panel('Системный журнал nfqws2', null, h('p', { class: 'sm muted', text: 'Последние 300 строк logread, новые сверху.' }), search, pre)
+      ? panel('Системный журнал nfqws2', copyBtn(() => preText(pre)), h('p', { class: 'sm muted', text: 'Последние 300 строк logread, новые сверху.' }), search, pre)
       : panel('Системный журнал nfqws2', null, h('p', { class: 'sm muted', text: 'На Keenetic системный журнал ведёт прошивка: откройте его в веб-интерфейсе роутера (раздел «Диагностика») и найдите строки nfqws2. Файлы журналов nfqws2 показаны ниже.' })),
     (data.files || []).map((f) => panel(f.name, h('span', { class: 'row', style: 'gap:8px' },
       h('span', { class: 'sm muted', text: fmtBytes((data.logs?.files || []).find((x) => x.name === f.name)?.used ?? f.size) + ' в памяти' }),
+      copyBtn(() => f.tail || ''),
       btn('Очистить', async () => { if (await clearLog(f.name)) route(); }, 'small ghost', 'trash')), (() => { const p = h('pre', { class: 'box' }); drawLog(p, (f.tail || '').split('\n').filter(Boolean), 'пусто'); return p; })())),
     panel('Трафик в очередь nfqws2', null, h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
       h('thead', {}, h('tr', {}, h('th', { text: 'Направление' }), h('th', { text: 'Что' }), h('th', { class: 'num', text: 'Пакетов' }), h('th', { class: 'num', text: 'Объём' }))),
@@ -5628,7 +5668,7 @@ function md(text, onAnchor) {
       flush();
       const code = [];
       while (++i < lines.length && !/^```/.test(lines[i])) code.push(lines[i]);
-      root.append(h('pre', { class: 'box', text: code.join('\n') }));
+      root.append(copyBox(h('pre', { class: 'box', text: code.join('\n') })));
       continue;
     }
     const hm = /^(#{1,4})\s+(.*)$/.exec(l);
@@ -5831,7 +5871,7 @@ function openUpdate(u, run = false) {
     h('p', {}, `Установлено: `, h('b', { text: u.current }), ` · последняя: `, h('b', { text: u.latest || '—' }), ' · ', h('a', { href: u.url || REPO + '/releases', target: '_blank', rel: 'noopener', text: 'страница релиза' })),
     u.notes ? h('div', { class: 'release-notes' }, md(u.notes)) : h('p', { class: 'sm muted', text: 'Описания изменений нет.' }),
     h('p', { class: 'sm muted' }, 'Обновление ставит пакет с GitHub (с проверкой контрольной суммы) и перезапускает веб-сервер интерфейса. nfqws2, конфиг, списки и доступ в интернет не затрагиваются. Из консоли: ', h('code', { text: 'nfqws-ui update' })),
-    status, log);
+    status, copyBox(log));
   log.hidden = true;
   const go = btn('Обновить до ' + u.latest, () => start(), 'primary', 'download', { disabled: !u.can_update || u.running });
   const dlg = modal('nfqws2-ui ' + (u.latest || ''), body, u.available ? go : []);
@@ -5886,7 +5926,7 @@ async function openNfqUpdate() {
   const status = h('div');
   const log = h('pre', { class: 'box', style: 'max-height:40vh', hidden: true });
   const head = h('div', { class: 'stack', style: 'gap:12px' }, spinner('Проверяю…'));
-  const body = h('div', { class: 'modal-b stack', style: 'gap:12px' }, head, status, log);
+  const body = h('div', { class: 'modal-b stack', style: 'gap:12px' }, head, status, copyBox(log));
   const go = btn('Обновить', null, 'primary', 'download', { hidden: true });
   const back = btn('Вернуть', null, 'warn', 'undo', { hidden: true });
   const recheck = btn('Проверить снова', () => draw(true), 'ghost', 'refresh');

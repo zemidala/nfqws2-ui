@@ -591,6 +591,16 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 .md li > p { margin: 4px 0; }
 .md code { font-family: var(--mono); font-size: .88em; background: var(--soft); border-radius: 4px; padding: 1px 5px; }
 .md pre.box { margin: 8px 0; font-size: 12.5px; }
+/* copy buttons: a tick for 1.5 s after copying; the icon in the corner of a code block; the icon after a command */
+.btn.copied, .btn.copied:hover { color: var(--ok); }
+.copybox { position: relative; min-width: 0; }
+.copybox > pre.box { padding-right: 46px; }
+.copybox > .btn { position: absolute; top: 6px; right: 14px; background: var(--surface); }
+.copybox:has(> pre[hidden]) { display: none; }
+.md .copybox { margin: 8px 0; }
+.md .copybox > pre.box { margin: 0; }
+.codewrap { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; min-width: 0; vertical-align: middle; }
+.codewrap > code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .md blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--warn); background: var(--warn-soft); border-radius: 0 8px 8px 0; }
 .md table { margin: 8px 0; }
 .md hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
@@ -610,7 +620,7 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 .frow { align-items: baseline; }
 .frow > .lbl { padding-top: 0; }
 .cmd-row { grid-template-columns: 290px minmax(0, 1fr); }
-.cmd-row > code.lbl { white-space: nowrap; color: var(--fg); }
+.cmd-row > .lbl code { white-space: nowrap; color: var(--fg); }
 @media (max-width: 759px) { .cmd-row { grid-template-columns: 1fr; gap: 2px; } }
 .tbl td.date { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
