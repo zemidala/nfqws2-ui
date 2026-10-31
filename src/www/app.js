@@ -560,7 +560,7 @@ const PAGES = {
   backup: ['#/settings/backup', 'Резервные копии'], hist: ['#/settings/hist', 'История изменений'], log: ['#/log', 'Журнал'],
   look: ['#/settings/look', 'Оформление'], about: ['#/settings/about', 'О программе'],
   // ещё не сделаны: в меню видны, но заблокированы и помечены «скоро»
-  diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], comm: ['#/tests/community', 'Стратегии сообщества'], frz: ['#/tests/freeze', 'Обрыв на 16 КБ'], cfg: ['#/tests/configs', 'Чужой конфиг'], auto: ['#/tests/auto', 'Автоподбор'], asn: ['#/asn', 'Список по ASN'], report: ['#/settings/report', 'Отчёт для помощи'],
+  diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], comm: ['#/tests/community', 'Стратегии сообщества'], frz: ['#/tests/freeze', 'Обрыв на 16 КБ'], dns: ['#/tests/dns', 'DNS-серверы'], cfg: ['#/tests/configs', 'Чужой конфиг'], auto: ['#/tests/auto', 'Автоподбор'], asn: ['#/asn', 'Список по ASN'], report: ['#/settings/report', 'Отчёт для помощи'],
 };
 // Новые функции — метка «новое». КАЖДАЯ новая функция интерфейса записывается сюда:
 // [страница из PAGES или «страница:функция», версия, в которой появилась, подпись для сообщения «Обновлено до…»].
@@ -596,6 +596,8 @@ const FEATURES = [
   ['frz:join', '1.23.0', '«Обрыв на 16 КБ»: сеть добавляется в профиль с той же стратегией одной строкой, а не новым профилем'],
   ['dev', '1.26.0', '«Устройства»: обход только для выбранных устройств домашней сети'],
   ['look:zd', '1.26.0', 'стиль «Z · zemidala» в «Оформлении»: фирменные цвета — чёрное меню, графит, оранжевые акценты'],
+  ['dns', '1.26.0', '«DNS-серверы»: какие DNS отвечают с роутера, не перехвачен ли обычный DNS и не подменяет ли DNS роутера адреса'],
+  ['lists:order', '1.26.0', '«Списки»: поиск, группы по профилю и порядок по имени или по числу записей'],
   ['mon:view', '1.26.0', '«Мониторинг»: сводка, таблица с сортировкой и общая шкала времени — видно, когда падало всё сразу'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
@@ -643,16 +645,16 @@ const SOON_HINT = 'Ещё в разработке — появится в одн
 const SYS_PAGES = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 const SYS_NAV = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 // Компоновка «Боковое меню»: группы и их страницы
-const MENU = [[null, ['over']], ['Проверка сайта', ['diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'cfg']], ['Наблюдение', ['mon', 'auto', 'tg']], ['Обход', ['prof', 'lists', 'dev', 'asn']], ['Система', SYS_NAV]];
+const MENU = [[null, ['over']], ['Проверка сайта', ['diag', 'frz', 'dns', 'pick', 'trace', 'phist', 'comm', 'cfg']], ['Наблюдение', ['mon', 'auto', 'tg']], ['Обход', ['prof', 'lists', 'dev', 'asn']], ['Система', SYS_NAV]];
 // Упрощённый вид (галочка в «Оформлении»): шесть разделов, страницы раздела — вкладками над страницей (как в TOP_TABS)
-const MENU_SIMPLE = [['over', 'Обзор', 'home', ['over']], ['pick', 'Проверка сайта', 'tests', ['diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'cfg', 'site']], ['mon', 'Наблюдение', 'pulse', ['mon', 'auto', 'tg']],
+const MENU_SIMPLE = [['over', 'Обзор', 'home', ['over']], ['pick', 'Проверка сайта', 'tests', ['diag', 'frz', 'dns', 'pick', 'trace', 'phist', 'comm', 'cfg', 'site']], ['mon', 'Наблюдение', 'pulse', ['mon', 'auto', 'tg']],
   ['prof', 'Профили', 'layers', ['prof', 'dev']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]];
 // Верхние вкладки компоновок: страница по клику, подпись, значок, страницы вкладки, «только на узком экране»
 const TOP_TABS = {
   menu: [],
-  tabs: [['over', 'Обзор', 'home', ['over'], true], ['pick', 'Проверка', 'tests', ['diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'cfg', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'auto', 'tg']],
+  tabs: [['over', 'Обзор', 'home', ['over'], true], ['pick', 'Проверка', 'tests', ['diag', 'frz', 'dns', 'pick', 'trace', 'phist', 'comm', 'cfg', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'auto', 'tg']],
     ['prof', 'Профили', 'layers', ['prof', 'dev']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
-  site: [['over', 'Обзор', 'home', ['over']], ['mon', 'Сайты', 'pulse', ['mon', 'diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'cfg', 'auto', 'tg', 'site']],
+  site: [['over', 'Обзор', 'home', ['over']], ['mon', 'Сайты', 'pulse', ['mon', 'diag', 'frz', 'dns', 'pick', 'trace', 'phist', 'comm', 'cfg', 'auto', 'tg', 'site']],
     ['prof', 'Профили', 'layers', ['prof', 'dev']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
 };
 // Нижняя панель телефона — одна для всех компоновок; остальное — в меню
@@ -677,7 +679,7 @@ function pageOf(r = parseRoute()) {
   if (r.tab === 'diag') return 'diag';
   if (r.tab === 'asn') return 'asn';
   if (r.tab === 'devices') return 'dev';
-  if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace', history: 'phist', community: 'comm', freeze: 'frz', configs: 'cfg', auto: 'auto' }[r.arg] || 'pick';
+  if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace', history: 'phist', community: 'comm', freeze: 'frz', dns: 'dns', configs: 'cfg', auto: 'auto' }[r.arg] || 'pick';
   if (r.tab === 'settings') return SYS_PAGES.includes(r.arg) ? r.arg : ['readme', 'changelog'].includes(r.arg) ? 'about' : 'prof';
   return 'over';
 }
@@ -1140,7 +1142,7 @@ function placeSide() {
 // Колонка состояния справа — на страницах-формах, проверках и таблицах, когда для неё хватает ширины
 // (показывает CSS по ширине области содержимого). Во «Вкладках» не нужна: обзор и так слева.
 // Списки, профили, конфиг, журнал и мониторинг отдают всю ширину своему содержимому, «Обзор» — карточкам.
-const RAIL_PAGES = ['diag', 'frz', 'cfg', 'pick', 'trace', 'phist', 'comm', 'auto', 'tg', 'asn', 'basic', 'base', 'backup', 'hist', 'report', 'look', 'about', 'site'];
+const RAIL_PAGES = ['diag', 'frz', 'dns', 'cfg', 'pick', 'trace', 'phist', 'comm', 'auto', 'tg', 'asn', 'basic', 'base', 'backup', 'hist', 'report', 'look', 'about', 'site'];
 function placeRail(main, page) {
   main.classList.toggle('formy', RAIL_PAGES.includes(page));   // строки форм на широком экране — подсказки справа от поля
   if (!isWide() || overviewCol() || !RAIL_PAGES.includes(page)) return;
@@ -1505,7 +1507,8 @@ function dnsSpoofNotice(sp) {
     + (sp.real_ok ? `По настоящему адресу сайт через nfqws2 открывается (HTTP ${sp.real_code}, ${sp.real_ms} мс), так что стратегия ни при чём. Устройства, которые берут адреса у роутера, тоже получают неверный адрес.`
       : `По настоящему адресу тоже не открывается: ${sp.real_reason}. Сначала включите защищённый DNS и проверьте ещё раз; не откроется — подберите стратегию.`)
     + ' Включите в роутере DNS-over-HTTPS или DNS-over-TLS.',
-    h('a', { class: 'btn small', href: wikiDns(), target: '_blank', rel: 'noopener' }, 'Как включить защищённый DNS'));
+    h('div', { class: 'row' }, h('a', { class: 'btn small', href: wikiDns(), target: '_blank', rel: 'noopener' }, 'Как включить защищённый DNS'),
+      h('a', { class: 'btn small', href: PAGES.dns[0] }, 'Какой DNS у вас работает')));
 }
 
 function probeVerdict(res, pr) {
@@ -2352,7 +2355,12 @@ function drawListNav(nav, current) {
   let fold = {};
   try { fold = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { /* нет хранилища */ }
   const setFold = (k, v) => { fold[k] = v; try { localStorage.setItem(KEY, JSON.stringify(fold)); } catch { /* нет хранилища */ } };
-  const row = (l) => {
+  const look = getLook();
+  const grouping = ['kind', 'profile', 'none'].includes(look.listGroup) ? look.listGroup : 'kind';
+  const order = look.listSort === 'n' ? 'n' : 'name';
+  const sorted = (arr) => [...arr].sort(order === 'n' ? (a, b) => (b.entries || 0) - (a.entries || 0) || a.name.localeCompare(b.name) : (a, b) => a.name.localeCompare(b.name));
+  // extra replaces the profile chips on the right (in profile groups the profile is already in the header)
+  const row = (l, extra) => {
     const pr = l.problems || {};
     const nice = LIST_NAMES[l.name];
     const file = l.name.replace(/\.list$/, '');
@@ -2362,23 +2370,59 @@ function drawListNav(nav, current) {
       h('span', { class: 'bar' + role }),
       h('span', { class: 'nm' }, nice ? [h('span', { class: 't', text: nice }), h('i', { class: 'mono', text: file })] : h('span', { class: 't mono', text: file })),
       h('span', { class: 'tail num' },
-        l.used.map((u) => h('span', { class: 'pchip' + (u.role === 'exclude' ? ' exc' : ''), text: '#' + u.profile })),
+        extra !== undefined ? extra : l.used.map((u) => h('span', { class: 'pchip' + (u.role === 'exclude' ? ' exc' : ''), text: '#' + u.profile })),
         pr.error ? h('span', { class: 'errdot' }) : pr.warning ? h('span', { class: 'warndot' }) : null,
         // стандартный список nfqws2-keenetic: не удаляется и не переименовывается — замок у числа записей
         l.stock ? h('span', { class: 'lk', title: 'Стандартный список nfqws2-keenetic: удалить и переименовать нельзя, очистить можно', 'aria-label': 'стандартный список' }, icon('lock')) : null,
         fmtNum(l.entries)));
   };
+  let query = '';
+  const shown = () => S.state.lists.filter((l) => !query || (l.name + ' ' + (LIST_NAMES[l.name] || '')).toLowerCase().includes(query));
+  // a foldable group (profile groups, "not connected"); while searching everything stays open
+  const group = (key, head, items, count) => {
+    const closed = fold[key] === true && !query && !items.some((l) => l.name === current);
+    const box = h('div', { class: 'lsec' + (closed ? ' closed' : '') });
+    box.append(
+      h('button', { type: 'button', class: 'lsec-h', 'aria-expanded': String(!closed), onclick: (e) => {
+        const c = box.classList.toggle('closed');
+        e.currentTarget.setAttribute('aria-expanded', String(!c));
+        setFold(key, c);
+      } }, h('span', { class: 'ar', text: '▾' }), head, h('span', { class: 'cnt num', text: count })),
+      h('div', { class: 'lsec-b' }, items.map((x) => x.el)));
+    return box;
+  };
+  // profiles that read the same lists in the same roles become one group (#12 and #14 in the stock config)
+  const byProfile = () => {
+    const lists = shown();
+    const sets = new Map();
+    for (const p of S.state.profiles || []) {
+      const items = lists.filter((l) => l.used.some((u) => u.profile === p.index));
+      if (!items.length) continue;
+      const roleOf = (l) => l.used.find((u) => u.profile === p.index).role;
+      const key = items.map((l) => l.name + ':' + roleOf(l)).sort().join(',');
+      if (sets.has(key)) sets.get(key).ps.push(p); else sets.set(key, { ps: [p], items, roleOf });
+    }
+    const out = [...sets.values()].map(({ ps, items, roleOf }) => {
+      const inc = sorted(items.filter((l) => roleOf(l) !== 'exclude')).map((l) => ({ name: l.name, el: row(l, null) }));
+      const exc = sorted(items.filter((l) => roleOf(l) === 'exclude')).map((l) => ({ name: l.name, el: row(l, h('span', { class: 'lrole', text: 'исключает' })) }));
+      const names = [...new Set(ps.map(profName))].join(' · ');
+      return group('p' + ps.map((p) => p.index).join('-'), [h('span', { class: 'pnum', text: ps.map((p) => '#' + p.index).join(', ') }), h('b', { text: names })], [...inc, ...exc], String(items.length));
+    });
+    const off = sorted(lists.filter((l) => !l.used.length)).map((l) => ({ name: l.name, el: row(l, null) }));
+    if (off.length) out.push(group('p-off', h('b', { class: 'muted', text: 'Не подключены' }), off, String(off.length)));
+    return out;
+  };
   const section = (kind, title) => {
-    const all = S.state.lists.filter((l) => l.kind === kind);
+    const all = sorted(shown().filter((l) => l.kind === kind));
     if (!all.length) return null;
     const used = all.filter((l) => l.used.length);
     const off = all.filter((l) => !l.used.length);
     const total = all.reduce((a, l) => a + (l.entries || 0), 0);
-    // неподключённые раскрыты, если открыт один из них или подключённых в разделе нет
-    const offOpen = !used.length || off.some((l) => l.name === current) || fold['off-' + kind] === true;
-    const closed = fold[kind] === true && !all.some((l) => l.name === current);
+    // неподключённые раскрыты, если открыт один из них, подключённых в разделе нет или идёт поиск
+    const offOpen = !used.length || !!query || off.some((l) => l.name === current) || fold['off-' + kind] === true;
+    const closed = fold[kind] === true && !query && !all.some((l) => l.name === current);
     const box = h('div', { class: 'lsec' + (closed ? ' closed' : '') });
-    const offBox = h('div', { class: 'lsec-off', hidden: !offOpen }, off.map(row));
+    const offBox = h('div', { class: 'lsec-off', hidden: !offOpen }, off.map((l) => row(l)));
     const offBtn = off.length && used.length ? h('button', { type: 'button', class: 'lsub', 'aria-expanded': String(offOpen), onclick: () => {
       offBox.hidden = !offBox.hidden;
       offBtn.setAttribute('aria-expanded', String(!offBox.hidden));
@@ -2390,13 +2434,28 @@ function drawListNav(nav, current) {
         e.currentTarget.setAttribute('aria-expanded', String(!c));
         setFold(kind, c);
       } }, h('span', { class: 'ar', text: '▾' }), h('b', { text: title }), h('span', { class: 'cnt num', text: `${plural(all.length, 'список', 'списка', 'списков')} · ${fmtNum(total)}` })),
-      h('div', { class: 'lsec-b' }, used.map(row), offBtn, offBox));
+      h('div', { class: 'lsec-b' }, used.map((l) => row(l)), offBtn, offBox));
     return box;
   };
   const act = (ic, label, onclick) => h('button', { class: 'ni', type: 'button', onclick }, h('span', { class: 'sq', text: ic }), h('span', { class: 'nm muted', text: label }));
   const file = h('input', { type: 'file', accept: '.list,.txt,text/plain', hidden: true, onchange: (e) => importListFile(e.target.files[0]) });
+  const body = h('div', { class: 'lnav-body' });
+  const drawBody = () => {
+    const parts = grouping === 'profile' ? byProfile()
+      : grouping === 'none' ? sorted(shown()).map((l) => row(l))
+        : [section('host', 'Списки сайтов'), section('ip', 'IP-списки')].filter(Boolean);
+    body.replaceChildren(...(parts.length ? parts : [h('div', { class: 'lnav-empty sm muted', text: query ? 'Ничего не найдено' : 'Списков нет' })]));
+  };
+  const selOf = (label, key, cur, opts) => h('select', { class: 'select', 'aria-label': label, title: label, onchange: (e) => { setLook({ [key]: e.target.value }); drawListNav(nav, current); } },
+    opts.map(([v, t]) => h('option', { value: v, text: t, selected: v === cur })));
+  const find = h('input', { class: 'input', type: 'search', placeholder: 'Найти список', 'aria-label': 'Найти список', oninput: (e) => { query = e.target.value.trim().toLowerCase(); drawBody(); } });
+  drawBody();
   nav.replaceChildren(
-    section('host', 'Списки сайтов'), section('ip', 'IP-списки'),
+    h('div', { class: 'lnav-ctl' }, newTag('lists:order'), find,
+      h('div', { class: 'lnav-opt' },
+        selOf('Группы', 'listGroup', grouping, [['kind', 'Сайты и IP'], ['profile', 'По профилям'], ['none', 'Без групп']]),
+        selOf('Порядок', 'listSort', order, [['name', 'По имени'], ['n', 'По записям']]))),
+    body,
     h('div', { class: 'lnav-acts' },
       act('+', 'Новый список', () => createList()),
       act('⇩', 'Загрузить по ссылке', importListUrl),
@@ -4410,6 +4469,7 @@ async function viewTests(main, r, bare = false) {
   if (r.arg === 'auto') return viewAuto(main);
   if (r.arg === 'community') return viewCommunity(main);
   if (r.arg === 'freeze') return viewFreeze(main);
+  if (r.arg === 'dns') return viewDns(main);
   if (r.arg === 'configs') return viewCfg(main);
   const tab = ['trace', 'monitor', 'notify'].includes(r.arg) ? r.arg : 'pick';
   if (tab === 'monitor') {
@@ -5244,6 +5304,118 @@ async function viewFreeze(main) {
   }
 
   poll();
+}
+
+// ============ DNS servers: which answer, which are intercepted, does the router's DNS fake addresses ============
+
+const DNS_SITE_TEXT = { ok: ['верно', 'ok'], fake: ['заглушка', 'bad'], none: ['нет ответа', 'bad'], other: ['другой адрес', 'warn'], podkop: ['podkop', ''], unknown: ['не сверить', ''] };
+
+async function viewDns(main) {
+  const startBtn = btn('Проверить', start, 'primary', 'play');
+  const out = h('div', { class: 'stack', style: 'gap:14px' }, spinner('Загрузка…'));
+  main.append(
+    h('div', { class: 'vh' }, h('h1', { text: 'DNS-серверы' }), startBtn),
+    h('p', { class: 'muted dns-lead', text: 'Какие DNS-серверы отвечают с этого роутера, не перехватывает ли провайдер обычный DNS и не подменяет ли адреса закрытых сайтов. Настройки DNS роутера страница не меняет — только показывает и советует.' }),
+    out);
+  async function start() {
+    const s = await guarded(() => api('dns_start'));
+    if (s) { draw(s); poll(); }
+  }
+  function poll() {
+    pollTest(async () => {
+      if (!out.isConnected) return false;
+      const s = await api('dns_get').catch(() => null);
+      if (!s) return true;
+      draw(s);
+      return !!s.running;
+    }, 1500);
+  }
+
+  const who = (u) => u.asn ? `${u.as_name || 'сеть'} (AS${u.asn})` : '';
+  function plainLine(s) {
+    const u = s.udp || {};
+    if (u.st === 'none') return [chip('нет ответа', 'bad'), null, 'на порт 53 ответа нет'];
+    if (u.st === 'intercepted') {
+      const why = u.why === 'isp' ? 'ответил сервер провайдера' : u.why === 'fast' ? `ответ за ${u.ms} мс — так быстро отвечает кто-то рядом` : `ответил ${who(u)}, а не ${s.name}`;
+      return [chip('перехвачен', 'bad'), u.ms, why];
+    }
+    return [chip('отвечает', 'ok'), u.ms, s.kind !== 'public' && u.asn ? 'дальше спрашивает ' + who(u) : null];
+  }
+  const secureLine = (r, failText) => !r ? null : r.ok ? [chip('работает', 'ok'), r.ms, null]
+    : [chip({ refused: 'отклонён', timeout: 'нет ответа', tls: 'обрыв TLS' }[r.why] || failText, 'bad'), null, null];
+  const prRow = (label, line) => line && h('div', { class: 'dns-pr' }, h('span', { class: 'p sm muted', text: label }), line[0],
+    h('span', { class: 'sm muted num', text: line[1] ? line[1] + ' мс' : '' }), line[2] ? h('div', { class: 'why sm muted', text: line[2] }) : null);
+
+  function tiles(s) {
+    const pub = s.servers.filter((x) => x.kind === 'public');
+    const router = s.servers.find((x) => x.kind === 'router');
+    const sites = s.sites || [];
+    const fake = sites.filter((x) => x.router.st === 'fake');
+    const silent = sites.filter((x) => x.router.st === 'none');
+    const t1 = !sites.length ? null : fake.length ? ['bad', `Подменяет ${fake.length} из ${sites.length}`, fake.map((x) => x.host).join(', ') + ' — вместо адреса сайта заглушка.']
+      : silent.length ? ['warn', `Не отвечает на ${plural(silent.length, 'сайт', 'сайта', 'сайтов')}`, silent.map((x) => x.host).join(', ')]
+        : ['ok', 'Отдаёт настоящие адреса', router?.udp?.asn ? 'Дальше спрашивает ' + who(router.udp) + '.' : ''];
+    const ic = pub.filter((x) => x.udp?.st === 'intercepted');
+    const none = pub.filter((x) => x.udp?.st === 'none');
+    const answered = [...new Set(ic.map((x) => x.udp.why === 'isp' ? 'сервер провайдера' : x.udp.why === 'fast' ? 'кто-то рядом' : who(x.udp)))];
+    const t2 = !pub.length ? null : ic.length ? ['bad', 'Перехвачен', `Спрашивали ${ic.map((x) => x.name).join(', ')} — ответил ${answered.join(', ')}.`]
+      : none.length === pub.length ? ['bad', 'Не проходит', 'Ни один сервер не ответил на порт 53.']
+        : none.length ? ['warn', 'Отвечают не все', `Нет ответа от ${none.map((x) => x.name).join(', ')}.`] : ['ok', 'Проходит', 'Отвечают те серверы, которых спрашивали.'];
+    const sec = pub.flatMap((x) => [['DoT', x, x.dot], ['DoH', x, x.doh]]).filter(([, , r]) => r);
+    const okSec = sec.filter(([, , r]) => r.ok);
+    const closed = sec.filter(([, , r]) => !r.ok).map(([p, x]) => `${p} к ${x.name}`);
+    const t3 = !sec.length ? null : !okSec.length ? ['bad', 'Не проходит', 'Ни DoT, ни DoH не соединились.']
+      : ['ok', `Работает: ${okSec.length} из ${sec.length}`, closed.length ? 'Закрыто: ' + closed.join(', ') + '.' : 'Проходят все.'];
+    const tile = (k, t) => t && h('div', { class: 'dns-tile ' + t[0] }, h('span', { class: 'k sm muted', text: k }), h('b', { class: 'v', text: t[1] }), t[2] ? h('span', { class: 'd sm muted', text: t[2] }) : null);
+    // advice: the fastest working secure server, said only when the router itself gets fake addresses; intercepted
+    // plain DNS alone does not matter if the router already asks over a secure channel
+    const best = okSec.map(([p, x, r]) => ({ p, x, ms: r.ms })).sort((a, b) => a.ms - b.ms)[0];
+    const trouble = fake.length > 0;
+    const adv = !sites.length ? null : !trouble ? notice('ok', 'DNS роутера в порядке', ic.length
+      ? 'Обычный DNS к чужим серверам перехвачен, но роутер получает настоящие адреса — менять ничего не нужно.'
+      : 'Роутер получает настоящие адреса — менять ничего не нужно.')
+      : best ? notice('info', 'Что сделать', `Поставьте в роутере защищённый DNS — быстрее всех ответил ${best.x.name} по ${best.p} (${best.ms} мс). Тогда настоящие адреса получат и роутер, и все устройства сети.`,
+        h('a', { class: 'btn small', href: wikiDns(), target: '_blank', rel: 'noopener' }, 'Как поставить'))
+        : notice('warn', 'Защищённый DNS не проходит', 'Провайдер закрыл и DoT, и DoH к проверенным серверам — сменить DNS на роутере не получится.');
+    return [h('div', { class: 'dns-tiles' }, tile('DNS роутера', t1), tile('Обычный DNS, порт 53', t2), tile('Защищённый DNS', t3)), s.running ? null : adv];
+  }
+
+  function draw(s) {
+    startBtn.disabled = !!s.running;
+    if (!s.started) {
+      out.replaceChildren(panel(null, null, h('p', { text: 'Проверка спрашивает DNS роутера, DNS провайдера и пять публичных серверов (Cloudflare, Google, Quad9, AdGuard DNS, Яндекс) тремя способами: обычный DNS на порт 53, DoT и DoH. Потом сверяет, что DNS роутера и провайдера отвечают на закрытые сайты и на сайты из «Мониторинга».' }),
+        h('p', { class: 'sm muted', text: 'Занимает 15–40 секунд. Нажмите «Проверить».' })));
+      return;
+    }
+    const sites = s.sites || [];
+    const hasIsp = s.servers.some((x) => x.kind === 'isp');
+    const cards = s.servers.map((x) => h('div', { class: 'dns-card' },
+      h('div', { class: 'hd' }, h('b', { text: x.name }), h('span', { class: 'mono sm muted', text: x.ip })),
+      prRow('порт 53', plainLine(x)), prRow('DoT', secureLine(x.dot, 'закрыт')), prRow('DoH', secureLine(x.doh, 'не отвечает'))));
+    const siteRows = sites.map((x) => {
+      const [t, cls] = DNS_SITE_TEXT[x.router.st] || ['?', ''];
+      const bad = !['ok', 'podkop'].includes(x.router.st);
+      return h('div', { class: 'dns-site' }, h('span', { class: 'mono', text: x.host }), chip(t, cls),
+        bad ? h('div', { class: 'sm muted', text: `DNS роутера: ${x.router.ips.join(', ') || 'ничего'}` + (x.ref.length ? ` · настоящий адрес: ${x.ref.join(', ')}` : '') }) : null);
+    });
+    const cell = (r) => r ? h('td', {}, chip(...(DNS_SITE_TEXT[r.st] || ['?', '']))) : h('td', { class: 'muted' }, '—');
+    const matrix = sites.length ? h('details', { class: 'dns-more' }, h('summary', { text: 'Подробно: сайт × DNS' }),
+      h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
+        h('thead', {}, h('tr', {}, h('th', { text: 'Сайт' }), h('th', { text: 'DNS роутера' }), hasIsp ? h('th', { text: 'DNS провайдера' }) : null, h('th', { text: 'Защищённый DNS' }))),
+        h('tbody', {}, sites.map((x) => h('tr', {}, h('td', { class: 'mono' }, x.host), cell(x.router), hasIsp ? cell(x.isp) : null,
+          h('td', { class: 'mono sm' }, x.ref.join(', ') || '—')))))),
+      sites.some((x) => x.router.st === 'podkop') ? h('p', { class: 'sm muted', text: 'podkop — адреса 198.18.x выдаёт podkop: такие сайты идут через него, так и задумано.' }) : null) : null;
+    out.replaceChildren(
+      s.running ? notice('info', s.step === 'sites' ? `Сверяю адреса сайтов… ${sites.length}` : `Спрашиваю серверы… ${s.servers.length}`, null, h('span', { class: 'spin' }))
+        : s.died ? notice('warn', 'Проверка прервалась', 'Запустите ещё раз.') : null,
+      ...tiles(s),
+      s.servers.length ? panel('Серверы', h('span', { class: 'sm muted', text: s.finished ? fmtDate(s.finished) : '' }), h('div', { class: 'dns-cards' }, cards)) : null,
+      sites.length ? panel('Сайты через DNS роутера', null, h('div', { class: 'dns-sites' }, siteRows), matrix) : null);
+  }
+
+  const s0 = await api('dns_get').catch(() => ({}));
+  draw(s0);
+  if (s0.running) poll();
 }
 
 // ============ Чужой конфиг: проверить целиком, не ставя ============

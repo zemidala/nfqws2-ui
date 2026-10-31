@@ -297,7 +297,7 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 .grip { color: var(--faint); cursor: grab; letter-spacing: -2px; user-select: none; font-size: 13px; }
 .lnav { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px; max-height: calc(100vh - var(--top-h) - 40px); overflow: auto; position: sticky; top: calc(var(--top-h) + 16px); box-shadow: var(--shadow); }
 :root[data-variant="b"] .lnav { border-color: transparent; }
-@media (max-width: 899px) { .lnav { position: static; max-height: 260px; } }
+@media (max-width: 899px) { .lnav { position: static; max-height: 360px; } }
 
 /* ---------- конструктор профиля ---------- */
 .two { display: grid; grid-template-columns: minmax(0, 1fr) 280px; gap: 14px; align-items: start; }
@@ -840,6 +840,35 @@ a.over-row:hover { background: var(--soft); }
 .lsec-h { padding: 9px 6px 5px; font-size: 13px; }
 .lsec-h:hover, .lsub:hover { background: var(--soft); }
 .lsec-h b { white-space: nowrap; }
+/* list column toolbar: search, grouping, order */
+.lnav-ctl { display: grid; gap: 8px; padding: 2px 4px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line); position: relative; }
+.lnav-ctl > .tag.new { position: absolute; top: -2px; right: 4px; }
+.lnav-ctl > .input { width: 100%; }
+.lnav-opt { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+.lnav-opt > * { min-width: 0; width: 100%; }
+.lnav-empty { padding: 12px 6px; }
+.lsec-h .pnum { font: 600 12.5px var(--mono); color: var(--accent-ink); white-space: nowrap; flex: none; }
+.lsec-h .pnum + b { white-space: normal; min-width: 0; }
+.lrole { font-size: 11.5px; color: var(--warn); }
+/* DNS servers page */
+.dns-lead { margin: -4px 0 14px; max-width: 860px; }
+.dns-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.dns-tile { display: grid; align-content: start; gap: 6px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--ok); border-radius: var(--radius); }
+.dns-tile.bad { border-top-color: var(--bad); } .dns-tile.warn { border-top-color: var(--warn); }
+.dns-tile .v { font-size: 19px; line-height: 1.25; }
+.dns-tile.ok .v { color: var(--ok); } .dns-tile.bad .v { color: var(--bad); } .dns-tile.warn .v { color: var(--warn); }
+.dns-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.dns-card { display: grid; align-content: start; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); }
+.dns-card .hd { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.dns-pr { display: grid; grid-template-columns: 58px auto 1fr; gap: 2px 8px; align-items: center; }
+.dns-pr .chip { justify-self: start; }
+.dns-pr .num { text-align: right; }
+.dns-pr .why { grid-column: 2 / -1; }
+.dns-sites { display: grid; }
+.dns-site { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.dns-site > .sm { grid-column: 1 / -1; overflow-wrap: anywhere; }
+.dns-more { margin-top: 12px; } .dns-more summary { cursor: pointer; color: var(--accent-ink); }
+.dns-more .tbl { margin-top: 8px; }
 .lsec-h .cnt { margin-left: auto; color: var(--faint); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
 .lsub { padding: 5px 8px 3px 6px; font-size: 11.5px; color: var(--faint); }
 .lsec-h .ar, .lsub .ar { color: var(--faint); width: 12px; display: inline-block; transition: transform .15s; }
