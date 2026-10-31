@@ -578,6 +578,7 @@ const FEATURES = [
   ['frz:inconf', '1.22.0', '«Обрыв на 16 КБ»: видно, что найденная стратегия уже стоит в конфиге и работает для этой сети'],
   ['frz:join', '1.23.0', '«Обрыв на 16 КБ»: сеть добавляется в профиль с той же стратегией одной строкой, а не новым профилем'],
   ['dev', '1.26.0', '«Устройства»: обход только для выбранных устройств домашней сети'],
+  ['mon:view', '1.26.0', '«Мониторинг»: сводка, таблица с сортировкой и общая шкала времени — видно, когда падало всё сразу'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 // на сколько минорных версий функция старше текущей (у сборки до выпуска — меньше нуля)
@@ -4100,7 +4101,7 @@ async function viewMonitor(main) {
   const add = h('input', { class: 'input mono grow', id: 'mon-add', placeholder: 'добавить сайт, например rutracker.org', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Добавить сайт' });
   const interval = h('select', { class: 'select', 'aria-label': 'Как часто' }, [10, 30, 60, 180, 720].map((n) => h('option', { value: n, text: n < 60 ? `каждые ${n} мин` : `каждые ${n / 60} ч`, selected: n === cfg.interval })));
   const enabled = h('input', { type: 'checkbox', id: 'mon-on', checked: cfg.enabled });
-  const listBox = h('div', { class: 'stack mon-list' });   // промежутки — в app.css (.mon-list): на широком экране между колонками свой
+  const listBox = h('div', { class: 'mon-box' });
   const nextInfo = h('p', { class: 'sm muted' });
   const checking = new Set();
   const save = async (extra = {}) => guarded(() => api('monitor_set', { sites, interval: Number(interval.value), enabled: enabled.checked, ...extra }));
@@ -4122,22 +4123,115 @@ async function viewMonitor(main) {
     nextInfo.textContent = (m.data.last ? `Последняя автоматическая проверка ${fmtAgo(now - m.data.last)}. ` : '') +
       (mins <= 1 ? 'Следующая — в ближайшие 10 минут.' : `Следующая ≈ через ${mins} мин (плюс-минус 10 минут: расписание проверяется раз в 10 минут).`);
   };
-  const draw = () => { drawNext(); listBox.replaceChildren(sites.length ? sites.map((host, i) => {
-    const hist = m.data.sites[host] || [];
-    const last = hist[hist.length - 1];
-    const okCount = hist.filter((x) => x[1]).length;
-    if (checking.has(host)) {
-      return h('div', { class: 'act' }, h('span', { class: 'spin' }), h('div', { class: 'item-main' }, h('b', { class: 'mono', text: host }), h('span', { class: 'sm muted', text: 'проверяю…' })));
-    }
-    return h('div', { class: 'act mon-site' + (dupHosts.has(host) ? ' mon-dup' : '') },
-      levelIcon(!last ? 'info' : !last[1] ? 'error' : last[2] > 5000 ? 'warning' : 'ok'),
-      h('div', { class: 'item-main' }, h('b', { class: 'mono', text: host }),
-        h('span', { class: 'sm muted', text: last ? (last[1] ? (last[2] > 5000 ? `открывается медленно, ${(last[2] / 1000).toFixed(1).replace(".", ",")} с` : `открывается, ${last[2]} мс`) : `не открывается: ${last[3]}`) + ` · ${fmtAgo(Math.floor(Date.now() / 1000) - last[0])}` + (hist.length ? ` · доступность ${Math.round(okCount / hist.length * 100)}% за ${plural(hist.length, 'проверку', 'проверки', 'проверок')}` : '') : 'ещё не проверялся' })),
-      uptimeBar(hist.slice(-48).map((x) => x[1])),
-      btn('Проверить', () => checkNow([host]), 'small ghost chk-now', 'refresh', { title: 'Проверить сейчас и записать результат в историю', 'aria-label': 'Проверить ' + host }),
-      btn('', () => checkHost(host), 'small icon ghost', 'search', { title: 'Подробно: какой профиль обрабатывает сайт', 'aria-label': 'Подробно о ' + host }),
-      btn('', async () => { sites.splice(i, 1); await save(); draw(); }, 'small icon ghost', 'x', { title: 'Убрать из мониторинга', 'aria-label': 'Убрать ' + host }));
-  }) : h('p', { class: 'muted', text: 'Сайтов нет — добавьте хотя бы один.' })); };
+  // a check result: [time, opened, ms, reason]; «slow» — opened, but longer than 5 s
+  const SLOW_MS = 5000;
+  const kindOf = (x) => !x ? 'none' : !x[1] ? 'bad' : x[2] > SLOW_MS ? 'slow' : 'ok';
+  const resText = (x) => !x ? 'ещё не проверялся' : !x[1] ? 'не открывается' : x[2] > SLOW_MS ? `медленно, ${(x[2] / 1000).toFixed(1).replace('.', ',')} с` : `${x[2]} мс`;
+  const statusChip = (host, x) => checking.has(host) ? h('span', { class: 'mst none' }, h('span', { class: 'spin' }), 'проверяю…')
+    : h('span', { class: 'mst ' + kindOf(x), title: x && !x[1] ? 'Не открывается: ' + x[3] : null, text: resText(x) });
+  const histOf = (host) => m.data.sites[host] || [];
+  const pctOf = (hist) => hist.length ? Math.round(hist.filter((x) => x[1]).length / hist.length * 100) : null;
+  const cellTitle = (x) => fmtDate(x[0]) + ' · ' + (x[1] ? `открылся, ${x[2]} мс` : 'не открылся: ' + x[3]);
+  const nowS = () => Math.floor(Date.now() / 1000);
+  // view (table / timeline) and sorting — remembered in this browser
+  let view = getLook().monView === 'tl' ? 'tl' : 'tbl';
+  let sort = { key: 'host', dir: 1 };
+  try { sort = { ...sort, ...JSON.parse(localStorage.getItem('nfqws-ui-mon-sort') || '{}') }; } catch { /* no storage */ }
+  const RANK = { bad: 0, slow: 1, ok: 2, none: 3 };
+  const CMP = {
+    host: (a, b) => a.localeCompare(b),
+    now: (a, b) => RANK[kindOf(histOf(a).at(-1))] - RANK[kindOf(histOf(b).at(-1))],
+    pct: (a, b) => (pctOf(histOf(a)) ?? 101) - (pctOf(histOf(b)) ?? 101),
+    when: (a, b) => (histOf(b).at(-1)?.[0] || 0) - (histOf(a).at(-1)?.[0] || 0),
+  };
+  const sorted = () => [...sites].sort((a, b) => sort.dir * (CMP[sort.key] || CMP.host)(a, b) || CMP.host(a, b));   // an unknown saved key must not break the page
+  const remove = async (host) => { sites.splice(sites.indexOf(host), 1); await save(); draw(); };
+  const acts = (host) => h('div', { class: 'mon-acts' },
+    btn('', () => checkNow([host]), 'small icon ghost', 'refresh', { title: 'Проверить сейчас и записать результат в историю', 'aria-label': 'Проверить ' + host, disabled: checking.has(host) }),
+    btn('', () => checkHost(host), 'small icon ghost mon-more', 'search', { title: 'Подробно: какой профиль обрабатывает сайт', 'aria-label': 'Подробно о ' + host }),
+    btn('', () => remove(host), 'small icon ghost', 'x', { title: 'Убрать из мониторинга', 'aria-label': 'Убрать ' + host }));
+  // the last 96 checks, the oldest on the left; fewer — the rest of the bar stays empty, so bars line up between rows
+  const histBar = (hist) => h('div', { class: 'mhist', 'aria-hidden': 'true' },
+    Array.from({ length: Math.max(0, 96 - hist.length) }, () => h('i', { class: 'none' })),
+    hist.slice(-96).map((x) => h('i', { class: kindOf(x), title: cellTitle(x) })));
+  const sumBox = h('div', { class: 'mon-sum' });
+  const drawSum = () => {
+    const lasts = sites.map((s) => histOf(s).at(-1));
+    const n = { ok: 0, slow: 0, bad: 0, none: 0 };
+    lasts.forEach((x) => n[kindOf(x)]++);
+    const pcts = sites.map((s) => pctOf(histOf(s))).filter((x) => x !== null);
+    const avg = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : null;
+    const seg = (k) => n[k] ? h('i', { class: k, style: `flex:${n[k]}` }) : null;
+    sumBox.replaceChildren(
+      h('div', { class: 'k' }, h('b', { class: 'big okc', text: String(n.ok + n.slow) }), h('span', { class: 'lbl', text: `из ${sites.length} открываются` + (n.slow ? `, ${n.slow} медленно` : '') })),
+      n.bad ? h('div', { class: 'k' }, h('b', { class: 'big badc', text: String(n.bad) }), h('span', { class: 'lbl', text: n.bad === 1 ? 'не открывается' : 'не открываются' })) : null,
+      avg !== null ? h('div', { class: 'k' }, h('b', { class: 'big', text: avg + '%' }), h('span', { class: 'lbl', text: 'средняя доступность' })) : null,
+      sites.length ? h('div', { class: 'k grow' }, h('div', { class: 'mon-stack' }, seg('ok'), seg('slow'), seg('bad'), seg('none')), nextInfo) : nextInfo);
+  };
+  const viewSeg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Вид' });
+  const drawSeg = () => viewSeg.replaceChildren(...[['tbl', 'Таблица'], ['tl', 'Шкала времени']].map(([v, t]) =>
+    h('button', { type: 'button', class: view === v ? 'on' : '', 'aria-pressed': String(view === v), text: t, onclick: () => { view = v; setLook({ monView: v }); drawSeg(); draw(); } })));
+  const drawTable = () => {
+    const heads = [['host', 'Сайт', ''], ['now', 'Сейчас', ''], [null, 'История', 'mon-wide'], ['pct', 'Доступность', 'num'], ['when', 'Проверен', 'num mon-wide'], [null, '', '']];
+    const th = ([k, t, cls]) => h('th', { class: cls, 'aria-sort': k && sort.key === k ? (sort.dir > 0 ? 'ascending' : 'descending') : null },
+      !k ? t : h('button', { class: 'th-sort', type: 'button', title: `Сортировать по столбцу «${t}»`, onclick: () => {
+        sort = { key: k, dir: sort.key === k ? -sort.dir : 1 };
+        try { localStorage.setItem('nfqws-ui-mon-sort', JSON.stringify(sort)); } catch { /* no storage */ }
+        draw();
+      } }, k === 'pct' ? [h('span', { class: 'mon-wide', text: t }), h('span', { class: 'mon-narrow', text: '%' })] : t, sort.key === k ? icon(sort.dir > 0 ? 'up' : 'down') : null));
+    return h('div', { class: 'scroll' }, h('table', { class: 'tbl mon-tbl' }, h('thead', {}, h('tr', {}, heads.map(th))),
+      h('tbody', {}, sorted().map((host) => {
+        const hist = histOf(host), x = hist.at(-1), p = pctOf(hist);
+        return h('tr', { class: dupHosts.has(host) ? 'mon-dup' : '' },
+          // a long name may wrap only after a dot, never in the middle of a word
+          h('td', { class: 'mono mon-host' }, h('button', { class: 'linkish', type: 'button', title: 'Подробно: какой профиль обрабатывает сайт', onclick: () => checkHost(host) },
+            host.split('.').flatMap((p, j) => j ? [h('wbr'), '.' + p] : [p]))),
+          h('td', {}, statusChip(host, x), x && !x[1] && !checking.has(host) ? h('div', { class: 'sm muted mon-why', text: x[3] }) : null),
+          h('td', { class: 'mon-wide mon-hcell' }, histBar(hist)),
+          h('td', { class: 'num', text: p === null ? '—' : p + '%' }),
+          h('td', { class: 'num sm muted mon-wide', text: x ? fmtAgo(nowS() - x[0]) : '—' }),
+          h('td', {}, acts(host)));
+      }))));
+  };
+  // Timeline: every site on one time axis — the window from the oldest check to now in 96 slots, each slot shows the
+  // worst result in it. A slot where every checked site failed points at the provider or the router, not a block.
+  const drawTimeline = () => {
+    // one slot = one check interval (at most 96 slots), so every scheduled check lands in its own slot
+    // a longer history than 96 intervals (interval changed, manual checks only) widens the slot instead of piling up in slot 0
+    const now = nowS();
+    const first = Math.min(...sites.map((s) => histOf(s)[0]?.[0] || now));
+    const step = Math.max(Number(interval.value) * 60, Math.ceil((now - first) / 95));
+    const N = Math.max(12, Math.min(96, Math.ceil((now - first) / step) + 1));
+    const span = N * step;
+    const slotOf = (t) => Math.min(N - 1, Math.max(0, Math.floor((t - (now - span)) / span * N)));
+    const WORST = { bad: 3, slow: 2, ok: 1, none: 0 };
+    const grid = sorted().map((host) => {
+      const cells = Array.from({ length: N }, () => ({ k: 'none', xs: [] }));
+      for (const x of histOf(host)) { const c = cells[slotOf(x[0])]; c.xs.push(x); if (WORST[kindOf(x)] > WORST[c.k]) c.k = kindOf(x); }
+      // cron runs every 10 minutes, so a check drifts into the next slot now and then: a single empty slot between
+      // two checked ones is that drift, not a missed check — draw it like the slot before
+      for (let i = 1; i < N - 1; i++) if (cells[i].k === 'none' && cells[i - 1].xs.length && cells[i + 1].xs.length) cells[i].k = cells[i - 1].k;
+      return [host, cells];
+    });
+    // runs of slots where at least two sites were checked and none opened
+    const dead = Array.from({ length: N }, (_, i) => { const ks = grid.map(([, c]) => c[i].k).filter((k) => k !== 'none'); return ks.length >= 2 && ks.every((k) => k === 'bad'); });
+    let run = null;
+    for (let i = N - 1; i >= 0; i--) { if (dead[i] && !run) run = [i, i]; else if (dead[i] && run && run[0] === i + 1) run[0] = i; else if (run) break; }
+    const slotT = (i) => now - span + span * i / N;
+    const ago = (s) => s < 5400 ? Math.round(s / 60) + ' мин' : s < 172800 ? Math.round(s / 3600) + ' ч' : Math.round(s / 86400) + ' дн';
+    return h('div', { class: 'mtl' },
+      grid.map(([host, cells]) => [
+        h('div', { class: 'mono mtl-host' }, h('span', { class: 'mtl-dot ' + kindOf(histOf(host).at(-1)) }), host),
+        h('div', { class: 'mtl-cells', style: `grid-template-columns:repeat(${N}, minmax(0, 1fr))` }, cells.map((c) => h('i', { class: c.k, title: c.xs.length ? c.xs.map(cellTitle).join('\n') : null }))),
+        h('div', { class: 'num sm', text: pctOf(histOf(host)) === null ? '—' : pctOf(histOf(host)) + '%' })]).flat(),
+      h('div', { class: 'mtl-axis' }, [1, 0.75, 0.5, 0.25, 0].map((f) => h('span', { text: f ? ago(span * f) + ' назад' : 'сейчас' }))),
+      run ? h('div', { class: 'mtl-note', text: `${fmtDate(Math.round(slotT(run[0])))} — ${fmtDate(Math.round(slotT(run[1] + 1)))}: не открывался ни один сайт. Похоже на сбой провайдера или роутера, а не на блокировку.` }) : null,
+      h('div', { class: 'mtl-legend sm muted' }, [['ok', 'открывался'], ['slow', 'медленно, больше 5 с'], ['bad', 'не открывался'], ['none', 'не проверялся']].map(([k, t]) => h('span', { class: k, text: t }))));
+  };
+  const draw = () => {
+    drawNext(); drawSum();
+    listBox.replaceChildren(!sites.length ? h('p', { class: 'muted', text: 'Сайтов нет — добавьте хотя бы один.' }) : view === 'tl' ? drawTimeline() : drawTable());
+  };
   const addNote = h('div', { class: 'mon-note' });
   let dupHosts = new Set();
   // same normalization as cleanHost() in api.php: the server drops duplicates, IPs and bad names silently
@@ -4173,9 +4267,11 @@ async function viewMonitor(main) {
       h('label', { class: 'row sm' }, enabled, 'включён'), interval,
       btn('Проверить все сейчас', async () => { toast('Проверяю…'); const r = await guarded(() => api('monitor_run')); if (r) { m.data = r.data; draw(); await loadState(); } }, 'small', 'refresh')),
       h('p', { class: 'sm muted', text: 'Сайты открываются с самого роутера через основной nfqws2. История — последние 96 проверок. При смене состояния «открывается ↔ нет» может прийти сообщение в Telegram — см. «Уведомления».' }),
-      nextInfo,
-      h('div', { class: 'row' }, add, btn('Добавить', addSite, 'primary', 'plus')), addNote, listBox));
-  [interval, enabled].forEach((x) => x.addEventListener('change', () => { save(); drawNext(); }));
+      sumBox,
+      h('div', { class: 'row' }, add, btn('Добавить', addSite, 'primary', 'plus')), addNote,
+      h('div', { class: 'row mon-viewrow' }, viewSeg, newTag('mon:view')), listBox));
+  drawSeg();
+  [interval, enabled].forEach((x) => x.addEventListener('change', () => { save(); draw(); }));
 }
 
 // Уведомления в Telegram о сайтах из мониторинга
@@ -5539,7 +5635,7 @@ async function viewAsn(main) {
       btn(x.auto ? 'Не обновлять' : 'Обновлять', async () => { if (await guarded(() => api('asn_set', { asn: x.asn, auto: !x.auto }))) route(true); }, 'small ghost')))) : null);
 }
 
-// ---------- Устройства ----------
+// ---------- Devices ----------
 // Who in the home network goes through nfqws2. A device is known by MAC; every listed device keeps its own
 // switch, and «new devices» decides only for the ones the router has not seen yet. OpenWrt only: on Keenetic
 // the firmware access policy does the same.
@@ -5610,7 +5706,9 @@ async function viewDevices(main) {
         h('td', { class: 'sm muted hide-narrow', text: x.online ? 'в сети' : 'нет' }),
         // the remove button keeps its place empty in other rows, so the switches stay in one column
         h('td', {}, h('div', { class: 'dev-act' }, toggle(x.on, 'Обход для ' + (x.name || x.mac), (v) => { x.on = v; tr.classList.toggle('off', !v); sync(); }),
-          x.manual ? btn('', () => { items.splice(items.indexOf(x), 1); draw(); sync(); }, 'small ghost icon slot', 'x', { title: 'Убрать из списка', 'aria-label': 'Убрать ' + x.mac }) : h('span', { class: 'slot' }))));
+          // any device not online now can be forgotten (phones change MACs; the list must not only grow);
+          // it comes back on its own when it shows up again
+          x.manual || !x.online ? btn('', () => { items.splice(items.indexOf(x), 1); draw(); sync(); }, 'small ghost icon slot', 'x', { title: x.manual ? 'Убрать из списка' : 'Забыть: устройство снова появится в списке, когда будет в сети', 'aria-label': 'Убрать ' + x.mac }) : h('span', { class: 'slot' }))));
       return tr;
     }));
   };

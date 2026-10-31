@@ -716,7 +716,10 @@ function snapExtra(array $snapFiles, ?array $cur = null): array
   $dirs = [substr(LISTS_DIR, 1) . '/', substr(CONF_DIR, 1) . '/blobs/'];
   $auto ??= array_map(fn($p) => substr($p, 1), array_filter(array_map(fn($p) => $p['autolist'], currentProfiles())));
   $extra = [];
-  foreach (array_keys($cur ?? snapHashes()) as $f) {
+  // $cur — current files to compare (the snapshot list passes its hashes); by default every *.list and blob on disk,
+  // big lists included: restoring compares with the archive's full file list
+  $cur ??= array_flip(array_map(fn($f) => substr($f, 1), array_merge(glob(LISTS_DIR . '/*.list') ?: [], glob(CONF_DIR . '/blobs/*') ?: [])));
+  foreach (array_keys($cur) as $f) {
     $inDir = array_filter($dirs, fn($d) => str_starts_with($f, $d));
     if ($inDir && !isset($snapFiles[$f]) && !in_array($f, $auto, true)) {
       $extra[] = $f;
@@ -1930,15 +1933,18 @@ function policyProbeOpts(): array
 }
 
 // ---------- devices: bypass only for chosen devices of the home network (OpenWrt) ----------
-// A device is known by its MAC. When a connection of a device without bypass enters the router from the LAN, it gets
-// our connmark bit (own chain in mangle PREROUTING, untouched by nfqws2 restarts). The first rule of nfqws_post and
-// nfqws_pre sends connections with that bit past nfqws2; the init script flushes those chains on every start, so
-// the two rules are put back after our restarts, on every cron pass and when the interface is opened.
-// The router's own traffic never passes PREROUTING from the LAN, so its checks always go through nfqws2.
+// A device is known by its MAC. Our own chain in mangle PREROUTING (first in it, before nfqws_pre) gives a NEW
+// connection from the LAN of a device without bypass our connmark bit, and every packet of such a connection — out
+// from the LAN and replies in from the WAN — the packet mark nfqws2 itself treats as «already processed»: all its
+// NFQUEUE rules carry «-m mark ! --mark MARK_PROCESSED», nfqws_pre returns on it. The packet mark set in PREROUTING
+// stays on a forwarded packet up to POSTROUTING. Nothing is put into nfqws2's own chains, so its restarts and
+// firewall rebuilds (which flush them) do not undo the choice. The router's own traffic never enters PREROUTING
+// from the LAN, so its checks always go through nfqws2.
 // Keenetic has the same in firmware (access policy, POLICY_NAME) — nothing is set up there.
 const DEV_CHAIN = 'nfqws_ui_dev';
 const DEV_MARK = '0x800000';
 const DEV_SIG = '/tmp/nfqws-ui-dev.sig';
+const DEV_TRY = '/tmp/nfqws-ui-dev.try';   // last failed attempt: do not hammer iptables on every state() poll
 const DEV_MAX = 256;
 
 function devicesConf(): array
@@ -2005,6 +2011,12 @@ function devicesList(): array
   return $items;
 }
 
+// nfqws2's «already processed» packet mark (MARK_PROCESSED in its init script)
+function devicesProcessedMark(): string
+{
+  return preg_match('/^MARK_PROCESSED="?(0x[0-9a-f]+)\//mi', (string)@file_get_contents(INIT_SCRIPT), $m) ? $m[1] : '0x40000000';
+}
+
 function devicesCmds(): array
 {
   $vars = confRawVars((string)@file_get_contents(CONF_FILE));
@@ -2017,28 +2029,44 @@ function devicesCmds(): array
 
 function devicesRemove(): void
 {
-  // delete a rule while it is there (duplicates included); at most a few rounds
-  $del = function (string $cmd): void {
-    for ($i = 0; $i < 5; $i++) {
-      exec("$cmd 2>/dev/null", $o, $rc);
-      if ($rc !== 0) {
-        return;
-      }
-    }
-  };
   foreach (['iptables', 'ip6tables'] as $c) {
     $ipt = "$c -w -t mangle ";
+    // the rules of the first version lived in nfqws2's chains: drop them too
     foreach (['nfqws_post', 'nfqws_pre'] as $ch) {
-      $del("$ipt-D $ch -m connmark --mark " . DEV_MARK . '/' . DEV_MARK . ' -j RETURN');
+      for ($i = 0; $i < 5 && exec("$ipt-D $ch -m connmark --mark " . DEV_MARK . '/' . DEV_MARK . ' -j RETURN 2>/dev/null', $o, $rc) !== false && $rc === 0; $i++);
     }
     exec($ipt . '-S ' . DEV_CHAIN . ' 2>/dev/null', $o, $rc);
     if ($rc === 0) {
-      $del("$ipt-D PREROUTING -j " . DEV_CHAIN);
+      for ($i = 0; $i < 5 && exec("$ipt-D PREROUTING -j " . DEV_CHAIN . ' 2>/dev/null', $o, $rc2) !== false && $rc2 === 0; $i++);
       exec($ipt . '-F ' . DEV_CHAIN . " 2>/dev/null; $ipt-X " . DEV_CHAIN . ' 2>/dev/null');
     }
   }
   @unlink(DEV_SIG);
+  @unlink(DEV_TRY);
   mangleRules(true);
+}
+
+function devicesRules(array $d, array $wan): array
+{
+  $m = DEV_MARK . '/' . DEV_MARK;
+  $p = devicesProcessedMark();
+  $mark = "-m connmark --mark $m -j MARK --set-xmark $p/$p";
+  $r = [$mark];   // packets of connections chosen before, both directions
+  foreach ($wan as $i) {
+    $r[] = '-i ' . escapeshellarg($i) . ' -j RETURN';   // only connections started from the home network are chosen
+  }
+  $r[] = '-m conntrack ! --ctstate NEW -j RETURN';
+  foreach ($d['list'] as $mac => $x) {
+    if (!preg_match('/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/', $mac) || !empty($x['on']) === $d['new_on']) {
+      continue;   // new_on: mark devices switched off; otherwise let devices switched on through and mark the rest
+    }
+    $r[] = "-m mac --mac-source $mac -j " . ($d['new_on'] ? "CONNMARK --set-xmark $m" : 'RETURN');
+  }
+  if (!$d['new_on']) {
+    $r[] = "-j CONNMARK --set-xmark $m";
+  }
+  $r[] = $mark;   // the first packet of a connection just chosen
+  return $r;
 }
 
 function devicesApply(): bool
@@ -2049,18 +2077,7 @@ function devicesApply(): bool
     return true;
   }
   [$cmds, $wan] = devicesCmds();
-  $m = DEV_MARK . '/' . DEV_MARK;
-  $rules = array_map(fn($i) => '-i ' . escapeshellarg($i) . ' -j RETURN', $wan);
-  $rules[] = '-m conntrack ! --ctstate NEW -j RETURN';
-  foreach ($d['list'] as $mac => $x) {
-    if (!preg_match('/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/', $mac) || !empty($x['on']) === $d['new_on']) {
-      continue;   // new_on: mark devices switched off; otherwise let devices switched on through and mark the rest
-    }
-    $rules[] = "-m mac --mac-source $mac -j " . ($d['new_on'] ? "CONNMARK --set-xmark $m" : 'RETURN');
-  }
-  if (!$d['new_on']) {
-    $rules[] = "-j CONNMARK --set-xmark $m";
-  }
+  $rules = devicesRules($d, $wan);
   $ok = true;
   foreach ($cmds as $c) {
     $ipt = "$c -w -t mangle ";
@@ -2072,27 +2089,38 @@ function devicesApply(): bool
     }
     exec($ipt . '-C PREROUTING -j ' . DEV_CHAIN . ' 2>/dev/null', $o, $rc);
     if ($rc !== 0) {
-      exec($ipt . '-I PREROUTING 1 -j ' . DEV_CHAIN . ' 2>/dev/null');
+      exec($ipt . '-I PREROUTING 1 -j ' . DEV_CHAIN . ' 2>/dev/null', $o, $rc);
+      $ok = $ok && $rc === 0;
     }
+    // the first version hooked into nfqws2's chains — not needed any more
     foreach (['nfqws_post', 'nfqws_pre'] as $ch) {
-      exec("$ipt-C $ch -m connmark --mark $m -j RETURN 2>/dev/null", $o, $rc);
-      if ($rc !== 0) {
-        exec("$ipt-I $ch 1 -m connmark --mark $m -j RETURN 2>/dev/null", $o, $rc);
-        $ok = $ok && ($rc === 0 || !findPid());   // nfqws2 stopped: its chains are absent, nothing to hook into
-      }
+      exec("$ipt-D $ch -m connmark --mark " . DEV_MARK . '/' . DEV_MARK . ' -j RETURN 2>/dev/null');
     }
   }
   @file_put_contents(DEV_SIG, devicesSig());
+  $ok ? @unlink(DEV_TRY) : @touch(DEV_TRY);
   mangleRules(true);
   return $ok;
 }
 
 function devicesSig(): string
 {
-  return md5(json_encode([devicesConf(), devicesCmds()]));
+  return md5(json_encode([devicesConf(), devicesCmds(), devicesProcessedMark()]));
 }
 
-// Rules in place? Restores them if nfqws2 was restarted, the router rebooted or the choice changed.
+// Are our chain and its PREROUTING jump in place, for IPv4 and (when on) IPv6?
+function devicesPlaced(array $cmds, bool $fresh): bool
+{
+  foreach ($cmds as $c) {
+    $all = $c === 'iptables' ? mangleRules($fresh) : (function () { exec('ip6tables -w -t mangle -S 2>/dev/null', $o); return $o; })();
+    if (!preg_grep('/^-A PREROUTING( .*)? -j ' . DEV_CHAIN . '\b/', $all) || !preg_grep('/^-A ' . DEV_CHAIN . ' /', $all)) {
+      return false;
+    }
+  }
+  return true;
+}
+
+// Rules in place? Restores them after a reboot, an outside flush or a change of the choice.
 // Returns null when bypass is for the whole network (nothing to keep).
 function devicesEnsure(bool $fresh = false): ?bool
 {
@@ -2107,17 +2135,16 @@ function devicesEnsure(bool $fresh = false): ?bool
     }
     return $memo = null;
   }
-  $running = (bool)findPid();
-  $placed = function (array $all) use ($running): bool {
-    // -v -S puts counters «-c P B» between the match and the target
-    $hook = fn($ch) => (bool)preg_grep('/^-A ' . $ch . ' .*--mark ' . DEV_MARK . '\/' . DEV_MARK . '( -c \d+ \d+)? -j RETURN/', $all);
-    return preg_grep('/^-A PREROUTING .*-j ' . DEV_CHAIN . '\b/', $all) && (!$running || ($hook('nfqws_post') && $hook('nfqws_pre')));
-  };
-  if ($placed(mangleRules($fresh)) && @file_get_contents(DEV_SIG) === devicesSig()) {
+  [$cmds] = devicesCmds();
+  if (devicesPlaced($cmds, $fresh) && @file_get_contents(DEV_SIG) === devicesSig()) {
     return $memo = true;
   }
+  // a failed attempt less than a minute ago: report, do not retry on every poll
+  if (!$fresh && @filemtime(DEV_TRY) > time() - 60) {
+    return $memo = false;
+  }
   devicesApply();
-  return $memo = $placed(mangleRules(true));
+  return $memo = devicesPlaced($cmds, true);
 }
 
 function volumeFrozen(string $url, array $resolve = []): bool
