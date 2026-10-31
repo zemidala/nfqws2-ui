@@ -461,9 +461,9 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 .status-ok { color: var(--ok); font-weight: 600; } .status-bad { color: var(--bad); font-weight: 600; }
 
 /* ---------- оформление ---------- */
-.looks { display: grid; grid-template-columns: repeat(auto-fit, minmax(210px, 1fr)); gap: 12px; border: 0; padding: 0; margin: 0; }
+.looks { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 12px; border: 0; padding: 0; margin: 0; }
 .looks legend { margin-bottom: 8px; }
-.look { position: relative; display: grid; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; background: var(--surface); cursor: pointer; }
+.look { position: relative; display: grid; align-content: start; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; background: var(--surface); cursor: pointer; }
 .look input { position: absolute; opacity: 0; }
 .look:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 .look:has(input:focus-visible) { outline: 2px solid var(--accent); outline-offset: 2px; }
@@ -589,7 +589,7 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
   .mon-tbl .mon-wide { display: none; } .mon-tbl .mon-narrow { display: inline; }
   .mon-tbl .mon-more { display: none; }
   .tbl.mon-tbl th, .tbl.mon-tbl td { padding-left: 4px; padding-right: 4px; }
-  .mon-tbl .mon-host { font-size: 13px; min-width: 9.5em; }   /* short names stay on one line */
+  .mon-tbl .mon-host { font-size: 13px; }
   .scroll > table.tbl.mon-tbl:has(th) { min-width: 0; }
   .mtl { grid-template-columns: minmax(0, 1fr) max-content; }
   .mtl-cells, .mtl-axis { grid-column: 1 / -1; }
@@ -1257,3 +1257,44 @@ label.chk > input[type="checkbox"], label.chk > input[type="radio"] { flex: none
 ::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:active { background: var(--accent); }
 ::-webkit-scrollbar-button { display: none; }
 .subtabs::-webkit-scrollbar { display: none; }
+
+/* ---------- Z · zemidala: the K layout with the brand palette (data-variant="k" data-palette="zd") ----------
+   Orange #ff6a14 fills (buttons, switches, markers) carry black text (7:1); orange as text is darker on light
+   (#c2490a) and lighter on dark (#ff8a45) — the pure brand orange reads at 2.9:1 as text. Black #07080b and
+   graphite surfaces, brand grey #9aa1b5 for captions in the black menu, blue #1d4dff as the second colour.
+   The selectors carry data-variant too, so they outrank every K colour block above (and its later overrides). */
+:root[data-variant="k"][data-palette="zd"] {
+  --bg: #f4f4f6; --surface: #ffffff; --line: #e2e3e8; --fg: #07080b; --muted: #5d6270; --faint: #737888;
+  --accent: #ff6a14; --accent-ink: #c2490a; --accent-fg: #07080b; --accent-soft: #fff1e8; --soft: #f1f2f5;
+  --k-side: #07080b; --k-active: #1a1208; --k-field: #8f939c; --zd-blue: #1d4dff; --zd-blue-soft: #eef2ff;
+}
+:root[data-variant="k"][data-palette="zd"][data-mode="dark"] {
+  --bg: #07080b; --surface: #111318; --line: #23262e; --fg: #eceef3; --muted: #b4bacb; --faint: #a3a9bb;
+  --accent: #ff6a14; --accent-ink: #ff8a45; --accent-fg: #07080b; --accent-soft: #2a1709; --soft: #191c22;
+  --k-side: #07080b; --k-active: #1a1208; --k-field: #5f636c; --zd-blue: #8ea4ff; --zd-blue-soft: #121a3a; --shadow: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-variant="k"][data-palette="zd"]:not([data-mode="light"]) {
+    --bg: #07080b; --surface: #111318; --line: #23262e; --fg: #eceef3; --muted: #b4bacb; --faint: #a3a9bb;
+    --accent: #ff6a14; --accent-ink: #ff8a45; --accent-fg: #07080b; --accent-soft: #2a1709; --soft: #191c22;
+    --k-side: #07080b; --k-active: #1a1208; --k-field: #5f636c; --zd-blue: #8ea4ff; --zd-blue-soft: #121a3a; --shadow: none;
+  }
+}
+/* the menu is black in both themes: its own text colours, scoped to it */
+:root[data-palette="zd"] #side:has(.mnav), :root[data-palette="zd"] .mnav {
+  --fg: #e8e9ee; --muted: #9aa1b5; --faint: #9aa1b5; --accent-ink: #ff8a45; --line: #23262e; color: var(--fg);
+}
+:root[data-palette="zd"] .mnav a.on { color: #ff8a45; font-weight: 600; box-shadow: inset 3px 0 #ff6a14; }
+:root[data-palette="zd"] .mnav a:hover { color: #ff8a45; }
+:root[data-palette="zd"] .mnav .tag.new { background: #1d4dff; }
+/* K paints table heads and the overview backdrop with the menu colour — black here, so they get their own */
+:root[data-palette="zd"] .tbl th { background: var(--soft); }
+:root[data-palette="zd"] .ov { background: transparent; }
+/* every block gets the orange line on top; information notes use the blue second colour */
+:root[data-palette="zd"] main .panel { border-top: 2px solid #ff6a14; }
+:root[data-palette="zd"] .notice.info { background: var(--zd-blue-soft); color: var(--fg); box-shadow: inset 3px 0 var(--zd-blue); }
+:root[data-palette="zd"] .notice.info > svg { color: var(--zd-blue); }
+.th-z { background: #f4f4f6; } .th-z .tl { background: #07080b; padding: 4px; } .th-z i { background: #3a3d45; height: 5px; }
+.th-z .acc { background: #ff6a14; width: 70%; } .th-z i.card { background: #fff; height: 30px; border: 1px solid #e2e3e8; border-top: 2px solid #ff6a14; }
+.look-new { display: grid; position: relative; }
+.look-new > .tag.new { position: absolute; top: 8px; right: 8px; }

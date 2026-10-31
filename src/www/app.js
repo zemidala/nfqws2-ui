@@ -442,14 +442,23 @@ async function guarded(fn, okText) {
 // Оформление по умолчанию: стиль K («как в Keenetic»). В браузере хранится только то, что выбрано явно, —
 // поэтому смена умолчания доходит до тех, кто стиль сам не выбирал
 const LOOK_DEFAULT = { variant: 'k', mode: 'auto', layout: 'menu' };
+// New installs (started on 1.26.0 or later) default to Z · zemidala; older ones keep K unless they pick a style.
+// The decision is cached in the browser so the page does not flash K before the state arrives.
+const ZD_SINCE = '1.26.0';
 function lookStored() {
   try { return JSON.parse(localStorage.getItem('nfqws-ui-look') || '{}') || {}; } catch { return {}; }
 }
-function getLook() {
-  return { ...LOOK_DEFAULT, ...lookStored() };
+function lookDefaultVariant() {
+  try { return localStorage.getItem('nfqws-ui-look-default') === 'z' ? 'z' : 'k'; } catch { return 'k'; }
 }
+function getLook() {
+  return { ...LOOK_DEFAULT, variant: lookDefaultVariant(), ...lookStored() };
+}
+// Z is the K layout with the brand palette: data-variant="k" keeps every K rule, data-palette="zd" swaps colours
+const isKLike = (variant) => variant === 'k' || variant === 'z';
 function applyLook(look = getLook()) {
-  document.documentElement.dataset.variant = look.variant;
+  document.documentElement.dataset.variant = look.variant === 'z' ? 'k' : look.variant;
+  if (look.variant === 'z') document.documentElement.dataset.palette = 'zd'; else delete document.documentElement.dataset.palette;
   document.documentElement.dataset.mode = look.mode;
   document.documentElement.dataset.layout = ['menu', 'tabs', 'site'].includes(look.layout) ? look.layout : 'menu';
   document.documentElement.toggleAttribute('data-simple', !!look.simple);
@@ -466,6 +475,14 @@ applyLook();
 
 async function loadState() {
   S.state = await api('state');
+  const since = S.state?.ui?.seen?.since;
+  if (since) {
+    const def = vcmp(since, ZD_SINCE) >= 0 ? 'z' : 'k';
+    if (def !== lookDefaultVariant()) {
+      try { localStorage.setItem('nfqws-ui-look-default', def); } catch { /* no storage */ }
+      if (!lookStored().variant) applyLook();
+    }
+  }
   updateChrome();
   return S.state;
 }
@@ -578,6 +595,7 @@ const FEATURES = [
   ['frz:inconf', '1.22.0', '«Обрыв на 16 КБ»: видно, что найденная стратегия уже стоит в конфиге и работает для этой сети'],
   ['frz:join', '1.23.0', '«Обрыв на 16 КБ»: сеть добавляется в профиль с той же стратегией одной строкой, а не новым профилем'],
   ['dev', '1.26.0', '«Устройства»: обход только для выбранных устройств домашней сети'],
+  ['look:zd', '1.26.0', 'стиль «Z · zemidala» в «Оформлении»: фирменные цвета — чёрное меню, графит, оранжевые акценты'],
   ['mon:view', '1.26.0', '«Мониторинг»: сводка, таблица с сортировкой и общая шкала времени — видно, когда падало всё сразу'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
@@ -1597,7 +1615,7 @@ const OVERVIEWS = [['brief', 'Кратко'], ['groups', 'Группы'], ['tile
 async function viewOverview(main, r) {
   sideBlocks();
   const look = getLook();
-  const view = OVERVIEWS.some(([v]) => v === look.overview) ? look.overview : simple() ? 'brief' : look.variant === 'k' ? 'masonry' : 'groups';   // в стиле K — отдельные карточки, как «Системный монитор»
+  const view = OVERVIEWS.some(([v]) => v === look.overview) ? look.overview : simple() ? 'brief' : isKLike(look.variant) ? 'masonry' : 'groups';   // в стиле K — отдельные карточки, как «Системный монитор»
   const B = { svc: SIDE.service, check: S.check.el, prob: SIDE.problems, mon: SIDE.monitor, backup: SIDE.backup, traffic: SIDE.traffic, ...overviewExtra() };
   const grp = (title, ...blocks) => h('div', { class: 'ogrp' }, h('h3', { text: title }), ...blocks);
   const body = {
@@ -4065,7 +4083,8 @@ async function paneLook(content) {
         card('a', 'A · Консоль', 'Плотно, панель с разделителями. Больше всего данных на экране.', h('span', { class: 'thumb th-a' }, h('span', { class: 'tl' }, i('acc'), i(), i(), i()), h('span', { class: 'tr' }, i(), i('', 'width:70%'), i('acc', 'width:40%')))),
         card('b', 'B · Карточки', 'Мягкие карточки и воздух. Удобнее на телефоне.', h('span', { class: 'thumb th-b' }, h('span', { class: 'tl' }, i(), i(), i('acc')), h('span', { class: 'tr' }, i(), i()))),
         card('c', 'C · Схема', 'Путь соединения через профили — главный объект.', h('span', { class: 'thumb th-c' }, h('span', { class: 'tl' }, i(), i(), i()), h('span', { class: 'tr' }, [0, 1, 2].map((k) => h('span', { class: 'pl' }, h('span', { class: 'nd' }), i(k === 0 ? 'acc' : '')))))),
-        card('k', 'K · Keenetic', 'Как веб-интерфейс Keenetic: светлое меню с разделами, белые карточки, синие кнопки.', h('span', { class: 'thumb th-k' }, h('span', { class: 'tl' }, i('acc'), i(), i(), i('acc'), i()), h('span', { class: 'tr' }, i('card'), i('card'))))),
+        card('k', 'K · Keenetic', 'Как веб-интерфейс Keenetic: светлое меню с разделами, белые карточки, синие кнопки.', h('span', { class: 'thumb th-k' }, h('span', { class: 'tl' }, i('acc'), i(), i(), i('acc'), i()), h('span', { class: 'tr' }, i('card'), i('card')))),
+        h('div', { class: 'look-new' }, card('z', 'Z · zemidala', 'Фирменные цвета: чёрное меню, графит, оранжевые кнопки и отметки. Раскладка как у K.', h('span', { class: 'thumb th-z' }, h('span', { class: 'tl' }, i('acc'), i(), i(), i('acc'), i()), h('span', { class: 'tr' }, i('card'), i('card')))), newTag('look:zd'))),
       h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Тема' }),
         h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Тема' }, [['auto', 'Как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(([m, t]) =>
           h('button', { type: 'button', role: 'radio', 'aria-checked': String(look.mode === m), class: look.mode === m ? 'on' : '', text: t, onclick: () => { setLook({ mode: m }); route(); } })))),
