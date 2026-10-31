@@ -467,7 +467,10 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 
 /* ---------- оформление ---------- */
 .looks { display: grid; grid-template-columns: repeat(auto-fit, minmax(185px, 1fr)); gap: 12px; border: 0; padding: 0; margin: 0; }
-.looks legend { margin-bottom: 8px; }
+.looks legend { margin-bottom: 8px; padding: 0; }   /* a legend has 2px of its own on the sides — the captions below have none */
+/* «Оттенок стиля», «Тема»: caption on top like the legends of the card groups, same left edge */
+.look-sub { display: grid; gap: 8px; justify-items: start; }
+.look-sub[hidden] { display: none; }
 .look { position: relative; display: grid; align-content: start; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; background: var(--surface); cursor: pointer; }
 .look input { position: absolute; opacity: 0; }
 .look:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }

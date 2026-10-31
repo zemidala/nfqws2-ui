@@ -4184,7 +4184,8 @@ async function paneLook(content) {
   const look = getLook();
   // tint of the chosen style (not Z): the slider repaints live, the marks update when let go
   const setTint = (v, t) => { const all = { ...(getLook().tints || {}) }; if (t === null) delete all[v]; else all[v] = t; setLook({ tints: all, bTint: undefined }); };
-  const tintRow = h('div', { class: 'frow tint-row' });
+  // the same shape as «Компоновка» and «Стиль интерфейса» above: a grey caption on top, the choice under it
+  const tintRow = h('div', { class: 'look-sub' });
   const drawTint = () => {
     const v = getLook().variant;
     tintRow.hidden = !TINT_VARIANTS.includes(v);
@@ -4192,7 +4193,7 @@ async function paneLook(content) {
     const cur = getLook().tints?.[v] ?? (v === 'b' ? getLook().bTint : undefined) ?? null;
     const own = typeof cur === 'number' && !TINTS.some(([t]) => t === cur);
     const tintNew = newTag('look:tint');
-    tintRow.replaceChildren(h('span', { class: 'lbl' }, 'Оттенок стиля', tintNew ? [' ', tintNew] : null),
+    tintRow.replaceChildren(h('span', { class: 'sm muted' }, 'Оттенок стиля', tintNew ? [' ', tintNew] : null),
       h('div', { class: 'tints', role: 'radiogroup', 'aria-label': 'Оттенок стиля' },
         TINTS.map(([t, name, H]) => h('button', { type: 'button', role: 'radio', 'aria-checked': String(!own && cur === t), class: 'tint' + (!own && cur === t ? ' on' : ''),
           onclick: () => { setTint(v, t); drawTint(); } },
@@ -4227,7 +4228,7 @@ async function paneLook(content) {
         card('k', 'K · Keenetic', 'Как веб-интерфейс Keenetic: светлое меню с разделами, белые карточки, синие кнопки.', h('span', { class: 'thumb th-k' }, h('span', { class: 'tl' }, i('acc'), i(), i(), i('acc'), i()), h('span', { class: 'tr' }, i('card'), i('card')))),
         h('div', { class: 'look-new' }, card('z', 'Z · zemidala', 'Фирменные цвета: чёрное меню, графит, оранжевые кнопки и отметки. Раскладка как у K.', h('span', { class: 'thumb th-z' }, h('span', { class: 'tl' }, i('acc'), i(), i(), i('acc'), i()), h('span', { class: 'tr' }, i('card'), i('card')))), newTag('look:zd'))),
       tintRow,
-      h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Тема' }),
+      h('div', { class: 'look-sub' }, h('span', { class: 'sm muted', text: 'Тема' }),
         h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Тема' }, [['auto', 'Как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(([m, t]) =>
           h('button', { type: 'button', role: 'radio', 'aria-checked': String(look.mode === m), class: look.mode === m ? 'on' : '', text: t, onclick: () => { setLook({ mode: m }); route(); } })))),
       h('p', { class: 'sm muted', text: 'Выбор хранится в этом браузере: на телефоне и компьютере можно выбрать разное.' })));
