@@ -708,7 +708,26 @@ function snapReadFile(string $id, string $rel): ?string
 // так что копию с одного роутера можно восстановить и на другом.
 // $nfqOnly — только конфиг, списки и блобы nfqws2, без настроек интерфейса (откат пакета nfqws2);
 // $keep — пути файлов (как на роутере), которые не трогать
-function restoreArchive(string $archive, string $reason, bool $nfqOnly = false, array $keep = []): array
+// Lists and blobs that exist now but are absent from a snapshot (by snapshot paths, as snapHashes keys them).
+// Autolists are left out: nfqws2 fills them itself.
+function snapExtra(array $snapFiles, ?array $cur = null): array
+{
+  static $auto = null;
+  $dirs = [substr(LISTS_DIR, 1) . '/', substr(CONF_DIR, 1) . '/blobs/'];
+  $auto ??= array_map(fn($p) => substr($p, 1), array_filter(array_map(fn($p) => $p['autolist'], currentProfiles())));
+  $extra = [];
+  foreach (array_keys($cur ?? snapHashes()) as $f) {
+    $inDir = array_filter($dirs, fn($d) => str_starts_with($f, $d));
+    if ($inDir && !isset($snapFiles[$f]) && !in_array($f, $auto, true)) {
+      $extra[] = $f;
+    }
+  }
+  return $extra;
+}
+
+// $prune: also delete lists and blobs that the archive does not have, so the result is exactly the snapshot.
+// Done only for directories the archive carries; the "before restore" snapshot keeps what is deleted.
+function restoreArchive(string $archive, string $reason, bool $nfqOnly = false, array $keep = [], bool $prune = false): array
 {
   exec('tar -tzf ' . escapeshellarg($archive) . ' 2>&1', $list, $rc);
   if ($rc !== 0 || !$list) {
@@ -745,8 +764,22 @@ function restoreArchive(string $archive, string $reason, bool $nfqOnly = false, 
     $changed[] = $e;
   }
   exec('rm -rf ' . escapeshellarg($tmp));
+  $removed = [];
+  if ($prune) {
+    $have = [];
+    foreach ($list as $e) {
+      $have[substr(ROOT . '/' . preg_replace('#^opt/#', '', $e), 1)] = 1;
+    }
+    $carried = array_filter([substr(LISTS_DIR, 1) . '/', substr(CONF_DIR, 1) . '/blobs/'], fn($d) => isset($have[$d])
+      || array_filter(array_keys($have), fn($k) => str_starts_with($k, $d)));
+    foreach (snapExtra($have) as $f) {
+      if (array_filter($carried, fn($d) => str_starts_with($f, $d)) && !in_array("/$f", $keep, true) && @unlink("/$f")) {
+        $removed[] = $f;
+      }
+    }
+  }
   historyScan('восстановление', $reason);
-  return $changed;
+  return ['changed' => $changed, 'removed' => $removed];
 }
 
 // ---------- история изменений ----------
@@ -7838,7 +7871,7 @@ function nfqUpdateJob(): void
     if ($keep) {
       nfqLog('Оставляю как есть (менялись после обновления): ' . implode(', ', array_map('basename', $keep)));
     }
-    $changed = restoreArchive(snapArchive($job['snap']), 'возврат nfqws2 ' . $to, true, $keep);
+    $changed = restoreArchive(snapArchive($job['snap']), 'возврат nfqws2 ' . $to, true, $keep)['changed'];
     nfqLog($changed ? 'Изменилось: ' . implode(', ', array_map('basename', $changed)) : 'Конфиг и списки и так совпадали со снимком');
   }
   // пакет перезапускает nfqws2 сам; ждём его, при необходимости запускаем
@@ -8784,8 +8817,7 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'POST' && ($_GET['upload'] ?? '') ===
   if (!$f || $f['error'] !== UPLOAD_ERR_OK || $f['size'] > 20 * 1048576) {
     fail('Файл не загрузился (не больше 20 МБ)');
   }
-  $changed = restoreArchive($f['tmp_name'], 'из файла ' . basename($f['name']));
-  respond(['changed' => $changed, 'lint' => lintCurrent()]);
+  respond(restoreArchive($f['tmp_name'], 'из файла ' . basename($f['name']), false, [], true) + ['lint' => lintCurrent()]);
 }
 
 if (($_SERVER['REQUEST_METHOD'] ?? '') !== 'POST') {
@@ -9564,6 +9596,7 @@ switch ($cmd) {
         }
       }
       $e['differs'] = $diff;
+      $e['extra'] = snapExtra($e['files'], $cur);   // restoring deletes these
       unset($e['files']);
     }
     unset($e);
@@ -9632,8 +9665,7 @@ switch ($cmd) {
 
   case 'snapshot_restore':
     $file = snapArchive($str('id'));
-    $changed = restoreArchive($file, 'из снимка ' . $str('id'));
-    respond(['changed' => $changed, 'lint' => lintCurrent()]);
+    respond(restoreArchive($file, 'из снимка ' . $str('id'), false, [], true) + ['lint' => lintCurrent()]);
 
   // Deletes snapshots from the router only. A snapshot with a NAS copy stays listed as NAS-only (the router key
   // cannot delete on the NAS, by design); a router-only snapshot is gone entirely.

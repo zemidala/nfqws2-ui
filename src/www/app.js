@@ -3509,7 +3509,7 @@ async function paneBase(content) {
   const issBox = h('div', {});
   const bar = h('div', { class: 'savebar', hidden: true });
   const chipsLua = h('div', { class: 'chips' });
-  const chipsBlob = h('div', { class: 'chips' });
+  const chipsBlob = h('div', { class: 'chips blobs' });
   const adders = h('div', { class: 'row base-add' });
   const relint = debounce(async (val) => {
     const r = await api('lint', { vars: { NFQWS_BASE_ARGS: val } }).catch(() => null);
@@ -3529,7 +3529,11 @@ async function paneBase(content) {
     const blobNames = blobToks.map((t) => t.slice(7).split(':')[0]);
     const blobFiles = blobToks.map((t) => base(t.replace(/^[^@]*@/, '')));
     chipsLua.replaceChildren(...(luaOn.length ? luaOn.map((f) => chip(f, 'mono')) : [h('span', { class: 'sm muted', text: 'не подключены — стратегии --lua-desync работать не будут' })]));
-    chipsBlob.replaceChildren(...(blobToks.length ? blobToks.map((t) => chip(t.slice(7).replace(/:@.*\//, ' → '), 'mono')) : [h('span', { class: 'sm muted', text: 'нет' })]));
+    // a blob is used if any other variable passes its name as a value (blob=, seqovl_pattern=, …)
+    const rest = Object.entries(S.conf.vars).filter(([k]) => k !== 'NFQWS_BASE_ARGS').map(([, v]) => v).join('\n');
+    const usedBlob = (n) => new RegExp('=' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=$|[\\s:,"\'])', 'm').test(rest);
+    chipsBlob.replaceChildren(...(blobToks.length ? blobToks.map((t, i) => h('div', { class: 'blob-row' }, chip(t.slice(7).replace(/:@.*\//, ' → '), 'mono'),
+      usedBlob(blobNames[i]) ? null : h('span', { class: 'sm muted', text: 'не используется в стратегиях' }))) : [h('span', { class: 'sm muted', text: 'нет' })]));
     if (!sys) { adders.replaceChildren(); return; }
     const used = new Set(toks.map((t) => t.replace(/^--/, '').split('=')[0]));
     // задаёт init-скрипт (user, qnum, pidfile, debug, bind-fix), добавляются своими списками (lua-init, blob)
@@ -3753,13 +3757,13 @@ async function paneBackup(content) {
   const fileInput = h('input', { type: 'file', accept: '.tar.gz,.tgz,application/gzip', hidden: true, onchange: async (e) => {
     const f = e.target.files[0];
     if (!f) return;
-    if (!confirm(`Восстановить конфиг и списки из «${f.name}»? Текущее состояние сохранится снимком.`)) return;
+    if (!confirm(`Восстановить конфиг и списки из «${f.name}»? Текущее состояние сохранится снимком. Списки и блобы, которых нет в архиве, удалятся.`)) return;
     const fd = new FormData();
     fd.append('archive', f);
     const r = await fetch('api.php?upload=restore', { method: 'POST', body: fd, credentials: 'same-origin' });
     const j = await r.json().catch(() => ({}));
     if (!r.ok) { toast(j.error || 'Не удалось восстановить', { err: true }); return; }
-    toast(j.changed.length ? `Восстановлено файлов: ${j.changed.length}. Перезапустите nfqws2.` : 'Архив совпадает с текущим состоянием');
+    toast(restoredText(j, 'Архив совпадает с текущим состоянием'));
     route(true);
   } });
   const maxCount = h('input', { class: 'input num', type: 'number', min: 5, max: 500, value: data.settings.max_count, style: 'width:90px', id: 'snap-count', 'aria-label': 'Не больше снимков' });
@@ -3804,9 +3808,10 @@ async function paneBackup(content) {
     h('td', {}, h('div', { class: 'row', style: 'flex-wrap:nowrap;gap:2px' },
       btn('Сравнить', () => compareSnapshot(e), 'small ghost', null, { disabled: e.partial || e.differs !== null && !e.differs.length }),
       btn('Восстановить', async () => {
-        if (!confirm(`Вернуть конфиг и списки к снимку от ${fmtDate(e.ts)}? Текущее состояние сохранится отдельным снимком.`)) return;
+        const gone = e.extra?.length ? `\n\nУдалятся (их не было в снимке): ${e.extra.map(base).join(', ')}.` : e.extra ? '' : '\n\nСписки и блобы, которых не было в снимке, удалятся.';
+        if (!confirm(`Вернуть конфиг и списки к снимку от ${fmtDate(e.ts)}? Текущее состояние сохранится отдельным снимком.${gone}`)) return;
         const r = await guarded(() => api('snapshot_restore', { id: e.id }));
-        if (r) { toast(r.changed.length ? `Восстановлено файлов: ${r.changed.length}. Перезапустите nfqws2.` : 'Снимок совпадает с текущим состоянием'); route(true); }
+        if (r) { toast(restoredText(r, 'Снимок совпадает с текущим состоянием')); route(true); }
       }, 'small ghost', null, { disabled: e.partial || e.differs !== null && !e.differs.length }),
       h('a', { class: 'btn small ghost icon', href: 'api.php?download=' + e.id, title: 'Скачать', 'aria-label': 'Скачать снимок' }, icon('download')),
       btn('', async () => { await guarded(() => api('snapshot_pin', { id: e.id, pinned: !e.pinned })); route(); }, 'small ghost icon' + (e.pinned ? ' primary' : ''), 'pin', { title: e.pinned ? 'Закреплён — не удаляется с роутера' : 'Закрепить: оставить на роутере', 'aria-label': 'Закрепить', disabled: !e.local }))));
@@ -3831,6 +3836,13 @@ async function paneBackup(content) {
     panel(R.stored ? 'Снимки' : 'Снимки на роутере', data.items.length ? [newTag('backup:delete'), selBar] : null, data.items.length ? h('div', { class: 'scroll' }, h('table', { class: 'tbl snaps' },
       h('thead', {}, h('tr', {}, h('th', { class: 'chk' }, all), h('th', { text: 'Когда' }), h('th', { text: 'Почему' }), h('th', { class: 'wide', text: 'По сравнению с текущим' }), h('th', { text: 'Где' }), h('th', { class: 'num', text: 'Размер' }), h('th'))),
       h('tbody', {}, rows))) : h('p', { class: 'muted', text: 'Снимков пока нет.' })));
+}
+
+// Toast after a restore: how many files came back from the snapshot and how many extra ones were deleted
+function restoredText(r, same) {
+  const n = r.changed.length, m = (r.removed || []).length;
+  if (!n && !m) return same;
+  return [n ? `Восстановлено файлов: ${n}` : '', m ? `удалено: ${m} (${r.removed.map(base).join(', ')})` : ''].filter(Boolean).join(', ') + '. Перезапустите nfqws2.';
 }
 
 // Confirms and deletes snapshots from the router. Consequences are listed only for the snapshots they apply to.

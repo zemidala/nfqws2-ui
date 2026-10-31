@@ -179,6 +179,9 @@ input[type="checkbox"]:disabled, input[type="radio"]:disabled { opacity: .45; cu
 .chip.mono { font-family: var(--mono); }
 button.chip { cursor: pointer; font-size: 12px; }
 .chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0; }
+.chips.blobs { flex-direction: column; align-items: flex-start; }
+.blob-row { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; min-width: 0; }
+.blob-row .chip { max-width: 100%; overflow-wrap: anywhere; }
 .lvl { display: inline-flex; flex: none; margin-top: 2px; }
 .lvl.error { color: var(--bad); } .lvl.warning { color: var(--warn); } .lvl.info { color: var(--accent-ink); } .lvl.ok { color: var(--ok); }
 .notice { border-radius: calc(var(--radius) * .8 + 2px); padding: 10px 12px; display: flex; gap: 10px; align-items: flex-start; }
