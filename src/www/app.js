@@ -560,7 +560,7 @@ const PAGES = {
   backup: ['#/settings/backup', 'Резервные копии'], hist: ['#/settings/hist', 'История изменений'], log: ['#/log', 'Журнал'],
   look: ['#/settings/look', 'Оформление'], about: ['#/settings/about', 'О программе'],
   // ещё не сделаны: в меню видны, но заблокированы и помечены «скоро»
-  diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], comm: ['#/tests/community', 'Стратегии сообщества'], frz: ['#/tests/freeze', 'Обрыв на 16 КБ'], dns: ['#/tests/dns', 'DNS-серверы'], cfg: ['#/tests/configs', 'Чужой конфиг'], auto: ['#/tests/auto', 'Автоподбор'], asn: ['#/asn', 'Список по ASN'], report: ['#/settings/report', 'Отчёт для помощи'],
+  diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], comm: ['#/tests/community', 'Стратегии сообщества'], frz: ['#/tests/freeze', 'Обрыв на 16 КБ'], dns: ['#/tests/dns', 'DNS-серверы'], conns: ['#/tests/conns', 'Соединения устройства'],cfg: ['#/tests/configs', 'Чужой конфиг'], auto: ['#/tests/auto', 'Автоподбор'], asn: ['#/asn', 'Список по ASN'], report: ['#/settings/report', 'Отчёт для помощи'],
 };
 // Новые функции — метка «новое». КАЖДАЯ новая функция интерфейса записывается сюда:
 // [страница из PAGES или «страница:функция», версия, в которой появилась, подпись для сообщения «Обновлено до…»].
@@ -596,6 +596,7 @@ const FEATURES = [
   ['frz:join', '1.23.0', '«Обрыв на 16 КБ»: сеть добавляется в профиль с той же стратегией одной строкой, а не новым профилем'],
   ['dev', '1.26.0', '«Устройства»: обход только для выбранных устройств домашней сети'],
   ['look:zd', '1.26.0', 'стиль «Z · zemidala» в «Оформлении»: фирменные цвета — чёрное меню, графит, оранжевые акценты'],
+  ['conns', '1.27.0', '«Соединения устройства»: куда ходит программа на устройстве сети, приходят ли ответы и видит ли эти порты nfqws2'],
   ['dns', '1.26.0', '«DNS-серверы»: какие DNS отвечают с роутера, не перехвачен ли обычный DNS и не подменяет ли DNS роутера адреса'],
   ['lists:order', '1.26.0', '«Списки»: поиск, группы по профилю и порядок по имени или по числу записей'],
   ['mon:view', '1.26.0', '«Мониторинг»: сводка, таблица с сортировкой и общая шкала времени — видно, когда падало всё сразу'],
@@ -645,16 +646,16 @@ const SOON_HINT = 'Ещё в разработке — появится в одн
 const SYS_PAGES = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 const SYS_NAV = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 // Компоновка «Боковое меню»: группы и их страницы
-const MENU = [[null, ['over']], ['Проверка сайта', ['diag', 'frz', 'dns', 'pick', 'trace', 'phist', 'comm', 'cfg']], ['Наблюдение', ['mon', 'auto', 'tg']], ['Обход', ['prof', 'lists', 'dev', 'asn']], ['Система', SYS_NAV]];
+const MENU = [[null, ['over']], ['Проверка сайта', ['diag', 'frz', 'dns', 'conns', 'pick', 'trace', 'phist', 'comm', 'cfg']], ['Наблюдение', ['mon', 'auto', 'tg']], ['Обход', ['prof', 'lists', 'dev', 'asn']], ['Система', SYS_NAV]];
 // Упрощённый вид (галочка в «Оформлении»): шесть разделов, страницы раздела — вкладками над страницей (как в TOP_TABS)
-const MENU_SIMPLE = [['over', 'Обзор', 'home', ['over']], ['pick', 'Проверка сайта', 'tests', ['diag', 'frz', 'dns', 'pick', 'trace', 'phist', 'comm', 'cfg', 'site']], ['mon', 'Наблюдение', 'pulse', ['mon', 'auto', 'tg']],
+const MENU_SIMPLE = [['over', 'Обзор', 'home', ['over']], ['pick', 'Проверка сайта', 'tests', ['diag', 'frz', 'dns', 'conns', 'pick', 'trace', 'phist', 'comm', 'cfg', 'site']], ['mon', 'Наблюдение', 'pulse', ['mon', 'auto', 'tg']],
   ['prof', 'Профили', 'layers', ['prof', 'dev']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]];
 // Верхние вкладки компоновок: страница по клику, подпись, значок, страницы вкладки, «только на узком экране»
 const TOP_TABS = {
   menu: [],
-  tabs: [['over', 'Обзор', 'home', ['over'], true], ['pick', 'Проверка', 'tests', ['diag', 'frz', 'dns', 'pick', 'trace', 'phist', 'comm', 'cfg', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'auto', 'tg']],
+  tabs: [['over', 'Обзор', 'home', ['over'], true], ['pick', 'Проверка', 'tests', ['diag', 'frz', 'dns', 'conns', 'pick', 'trace', 'phist', 'comm', 'cfg', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'auto', 'tg']],
     ['prof', 'Профили', 'layers', ['prof', 'dev']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
-  site: [['over', 'Обзор', 'home', ['over']], ['mon', 'Сайты', 'pulse', ['mon', 'diag', 'frz', 'dns', 'pick', 'trace', 'phist', 'comm', 'cfg', 'auto', 'tg', 'site']],
+  site: [['over', 'Обзор', 'home', ['over']], ['mon', 'Сайты', 'pulse', ['mon', 'diag', 'frz', 'dns', 'conns', 'pick', 'trace', 'phist', 'comm', 'cfg', 'auto', 'tg', 'site']],
     ['prof', 'Профили', 'layers', ['prof', 'dev']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
 };
 // Нижняя панель телефона — одна для всех компоновок; остальное — в меню
@@ -679,7 +680,7 @@ function pageOf(r = parseRoute()) {
   if (r.tab === 'diag') return 'diag';
   if (r.tab === 'asn') return 'asn';
   if (r.tab === 'devices') return 'dev';
-  if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace', history: 'phist', community: 'comm', freeze: 'frz', dns: 'dns', configs: 'cfg', auto: 'auto' }[r.arg] || 'pick';
+  if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace', history: 'phist', community: 'comm', freeze: 'frz', dns: 'dns', conns: 'conns', configs: 'cfg', auto: 'auto' }[r.arg] || 'pick';
   if (r.tab === 'settings') return SYS_PAGES.includes(r.arg) ? r.arg : ['readme', 'changelog'].includes(r.arg) ? 'about' : 'prof';
   return 'over';
 }
@@ -1142,7 +1143,7 @@ function placeSide() {
 // Колонка состояния справа — на страницах-формах, проверках и таблицах, когда для неё хватает ширины
 // (показывает CSS по ширине области содержимого). Во «Вкладках» не нужна: обзор и так слева.
 // Списки, профили, конфиг, журнал и мониторинг отдают всю ширину своему содержимому, «Обзор» — карточкам.
-const RAIL_PAGES = ['diag', 'frz', 'dns', 'cfg', 'pick', 'trace', 'phist', 'comm', 'auto', 'tg', 'asn', 'basic', 'base', 'backup', 'hist', 'report', 'look', 'about', 'site'];
+const RAIL_PAGES = ['diag', 'frz', 'dns', 'conns', 'cfg', 'pick', 'trace', 'phist', 'comm', 'auto', 'tg', 'asn', 'basic', 'base', 'backup', 'hist', 'report', 'look', 'about', 'site'];
 function placeRail(main, page) {
   main.classList.toggle('formy', RAIL_PAGES.includes(page));   // строки форм на широком экране — подсказки справа от поля
   if (!isWide() || overviewCol() || !RAIL_PAGES.includes(page)) return;
@@ -4470,6 +4471,7 @@ async function viewTests(main, r, bare = false) {
   if (r.arg === 'community') return viewCommunity(main);
   if (r.arg === 'freeze') return viewFreeze(main);
   if (r.arg === 'dns') return viewDns(main);
+  if (r.arg === 'conns') return viewConns(main);
   if (r.arg === 'configs') return viewCfg(main);
   const tab = ['trace', 'monitor', 'notify'].includes(r.arg) ? r.arg : 'pick';
   if (tab === 'monitor') {
@@ -5223,8 +5225,10 @@ async function viewFreeze(main) {
     if (n.baseline?.ok) return [levelIcon('ok'), h('span', { text: 'обрыва нет' })];
     if (!n.freeze) return [levelIcon('info'), h('span', { class: 'muted', text: 'не проверить: ' + (n.baseline?.reason || 'нет ответа') })];
     const what = n.stall ? 'замирает ещё до ответа' : 'обрыв есть';
-    if (n.found) return [levelIcon(inConfWorks(n) ? 'ok' : 'warning'), h('span', {}, what + ' · снимает имя ', h('b', { class: 'mono', text: n.found.name }), h('div', { class: 'sm muted', text: n.found.via ? `найдено на ${n.found.via} — та же сеть` : n.found.strategy + (n.found.ms ? `, ${n.found.ms} мс` : '') }), inConfNote(n))];
-    return [levelIcon('error'), h('span', { text: n.tried?.length ? `${what} · не снялся (проверено ${plural(n.tried.length, 'вариант', 'варианта', 'вариантов')})` : what })];
+    // the probe goes WITHOUT bypass; «Диагноз» checks through nfqws2 — both can be true at once, say it
+    const stallNote = n.stall ? h('div', { class: 'sm muted', text: 'Без обхода соединение с этим адресом открывается, но сервер не отвечает вовсе — провайдер глушит ещё раньше 16 КБ. Проба идёт мимо nfqws2, а «Диагноз» проверяет через ваш конфиг: если там сайт открывается, ваш профиль с этим уже справляется.' }) : null;
+    if (n.found) return [levelIcon(inConfWorks(n) ? 'ok' : 'warning'), h('span', {}, what + ' · снимает имя ', h('b', { class: 'mono', text: n.found.name }), h('div', { class: 'sm muted', text: n.found.via ? `найдено на ${n.found.via} — та же сеть` : n.found.strategy + (n.found.ms ? `, ${n.found.ms} мс` : '') }), inConfNote(n), stallNote)];
+    return [levelIcon('error'), h('span', {}, n.tried?.length ? `${what} · не снялся (проверено ${plural(n.tried.length, 'вариант', 'варианта', 'вариантов')})` : what, stallNote)];
   }
 
   // Найденная стратегия уже в конфиге: сервер сверяет при каждом чтении итога (конфиг мог поменяться после пробы)
@@ -5438,6 +5442,109 @@ async function viewDns(main) {
   }
 
   const s0 = await api('dns_get').catch(() => ({}));
+  draw(s0);
+  if (s0.running) poll();
+}
+
+// ============ Device connections: what a program on a home device talks to, and whether answers come back ============
+
+async function viewConns(main) {
+  const out = h('div', { class: 'stack', style: 'gap:14px' });
+  const devSel = h('select', { class: 'select', 'aria-label': 'Устройство' });
+  const secSel = h('select', { class: 'select', 'aria-label': 'Сколько записывать' }, [[30, '30 секунд'], [60, '1 минута'], [120, '2 минуты']].map(([v, t]) => h('option', { value: v, text: t, selected: v === 60 })));
+  const startBtn = btn('Записать', start, 'primary');
+  let onlyBad = false;
+  main.append(
+    h('div', { class: 'vh' }, h('h1', { text: 'Соединения устройства' })),
+    h('p', { class: 'muted dns-lead', text: 'Куда ходит программа на устройстве вашей сети и приходят ли ответы. Нужно, когда сайт открывается, а приложение работает плохо: голос в Discord обрывается, игра не входит в мир. Запись только читает таблицу соединений роутера и ничего не меняет.' }),
+    panel(null, null,
+      h('div', { class: 'conn-form' }, devSel, secSel, startBtn),
+      h('p', { class: 'sm muted', style: 'margin:8px 0 0', text: 'Пока идёт запись, пользуйтесь программой на этом устройстве: позвоните в Discord, зайдите в игру — и дождитесь обрыва, если он есть.' })),
+    out);
+
+  async function loadDevices(keep) {
+    const r = await api('conns_devices').catch(() => ({ items: [] }));
+    devSel.replaceChildren(...(r.items.length ? r.items.map((d) => h('option', { value: d.ip, selected: d.ip === keep,
+      text: (d.name ? `${d.name} — ${d.ip}` : d.ip) + (d.flows ? ` · ${plural(d.flows, 'соединение', 'соединения', 'соединений')}` : '') }))
+      : [h('option', { value: '', text: 'Устройств с соединениями нет' })]));
+    devSel.dispatchEvent(new Event('change'));
+  }
+  async function start() {
+    const s = await guarded(() => api('conns_start', { ip: devSel.value, secs: Number(secSel.value) }));
+    if (s) { draw(s); poll(); }
+  }
+  function poll() {
+    pollTest(async () => {
+      if (!out.isConnected) return false;
+      const s = await api('conns_get').catch(() => null);
+      if (!s) return true;
+      draw(s);
+      return !!s.running;
+    }, 2000);
+  }
+
+  const kb = (b) => fmtBytes(b);
+  // verdict for one direction: no answer at all, stalled after some data, or answering
+  const verdict = (f) => !f.rp ? ['нет ответа', 'bad'] : f.stall ? [`замер на ${kb(f.stall)}`, 'warn'] : ['отвечает', 'ok'];
+  const bad = (f) => verdict(f)[1] !== 'ok';
+  function nfqText(f) {
+    if (!f.seen) return [`порт ${f.dport} nfqws2 не видит`, 'warn'];
+    if ([80, 443].includes(f.dport)) return ['видит; профиль — по имени сайта', ''];
+    if (!f.profile) return ['видит, но ни один профиль не берёт', 'warn'];
+    const p = prof(f.profile);
+    return [`профиль #${f.profile}` + (p ? ` «${profName(p)}»` : '') + (f.l7 ? `, если это ${f.l7}` : ''), ''];
+  }
+
+  function draw(s) {
+    startBtn.disabled = !!s.running;
+    if (!s.started) {
+      out.replaceChildren();
+      return;
+    }
+    const flows = s.flows || [];
+    const nores = flows.filter((f) => !f.rp);
+    const stalled = flows.filter((f) => f.rp && f.stall);
+    const unseen = flows.filter((f) => f.seen === false);
+    const udpBad = nores.filter((f) => f.proto === 'udp');
+    const sum = h('div', { class: 'conn-sum' },
+      chip(`${plural(flows.length, 'направление', 'направления', 'направлений')}`, ''),
+      nores.length ? chip(`без ответа: ${nores.length}`, 'bad') : null,
+      stalled.length ? chip(`замерли: ${stalled.length}`, 'warn') : null,
+      unseen.length && !s.running ? chip(`nfqws2 не видит: ${unseen.length}`, 'warn') : null,
+      h('span', { class: 'grow' }),
+      flows.some(bad) ? h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: onlyBad, onchange: (e) => { onlyBad = e.target.checked; draw(s); } }), 'Только с проблемами') : null);
+    // hints say what the table shows, without guessing the fix
+    const hints = s.running ? [] : [
+      udpBad.length ? notice('bad', 'UDP без ответа', `Устройство шлёт UDP на ${udpBad.slice(0, 3).map((f) => `${f.dst}:${f.dport}`).join(', ')}${udpBad.length > 3 ? ' и ещё ' + (udpBad.length - 3) : ''}, а ответов нет. Так выглядит закрытый голос или игровой сервер. Сайт программы при этом может открываться — у него другие адреса.`) : null,
+      unseen.some((f) => !f.rp || f.stall) ? notice('warn', 'Порт мимо nfqws2', `Проблемные направления идут на порты, которых нет в TCP_PORTS/UDP_PORTS: ${[...new Set(unseen.filter((f) => !f.rp || f.stall).map((f) => `${f.proto.toUpperCase()} ${f.dport}`))].join(', ')}. nfqws2 такой трафик не видит, и стратегии к нему не применяются. Порты задаются в «Основное».`,
+        h('a', { class: 'btn small', href: '#/settings/basic' }, 'Основное')) : null,
+      s.offload ? notice('info', 'Включено ускорение потоков', 'В межсетевом экране OpenWrt включён flow offloading: у ускоренных соединений счётчики перестают расти, и «нет ответа» может быть ложным.') : null,
+      !flows.length ? notice('info', 'Соединений не было', 'За время записи устройство никуда не ходило. Запустите программу и запишите ещё раз.') : null,
+    ].filter(Boolean);
+    const rows = flows.filter((f) => !onlyBad || bad(f)).sort((a, b) => bad(b) - bad(a));
+    const tbl = h('div', { class: 'scroll' }, h('table', { class: 'tbl conn-tbl' },
+      h('thead', {}, h('tr', {}, ...['Куда', 'Порт', 'Отправлено', 'Получено', 'Итог', 'nfqws2'].map((t, i) => h('th', { class: i === 2 || i === 3 ? 'num' : '', text: t })))),
+      h('tbody', {}, rows.map((f) => {
+        const [vt, vc] = verdict(f);
+        const [nt, nc] = s.running ? ['…', ''] : nfqText(f);
+        // data-h: on a phone each row turns into a card and the cells carry their own captions
+        return h('tr', {},
+          h('td', { class: 'c-dst' }, h('span', { class: 'mono', text: f.dst }), f.as_name ? h('div', { class: 'sm muted', text: f.as_name }) : null),
+          h('td', { class: 'mono nowrap c-port', text: `${f.proto.toUpperCase()} ${f.dport}` }),
+          h('td', { class: 'num', 'data-h': 'Отправлено' }, kb(f.ob), h('div', { class: 'sm muted', text: plural(f.op, 'пакет', 'пакета', 'пакетов') })),
+          h('td', { class: 'num', 'data-h': 'Получено' }, kb(f.rb), h('div', { class: 'sm muted', text: plural(f.rp, 'пакет', 'пакета', 'пакетов') })),
+          h('td', { class: 'c-res' }, chip(vt, vc)),
+          h('td', { class: 'sm c-nfq' + (nc ? ' warnc' : ''), 'data-h': 'nfqws2', text: nt }));
+      }))));
+    out.replaceChildren(
+      s.running ? notice('info', `Записываю… ${s.elapsed || 0} из ${s.secs} с`, 'Пользуйтесь программой на устройстве.', h('span', { class: 'spin' }))
+        : s.died ? notice('warn', 'Запись прервалась', 'Запустите ещё раз.') : null,
+      ...hints,
+      panel(s.running ? 'Соединения' : `Соединения ${s.ip}`, s.finished ? h('span', { class: 'sm muted', text: fmtDate(s.finished) }) : null, sum, flows.length ? tbl : null));
+  }
+
+  const s0 = await api('conns_get').catch(() => ({}));
+  await loadDevices(s0.ip);
   draw(s0);
   if (s0.running) poll();
 }

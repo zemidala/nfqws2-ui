@@ -2263,10 +2263,9 @@ function excludeOptions(string $host, int $index): array
     $shown = array_slice($ips, 0, 8);
     $opts[] = ['mode' => 'ip', 'title' => 'По адресу ' . implode(', ', array_slice($shown, 0, 3)) . (count($shown) > 3 ? ' и ещё ' . (count($shown) - 3) : ''),
       'hint' => 'Для программ и игр, которые подключаются по адресу, без имени.', 'files' => [['name' => EXCLUDE_IP_LIST, 'add' => $shown]], 'token' => $ipToken];
-    $net = ripe('network-info', $ips[0], 8);
-    $asn = (int)($net['asns'][0] ?? 0);
+    $asn = (int)ipAsn($ips[0]);   // cached for a day, like the name below for a month
     if ($asn) {
-      $holder = (string)(ripe('as-overview', "AS$asn", 8)['holder'] ?? '');
+      $holder = asName($asn);
       $asPath = LISTS_DIR . "/ipset_as$asn.list";
       $opts[] = ['mode' => 'asn', 'asn' => $asn, 'title' => "Вся сеть AS$asn" . ($holder !== '' ? " ($holder)" : ''),
         'hint' => 'Если у сервера много адресов. Широко: мимо профиля пойдёт всё в этой сети. Список префиксов обновляется раз в сутки.',
@@ -7907,6 +7906,183 @@ function dnsJob(): void
   $save();
 }
 
+// ================= device connections =================
+// What a program on a home device really talks to: for N seconds the job reads the connection table
+// (/proc/net/nf_conntrack, packet and byte counters in both directions) and keeps the device's connections to the
+// internet. The answer to "Discord says it works but voice drops": UDP flows with no reply, or flows whose port
+// nfqws2 does not see at all. Read-only: nothing on the router changes.
+const CONN_FILE = '/tmp/nfqws-ui-conns.json';
+const CONN_SECS = [30, 60, 120];
+const CONN_MAX = 300;      // flows kept
+const CONN_STALL = 6;      // s: the device keeps sending, nothing comes back — the flow stalled
+
+// One line of nf_conntrack → [proto, src, dst, sport, dport, packets, bytes, rpackets, rbytes, state]
+function connParse(string $line): ?array
+{
+  if (!preg_match('/^ipv4\s+\d+\s+(tcp|udp)\s+\d+\s+\d+\s+(?:([A-Z_]+)\s+)?src=(\S+) dst=(\S+) sport=(\d+) dport=(\d+) packets=(\d+) bytes=(\d+)(?: \[UNREPLIED\])? src=\S+ dst=\S+ sport=\d+ dport=\d+ packets=(\d+) bytes=(\d+)/', $line, $m)) {
+    return null;
+  }
+  return ['proto' => $m[1], 'state' => $m[2], 'src' => $m[3], 'dst' => $m[4], 'sport' => (int)$m[5], 'dport' => (int)$m[6],
+    'op' => (int)$m[7], 'ob' => (int)$m[8], 'rp' => (int)$m[9], 'rb' => (int)$m[10]];
+}
+
+function connTable(): array
+{
+  $out = [];
+  foreach (explode("\n", (string)@file_get_contents('/proc/net/nf_conntrack')) as $l) {
+    if ($l !== '' && ($c = connParse($l))) {
+      $out[] = $c;
+    }
+  }
+  return $out;
+}
+
+function ipPrivate(string $ip): bool
+{
+  return isIp4($ip) && (ipReserved($ip) || ipInEntry(inet_pton($ip), '198.18.0.0/15'));
+}
+
+// Home devices that have connections to the internet now, with names where the router knows them
+function connDevices(): array
+{
+  $names = [];
+  if (ROOT === '') {
+    foreach (devicesList() as $d) {
+      if (!empty($d['ip'])) {
+        $names[$d['ip']] = $d['name'] ?: $d['mac'];
+      }
+    }
+  }
+  $own = array_filter(array_map('trim', explode(' ', (string)shell_exec('ip -4 -o addr show 2>/dev/null | awk \'{print $4}\' | cut -d/ -f1 | tr "\n" " "'))));
+  $n = [];
+  foreach (connTable() as $c) {
+    if (ipPrivate($c['src']) && !ipPrivate($c['dst']) && !in_array($c['src'], $own, true)) {
+      $n[$c['src']] = ($n[$c['src']] ?? 0) + 1;
+    }
+  }
+  arsort($n);
+  $out = [];
+  foreach ($n as $ip => $cnt) {
+    $out[] = ['ip' => $ip, 'name' => $names[$ip] ?? '', 'flows' => $cnt];
+  }
+  foreach ($names as $ip => $name) {
+    if (!isset($n[$ip])) {
+      $out[] = ['ip' => $ip, 'name' => $name, 'flows' => 0];
+    }
+  }
+  return $out;
+}
+
+function connData(): array
+{
+  $d = json_decode((string)@file_get_contents(CONN_FILE), true);
+  if (is_array($d) && !empty($d['running']) && time() - (int)@filemtime(CONN_FILE) > 30) {
+    $d['running'] = false;
+    $d['died'] = true;
+  }
+  return is_array($d) ? $d : [];
+}
+
+function connStart(string $ip, int $secs): void
+{
+  isIp4($ip) && ipPrivate($ip) || fail('Нужен адрес устройства домашней сети');
+  in_array($secs, CONN_SECS, true) || fail('Неверная длительность');
+  !empty(connData()['running']) && fail('Запись уже идёт');
+  file_put_contents(CONN_FILE, json_encode(['running' => true, 'ip' => $ip, 'secs' => $secs, 'started' => time(), 'flows' => []]));
+  exec('(env -i PATH=' . JOB_PATH . ' NFQWS_UI_CLI=conns php-cgi -q -f ' . escapeshellarg(__FILE__) . ' >/dev/null 2>&1 &)');
+}
+
+function connJob(): void
+{
+  set_time_limit(0);
+  $d = connData();
+  $ip = (string)($d['ip'] ?? '');
+  $secs = (int)($d['secs'] ?? 60);
+  if (!isIp4($ip)) {
+    return;
+  }
+  $t0 = time();
+  $flows = [];
+  $save = function () use (&$d, &$flows) {
+    uasort($flows, fn($a, $b) => $b['ob'] + $b['rb'] <=> $a['ob'] + $a['rb']);
+    $d['flows'] = array_values(array_slice($flows, 0, CONN_MAX));
+    file_put_contents(CONN_FILE, json_encode($d, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+  };
+  while (time() - $t0 < $secs) {
+    $now = time();
+    $seen = [];
+    foreach (connTable() as $c) {
+      if ($c['src'] !== $ip || ipPrivate($c['dst'])) {
+        continue;
+      }
+      // one row per (protocol, address, port): a program opens many connections to the same server
+      $k = $c['proto'] . '|' . $c['dst'] . '|' . $c['dport'];
+      $ck = $k . '|' . $c['sport'];
+      $f = $flows[$k] ?? ['proto' => $c['proto'], 'dst' => $c['dst'], 'dport' => $c['dport'], 'first' => $now - $t0, 'conns' => [], 'op' => 0, 'ob' => 0, 'rp' => 0, 'rb' => 0, 'stall' => 0];
+      $prev = $f['conns'][$ck] ?? [0, 0, 0, 0];
+      $f['conns'][$ck] = [$c['op'], $c['ob'], $c['rp'], $c['rb']];
+      $f['last'] = $now - $t0;
+      $f['state'] = $c['state'];
+      // stalled: the device sent more since the last look, the server sent nothing back for CONN_STALL s
+      if ($c['ob'] > $prev[1] && $c['rb'] === $prev[3]) {
+        $f['quiet'] = $f['quiet'] ?? $now;
+        if ($now - $f['quiet'] >= CONN_STALL) {
+          $f['stall'] = max($f['stall'], $c['rb']);
+        }
+      } elseif ($c['rb'] > $prev[3]) {
+        unset($f['quiet']);
+      }
+      $seen[$k] = true;
+      $flows[$k] = $f;
+    }
+    foreach ($flows as $k => &$f) {
+      $f['op'] = array_sum(array_column($f['conns'], 0));
+      $f['ob'] = array_sum(array_column($f['conns'], 1));
+      $f['rp'] = array_sum(array_column($f['conns'], 2));
+      $f['rb'] = array_sum(array_column($f['conns'], 3));
+      $f['n'] = count($f['conns']);
+    }
+    unset($f);
+    $d['elapsed'] = $now - $t0;
+    $save();
+    sleep(2);
+  }
+  // after the recording: does nfqws2 see the port, which profile takes the address, whose network it is
+  $v = confValues();
+  $ports = ['tcp' => parsePorts(str_replace(':', '-', $v['TCP_PORTS'])) ?? [], 'udp' => parsePorts(str_replace(':', '-', $v['UDP_PORTS'])) ?? []];
+  $profiles = currentProfiles();
+  $cache = new ListCache();
+  $names = 0;
+  foreach ($flows as &$f) {
+    unset($f['conns'], $f['quiet']);
+    $f['seen'] = inRanges($f['dport'], $ports[$f['proto']]);
+    $l7 = $f['proto'] === 'tcp' ? ($f['dport'] === 443 ? 'tls' : ($f['dport'] === 80 ? 'http' : 'unknown')) : ($f['dport'] === 443 ? 'quic' : 'unknown');
+    // a profile by address only: for HTTPS and QUIC the site name (SNI) decides, and the table has no names
+    if ($f['seen'] && $l7 === 'unknown') {
+      // the table does not say what protocol a UDP flow carries; voice programs are recognised by nfqws2 as discord
+      // or stun, and profiles often filter by that (--filter-l7=discord,stun)
+      foreach ($f['proto'] === 'udp' ? ['unknown', 'discord', 'stun'] : ['unknown'] as $try) {
+        if ($p = matchRoute($profiles, $f['dst'], [$f['dst']], $f['proto'], $f['dport'], $try, $cache)['profile'] ?? null) {
+          $f['profile'] = $p;
+          if ($try !== 'unknown') {
+            $f['l7'] = $try;
+          }
+          break;
+        }
+      }
+    }
+    if ($names++ < 30 && ($a = ipAsn($f['dst']))) {
+      $f['asn'] = $a;
+      $f['as_name'] = asName($a);
+    }
+  }
+  unset($f);
+  $d['offload'] = ROOT === '' && trim((string)shell_exec('uci -q get firewall.@defaults[0].flow_offloading 2>/dev/null')) === '1';
+  $d['running'] = false;
+  $d['finished'] = time();
+  $save();
+}
+
 // ================= обновление интерфейса =================
 // Проверка — по последнему релизу на GitHub, не чаще раза в 12 часов (кнопка «Проверить» — сразу).
 // Само обновление делает nfqws-ui-setup update в отдельном сеансе: при установке пакета lighttpd
@@ -9212,6 +9388,10 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
     dnsJob();
     exit(0);
   }
+  if ($cli === 'conns') {
+    connJob();
+    exit(0);
+  }
   seenInfo();   // первым — как и в state()
   pendingExpire(60);   // задание проверки после перезапуска могло погибнуть — откат не должен потеряться
   devicesEnsure();     // nfqws2 restarted outside the interface or the router rebooted
@@ -10423,6 +10603,16 @@ switch ($cmd) {
     $s['asn'] = array_values($s['asn']);
     saveUiSettings($s);
     respond(['items' => $s['asn']]);
+
+  case 'conns_devices':
+    respond(['items' => connDevices()]);
+
+  case 'conns_start':
+    connStart((string)($in['ip'] ?? ''), (int)($in['secs'] ?? 60));
+    respond(connData());
+
+  case 'conns_get':
+    respond(connData());
 
   case 'dns_start':
     dnsStart();

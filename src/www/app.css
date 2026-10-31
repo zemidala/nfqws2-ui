@@ -860,6 +860,26 @@ a.over-row:hover { background: var(--soft); }
   background: #23262e; border: 1px solid #3a3e48; border-right: 0; border-bottom: 0; }
 .ui-tip.up::before { top: auto; bottom: -6px; border: 1px solid #3a3e48; border-left: 0; border-top: 0; }
 .ui-tip[hidden] { display: none; }
+/* device connections page */
+.conn-form { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+@media (max-width: 599px) { .conn-form { grid-template-columns: minmax(0, 1fr); } }
+.conn-sum { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.conn-tbl td { vertical-align: top; }
+.conn-tbl td.nowrap { white-space: nowrap; }
+.conn-tbl td.warnc { color: var(--warn); }
+/* phone: a row is a card — address and verdict on top, port, then sent / received side by side, nfqws2 below */
+/* :root:root — above the K table rules and the shared «wide table keeps 600px» rule */
+@media (max-width: 599px) {
+  :root:root .conn-tbl thead { display: none; }
+  :root:root .scroll > .conn-tbl, :root:root .conn-tbl tbody { display: block; width: 100%; min-width: 0; }
+  :root:root .conn-tbl tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
+  :root:root .conn-tbl td { display: block; padding: 0; border: 0; text-align: left; background: none; }
+  :root:root .conn-tbl td.c-dst { grid-column: 1; grid-row: 1; }
+  :root:root .conn-tbl td.c-res { grid-column: 2; grid-row: 1; justify-self: end; }
+  :root:root .conn-tbl td.c-port { grid-column: 1 / -1; }
+  :root:root .conn-tbl td.c-nfq { grid-column: 1 / -1; }
+  :root:root .conn-tbl td[data-h]::before { content: attr(data-h); display: block; font-size: 12px; color: var(--muted); }
+}
 /* DNS servers page */
 .dns-lead { margin: -4px 0 14px; max-width: 860px; }
 .dns-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
