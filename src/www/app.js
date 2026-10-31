@@ -504,6 +504,9 @@ function tintCss(look) {
     const dark = vars(TINT_STEPS[v].dark) + ` --accent: ${dacc}; --accent-ink: ${c(70, iL)}; --accent-fg: ${c(60, 8)}; --accent-soft: ${c(42, 17)}; --tk-opt: ${c(70, iL)};`;
     const sel = `:root:root:root[data-variant="${v}"]${v === 'k' ? ':not([data-palette])' : ''}`;
     css += `${sel} { ${light} }\n${sel}[data-mode="dark"] { ${dark} }\n@media (prefers-color-scheme: dark) { ${sel}:not([data-mode="light"]) { ${dark} } }\n`;
+    // the style's preview in «Оформление» (always drawn light) takes the tint too
+    const tb = TINT_STEPS[v].light.bg || [14, 96];
+    css += `.thumb.th-${v} { background: ${c(tb[0], tb[1])}; } .thumb.th-${v} .acc { background: ${lacc}; } .thumb.th-${v} .nd { border-color: ${lacc}; }\n`;
   }
   return css;
 }
