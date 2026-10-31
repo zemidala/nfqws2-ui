@@ -849,6 +849,7 @@ a.over-row:hover { background: var(--soft); }
 .lnav-empty { padding: 12px 6px; }
 .lsec-h .pnum { font: 600 12.5px var(--mono); color: var(--accent-ink); white-space: nowrap; flex: none; }
 .lsec-h .pnum + b { white-space: normal; min-width: 0; }
+.lsec-h .pnum ~ .cnt { flex: none; overflow: visible; }
 .lrole { font-size: 11.5px; color: var(--warn); }
 /* own tooltip (shared handler in app.js): graphite with an orange line, the same in every theme */
 .ui-tip { position: fixed; z-index: 1000; max-width: min(320px, calc(100vw - 16px)); padding: 7px 10px 7px 13px; border-radius: 6px;
