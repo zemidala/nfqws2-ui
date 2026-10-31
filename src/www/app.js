@@ -596,10 +596,10 @@ const FEATURES = [
   ['frz:join', '1.23.0', '«Обрыв на 16 КБ»: сеть добавляется в профиль с той же стратегией одной строкой, а не новым профилем'],
   ['dev', '1.26.0', '«Устройства»: обход только для выбранных устройств домашней сети'],
   ['look:zd', '1.26.0', 'стиль «Z · zemidala» в «Оформлении»: фирменные цвета — чёрное меню, графит, оранжевые акценты'],
-  ['conns', '1.27.0', '«Соединения устройства»: куда ходит программа на устройстве сети, приходят ли ответы и видит ли эти порты nfqws2'],
   ['dns', '1.26.0', '«DNS-серверы»: какие DNS отвечают с роутера, не перехвачен ли обычный DNS и не подменяет ли DNS роутера адреса'],
   ['lists:order', '1.26.0', '«Списки»: поиск, группы по профилю и порядок по имени или по числу записей'],
   ['mon:view', '1.26.0', '«Мониторинг»: сводка, таблица с сортировкой и общая шкала времени — видно, когда падало всё сразу'],
+  ['conns', '1.27.0', '«Соединения устройства»: куда ходит программа на устройстве сети, приходят ли ответы и видит ли эти порты nfqws2'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 // на сколько минорных версий функция старше текущей (у сборки до выпуска — меньше нуля)
@@ -5464,6 +5464,7 @@ async function viewConns(main) {
 
   async function loadDevices(keep) {
     const r = await api('conns_devices').catch(() => ({ items: [] }));
+    if (r.noacct) out.before(notice('warn', 'Счётчики соединений выключены', 'В системе выключен учёт трафика соединений (nf_conntrack_acct = 0) — запись ничего не покажет. Включить: sysctl -w net.netfilter.nf_conntrack_acct=1 (до перезагрузки роутера).'));
     devSel.replaceChildren(...(r.items.length ? r.items.map((d) => h('option', { value: d.ip, selected: d.ip === keep,
       text: (d.name ? `${d.name} — ${d.ip}` : d.ip) + (d.flows ? ` · ${plural(d.flows, 'соединение', 'соединения', 'соединений')}` : '') }))
       : [h('option', { value: '', text: 'Устройств с соединениями нет' })]));
@@ -5484,10 +5485,13 @@ async function viewConns(main) {
   }
 
   const kb = (b) => fmtBytes(b);
-  // verdict for one direction: no answer at all, stalled after some data, or answering
-  const verdict = (f) => !f.rp ? ['нет ответа', 'bad'] : f.stall ? [`замер на ${kb(f.stall)}`, 'warn'] : ['отвечает', 'ok'];
+  // verdict for a row, counted per connection: one answering connection must not hide the failed ones
+  const of = (k, f) => f.n > 1 ? ` у ${k} из ${f.n}` : '';
+  const verdict = (f) => f.noans === f.n ? ['нет ответа', 'bad'] : f.noans ? [`нет ответа${of(f.noans, f)}`, 'warn']
+    : f.stalled ? [`замер на ${kb(f.stall)}${of(f.stalled, f)}`, 'warn'] : ['отвечает', 'ok'];
   const bad = (f) => verdict(f)[1] !== 'ok';
   function nfqText(f) {
+    if (f.podkop) return ['идёт через podkop', ''];
     if (!f.seen) return [`порт ${f.dport} nfqws2 не видит`, 'warn'];
     if ([80, 443].includes(f.dport)) return ['видит; профиль — по имени сайта', ''];
     if (!f.profile) return ['видит, но ни один профиль не берёт', 'warn'];
@@ -5502,10 +5506,10 @@ async function viewConns(main) {
       return;
     }
     const flows = s.flows || [];
-    const nores = flows.filter((f) => !f.rp);
-    const stalled = flows.filter((f) => f.rp && f.stall);
+    const nores = flows.filter((f) => f.noans);
+    const stalled = flows.filter((f) => !f.noans && f.stalled);
     const unseen = flows.filter((f) => f.seen === false);
-    const udpBad = nores.filter((f) => f.proto === 'udp');
+    const udpBad = flows.filter((f) => f.proto === 'udp' && f.noans === f.n);
     const sum = h('div', { class: 'conn-sum' },
       chip(`${plural(flows.length, 'направление', 'направления', 'направлений')}`, ''),
       nores.length ? chip(`без ответа: ${nores.length}`, 'bad') : null,
@@ -5516,10 +5520,11 @@ async function viewConns(main) {
     // hints say what the table shows, without guessing the fix
     const hints = s.running ? [] : [
       udpBad.length ? notice('bad', 'UDP без ответа', `Устройство шлёт UDP на ${udpBad.slice(0, 3).map((f) => `${f.dst}:${f.dport}`).join(', ')}${udpBad.length > 3 ? ' и ещё ' + (udpBad.length - 3) : ''}, а ответов нет. Так выглядит закрытый голос или игровой сервер. Сайт программы при этом может открываться — у него другие адреса.`) : null,
-      unseen.some((f) => !f.rp || f.stall) ? notice('warn', 'Порт мимо nfqws2', `Проблемные направления идут на порты, которых нет в TCP_PORTS/UDP_PORTS: ${[...new Set(unseen.filter((f) => !f.rp || f.stall).map((f) => `${f.proto.toUpperCase()} ${f.dport}`))].join(', ')}. nfqws2 такой трафик не видит, и стратегии к нему не применяются. Порты задаются в «Основное».`,
+      unseen.some(bad) ? notice('warn', 'Порт мимо nfqws2', `Проблемные направления идут на порты, которых нет в TCP_PORTS/UDP_PORTS: ${[...new Set(unseen.filter(bad).map((f) => `${f.proto.toUpperCase()} ${f.dport}`))].join(', ')}. nfqws2 такой трафик не видит, и стратегии к нему не применяются. Порты задаются в «Основное».`,
         h('a', { class: 'btn small', href: '#/settings/basic' }, 'Основное')) : null,
       s.offload ? notice('info', 'Включено ускорение потоков', 'В межсетевом экране OpenWrt включён flow offloading: у ускоренных соединений счётчики перестают расти, и «нет ответа» может быть ложным.') : null,
-      !flows.length ? notice('info', 'Соединений не было', 'За время записи устройство никуда не ходило. Запустите программу и запишите ещё раз.') : null,
+      s.noacct ? notice('warn', 'Счётчики соединений выключены', 'В системе выключен учёт трафика соединений (nf_conntrack_acct = 0), поэтому записать нечего. Включить: sysctl -w net.netfilter.nf_conntrack_acct=1 — действует до перезагрузки роутера.')
+        : !flows.length ? notice('info', 'Соединений не было', 'За время записи устройство никуда не ходило. Запустите программу и запишите ещё раз.') : null,
     ].filter(Boolean);
     const rows = flows.filter((f) => !onlyBad || bad(f)).sort((a, b) => bad(b) - bad(a));
     const tbl = h('div', { class: 'scroll' }, h('table', { class: 'tbl conn-tbl' },
@@ -5537,7 +5542,8 @@ async function viewConns(main) {
           h('td', { class: 'sm c-nfq' + (nc ? ' warnc' : ''), 'data-h': 'nfqws2', text: nt }));
       }))));
     out.replaceChildren(
-      s.running ? notice('info', `Записываю… ${s.elapsed || 0} из ${s.secs} с`, 'Пользуйтесь программой на устройстве.', h('span', { class: 'spin' }))
+      s.running ? (s.step === 'annotate' ? notice('info', 'Запись закончена, определяю сети и профили…', null, h('span', { class: 'spin' }))
+        : notice('info', `Записываю… ${s.elapsed || 0} из ${s.secs} с`, 'Пользуйтесь программой на устройстве.', h('span', { class: 'spin' })))
         : s.died ? notice('warn', 'Запись прервалась', 'Запустите ещё раз.') : null,
       ...hints,
       panel(s.running ? 'Соединения' : `Соединения ${s.ip}`, s.finished ? h('span', { class: 'sm muted', text: fmtDate(s.finished) }) : null, sum, flows.length ? tbl : null));
