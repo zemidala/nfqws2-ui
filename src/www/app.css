@@ -1338,6 +1338,9 @@ label.chk > input[type="checkbox"], label.chk > input[type="radio"] { flex: none
 :root[data-palette="zd"] .ov { background: transparent; }
 /* every block gets the orange line on top; information notes use the blue second colour */
 :root[data-palette="zd"] main .panel { border-top: 2px solid #ff6a14; }
+/* K panels are flat and flush with the page; in Z a panel is a visible card, so its content needs room inside */
+:root[data-palette="zd"] main .panel, :root[data-palette="zd"] main .panel + .panel { padding: 18px 22px 22px; border-radius: 4px; }
+@media (max-width: 479px) { :root[data-palette="zd"] main .panel, :root[data-palette="zd"] main .panel + .panel { padding: 14px 14px 16px; } }
 :root[data-palette="zd"] .notice.info { background: var(--zd-blue-soft); color: var(--fg); box-shadow: inset 3px 0 var(--zd-blue); }
 :root[data-palette="zd"] .notice.info > svg { color: var(--zd-blue); }
 .th-z { background: #f4f4f6; } .th-z .tl { background: #07080b; padding: 4px; } .th-z i { background: #3a3d45; height: 5px; }

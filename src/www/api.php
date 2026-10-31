@@ -6403,8 +6403,10 @@ function providerDetect(): ?array
 // AS провайдера: из настроек; $detect — если не задан, определить (запрос к RIPEstat)
 function myAsn(bool $detect): int
 {
+  static $tried = false;   // a failed detection is not repeated within one request or job (two RIPEstat calls each)
   $asn = (int)uiSettings()['provider_asn'];
-  if (!$asn && $detect) {
+  if (!$asn && $detect && !$tried) {
+    $tried = true;
     $asn = (int)(providerDetect()['asn'] ?? 0);
   }
   return $asn;
@@ -7686,16 +7688,19 @@ function diagQuic(string $host, string $ip): array
 // the provider's DNS return against DoH. A background job (NFQWS_UI_CLI=dns); progress and result in DNS_FILE.
 // The router's DNS settings are never changed here — the page only shows and advises.
 const DNS_FILE = '/tmp/nfqws-ui-dns.json';
-const DNS_JOB_MAX = 240;   // a job older than this is considered dead
+const DNS_JOB_MAX = 120;   // no progress written for this long — the job is dead
 // [name, IPv4, DoT/DoH host name, networks its resolvers ask from (seen in whoami); empty — not checked]
 const DNS_SERVERS = [
   ['Cloudflare', '1.1.1.1', 'cloudflare-dns.com', [13335]],
   ['Google', '8.8.8.8', 'dns.google', [15169]],
-  ['Quad9', '9.9.9.9', 'dns.quad9.net', [42, 19281]],
+  ['Quad9', '9.9.9.9', 'dns.quad9.net', []],   // asks upstream from partner networks too
   ['AdGuard DNS', '94.140.14.14', 'dns.adguard-dns.com', []],
   ['Яндекс', '77.88.8.8', 'common.dot.dns.yandex.net', [13238]],
 ];
-const DNS_FAST_MS = 5;   // a public server abroad cannot answer this fast: someone nearby answered instead
+// a public server that answers from the same address as the router's own DNS and this fast is the home network's
+// resolver answering in its place (a router or AdGuard catching port 53); a fast answer alone proves nothing —
+// Yandex and Cloudflare have nodes in Russia that answer in 2–4 ms
+const DNS_FAST_MS = 5;
 const DNS_SITES = ['rutracker.org', 'nnmclub.to', 'linkedin.com', 'x.com', 'instagram.com', 'facebook.com'];
 const DNS_SITES_MAX = 10;   // plus monitoring sites up to this many
 
@@ -7755,7 +7760,8 @@ function asName(int $asn): string
     if ($d === null) {
       return '';
     }
-    $c[$asn] = [preg_replace('/\s*-\s*.*$/', '', (string)($d['holder'] ?? '')), time()];
+    // "CLOUDFLARENET - Cloudflare, Inc." → "CLOUDFLARENET"; a hyphen inside the handle (ROSTELECOM-AS) stays
+    $c[$asn] = [preg_replace('/\s+-\s+.*$/', '', (string)($d['holder'] ?? '')), time()];
     @mkdir(CACHE_DIR, 0700, true);
     @file_put_contents($file, json_encode($c, JSON_UNESCAPED_UNICODE));
   }
@@ -7764,8 +7770,9 @@ function asName(int $asn): string
 
 // Plain DNS to a server and who really answered: the resolver's outgoing address and its network. $expect — networks of
 // a public server (null for the router's and the provider's own DNS, which are not checked for interception).
-// Intercepted: the answer came from the provider's network, from another network than the server's, or too fast
-function dnsPlain(string $server, ?array $expect = null): array
+// Intercepted: the answer came from the provider's network, from another network than the server's, or from the
+// router's own resolver ($routerWho) and very fast
+function dnsPlain(string $server, ?array $expect = null, int $my = 0, ?string $routerWho = null): array
 {
   $r = dnsUdp($server, 'ya.ru');
   if (!$r['ok']) {
@@ -7775,8 +7782,8 @@ function dnsPlain(string $server, ?array $expect = null): array
   $asn = $who ? ipAsn($who) : null;
   $out = ['st' => 'ok', 'ms' => $r['ms'], 'who' => $who, 'asn' => $asn, 'as_name' => $asn ? asName($asn) : ''];
   if ($expect !== null) {
-    $my = myAsn(true);
-    $why = $asn && $my && $asn === $my ? 'isp' : ($asn && $expect && !in_array($asn, $expect, true) ? 'other' : ($r['ms'] < DNS_FAST_MS ? 'fast' : null));
+    $local = $who && $who === $routerWho && $r['ms'] < DNS_FAST_MS && (!$expect || !in_array($asn, $expect, true));
+    $why = $asn && $my && $asn === $my ? 'isp' : ($local ? 'local' : ($asn && $expect && !in_array($asn, $expect, true) ? 'other' : null));
     if ($why) {
       $out['st'] = 'intercepted';
       $out['why'] = $why;
@@ -7827,7 +7834,9 @@ function dnsVerdict(array $ips, array $ref): string
 function dnsData(): array
 {
   $d = json_decode((string)@file_get_contents(DNS_FILE), true);
-  if (is_array($d) && !empty($d['running']) && time() - ($d['started'] ?? 0) > DNS_JOB_MAX) {
+  // dead = no progress written for DNS_JOB_MAX (the job saves after every server and site), not "started long ago":
+  // with RIPEstat or DoH slow a living job may well run longer
+  if (is_array($d) && !empty($d['running']) && time() - (int)@filemtime(DNS_FILE) > DNS_JOB_MAX) {
     $d['running'] = false;
     $d['died'] = true;
   }
@@ -7845,13 +7854,16 @@ function dnsStart(): void
 
 function dnsJob(): void
 {
+  set_time_limit(0);
   $d = ['running' => true, 'started' => time(), 'servers' => [], 'sites' => [], 'step' => 'servers'];
   $save = function () use (&$d) { file_put_contents(DNS_FILE, json_encode($d, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)); };
   $save();
   $loc = dnsLocalServers();
-  $d['isp_asn'] = myAsn(true) ?: null;
-  $d['isp_name'] = $d['isp_asn'] ? asName($d['isp_asn']) : '';
-  $d['servers'][] = ['name' => 'DNS роутера', 'ip' => $loc['router'], 'kind' => 'router', 'udp' => dnsPlain($loc['router'])];
+  $my = myAsn(true);   // once per job: when it is not saved yet, detecting goes to RIPEstat
+  $d['isp_asn'] = $my ?: null;
+  $d['isp_name'] = $my ? asName($my) : '';
+  $router = dnsPlain($loc['router']);
+  $d['servers'][] = ['name' => 'DNS роутера', 'ip' => $loc['router'], 'kind' => 'router', 'udp' => $router];
   $save();
   if ($loc['isp']) {
     $d['servers'][] = ['name' => 'DNS провайдера', 'ip' => $loc['isp'], 'kind' => 'isp', 'udp' => dnsPlain($loc['isp'])];
@@ -7859,7 +7871,7 @@ function dnsJob(): void
   }
   foreach (DNS_SERVERS as [$name, $ip, $host, $expect]) {
     $doh = dohResolve($host, $ip, 'ya.ru');
-    $d['servers'][] = ['name' => $name, 'ip' => $ip, 'host' => $host, 'kind' => 'public', 'udp' => dnsPlain($ip, $expect),
+    $d['servers'][] = ['name' => $name, 'ip' => $ip, 'host' => $host, 'kind' => 'public', 'udp' => dnsPlain($ip, $expect, $my, $router['who'] ?? null),
       'dot' => dotProbe($host, $ip), 'doh' => $doh['ok'] && $doh['ips'] ? ['ok' => true, 'ms' => $doh['ms']] : ['ok' => false, 'ms' => 0, 'error' => $doh['error'] ?? 'пустой ответ']];
     $save();
   }

@@ -2418,7 +2418,7 @@ function drawListNav(nav, current) {
     const used = all.filter((l) => l.used.length);
     const off = all.filter((l) => !l.used.length);
     const total = all.reduce((a, l) => a + (l.entries || 0), 0);
-    // неподключённые раскрыты, если открыт один из них, подключённых в разделе нет или идёт поиск
+    // not connected lists are open when one of them is current, the section has no connected ones, or a search is on
     const offOpen = !used.length || !!query || off.some((l) => l.name === current) || fold['off-' + kind] === true;
     const closed = fold[kind] === true && !query && !all.some((l) => l.name === current);
     const box = h('div', { class: 'lsec' + (closed ? ' closed' : '') });
@@ -5336,7 +5336,7 @@ async function viewDns(main) {
     const u = s.udp || {};
     if (u.st === 'none') return [chip('нет ответа', 'bad'), null, 'на порт 53 ответа нет'];
     if (u.st === 'intercepted') {
-      const why = u.why === 'isp' ? 'ответил сервер провайдера' : u.why === 'fast' ? `ответ за ${u.ms} мс — так быстро отвечает кто-то рядом` : `ответил ${who(u)}, а не ${s.name}`;
+      const why = u.why === 'isp' ? 'ответил сервер провайдера' : u.why === 'local' ? `ответил DNS вашей сети за ${u.ms} мс, а не ${s.name}` : `ответил ${who(u)}, а не ${s.name}`;
       return [chip('перехвачен', 'bad'), u.ms, why];
     }
     return [chip('отвечает', 'ok'), u.ms, s.kind !== 'public' && u.asn ? 'дальше спрашивает ' + who(u) : null];
@@ -5357,7 +5357,7 @@ async function viewDns(main) {
         : ['ok', 'Отдаёт настоящие адреса', router?.udp?.asn ? 'Дальше спрашивает ' + who(router.udp) + '.' : ''];
     const ic = pub.filter((x) => x.udp?.st === 'intercepted');
     const none = pub.filter((x) => x.udp?.st === 'none');
-    const answered = [...new Set(ic.map((x) => x.udp.why === 'isp' ? 'сервер провайдера' : x.udp.why === 'fast' ? 'кто-то рядом' : who(x.udp)))];
+    const answered = [...new Set(ic.map((x) => x.udp.why === 'isp' ? 'сервер провайдера' : x.udp.why === 'local' ? 'DNS вашей сети' : who(x.udp)))];
     const t2 = !pub.length ? null : ic.length ? ['bad', 'Перехвачен', `Спрашивали ${ic.map((x) => x.name).join(', ')} — ответил ${answered.join(', ')}.`]
       : none.length === pub.length ? ['bad', 'Не проходит', 'Ни один сервер не ответил на порт 53.']
         : none.length ? ['warn', 'Отвечают не все', `Нет ответа от ${none.map((x) => x.name).join(', ')}.`] : ['ok', 'Проходит', 'Отвечают те серверы, которых спрашивали.'];
@@ -5371,7 +5371,9 @@ async function viewDns(main) {
     // plain DNS alone does not matter if the router already asks over a secure channel
     const best = okSec.map(([p, x, r]) => ({ p, x, ms: r.ms })).sort((a, b) => a.ms - b.ms)[0];
     const trouble = fake.length > 0;
-    const adv = !sites.length ? null : !trouble ? notice('ok', 'DNS роутера в порядке', ic.length
+    const adv = !sites.length ? null : !trouble && silent.length ? notice('warn', 'DNS роутера отвечает не на все сайты',
+      `На ${silent.map((x) => x.host).join(', ')} он не вернул адреса. Если эти сайты нужны — проверьте их в «Диагнозе блокировки»: бывает, что DNS провайдера молчит вместо заглушки.`)
+      : !trouble ? notice('ok', 'DNS роутера в порядке', ic.length
       ? 'Обычный DNS к чужим серверам перехвачен, но роутер получает настоящие адреса — менять ничего не нужно.'
       : 'Роутер получает настоящие адреса — менять ничего не нужно.')
       : best ? notice('info', 'Что сделать', `Поставьте в роутере защищённый DNS — быстрее всех ответил ${best.x.name} по ${best.p} (${best.ms} мс). Тогда настоящие адреса получат и роутер, и все устройства сети.`,
@@ -5403,8 +5405,10 @@ async function viewDns(main) {
       h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
         h('thead', {}, h('tr', {}, h('th', { text: 'Сайт' }), h('th', { text: 'DNS роутера' }), hasIsp ? h('th', { text: 'DNS провайдера' }) : null, h('th', { text: 'Защищённый DNS' }))),
         h('tbody', {}, sites.map((x) => h('tr', {}, h('td', { class: 'mono' }, x.host), cell(x.router), hasIsp ? cell(x.isp) : null,
-          h('td', { class: 'mono sm' }, x.ref.join(', ') || '—')))))),
-      sites.some((x) => x.router.st === 'podkop') ? h('p', { class: 'sm muted', text: 'podkop — адреса 198.18.x выдаёт podkop: такие сайты идут через него, так и задумано.' }) : null) : null;
+          h('td', { class: 'mono sm' }, x.ref.join(', ') || '—')))),
+        // the note is a table row, so it starts where the cell text starts in every style
+        sites.some((x) => x.router.st === 'podkop' || x.isp?.st === 'podkop') ? h('tfoot', {}, h('tr', {}, h('td', { class: 'sm muted', colspan: hasIsp ? 4 : 3,
+          text: 'podkop — адреса 198.18.x выдаёт podkop: такие сайты идут через него, так и задумано.' }))) : null))) : null;
     out.replaceChildren(
       s.running ? notice('info', s.step === 'sites' ? `Сверяю адреса сайтов… ${sites.length}` : `Спрашиваю серверы… ${s.servers.length}`, null, h('span', { class: 'spin' }))
         : s.died ? notice('warn', 'Проверка прервалась', 'Запустите ещё раз.') : null,
@@ -6569,7 +6573,8 @@ function tipText(t) {
 // browser does not show its own tooltip, and refresh the one on screen
 new MutationObserver((muts) => {
   for (const m of muts) {
-    if (!m.target.hasAttribute('title')) continue;
+    // a native select is hidden behind its own dropdown button, which takes the title from it (ddSync)
+    if (!m.target.hasAttribute('title') || m.target.tagName === 'SELECT') continue;
     tipText(m.target);
     if (m.target === TIP.target && TIP.el) {
       if (m.target.dataset.tip) TIP.el.textContent = m.target.dataset.tip; else tipHide();
@@ -6602,7 +6607,7 @@ function tipHide() {
   TIP.target?.removeAttribute('aria-describedby');
   TIP.target = null;
 }
-const tipFor = (e) => e.target.closest?.('[title], [data-tip]');
+const tipFor = (e) => e.target.closest?.('[title]:not(select), [data-tip]');
 document.addEventListener('pointerover', (e) => {
   if (e.pointerType === 'touch') return;
   const t = tipFor(e);
