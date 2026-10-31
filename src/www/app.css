@@ -173,8 +173,9 @@ input[type="checkbox"]:checked::after { content: ""; width: 4px; height: 9px; bo
 input[type="checkbox"]:indeterminate::after { content: ""; width: 9px; height: 2px; background: var(--accent-fg); }
 input[type="radio"]:checked::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-fg); }
 input[type="checkbox"]:disabled, input[type="radio"]:disabled { opacity: .45; cursor: default; }
-.chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 9px; border-radius: var(--ctl-r); background: var(--soft); font-size: 12px; white-space: nowrap; color: var(--fg); border: 1px solid transparent; max-width: 100%; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 9px; border-radius: var(--ctl-r); background: var(--soft); font-size: 12px; white-space: nowrap; color: var(--fg); border: 1px solid var(--line); max-width: 100%; }
 .chip.accent { background: var(--accent-soft); color: var(--accent-ink); }
+.chip:is(.accent, .ok, .warn, .bad) { border-color: transparent; }
 .chip.ok { background: var(--ok-soft); color: var(--ok); } .chip.warn { background: var(--warn-soft); color: var(--warn); } .chip.bad { background: var(--bad-soft); color: var(--bad); }
 .chip.add { background: transparent; border: 1px dashed var(--line); color: var(--muted); cursor: pointer; }
 .chip.add:hover { color: var(--fg); border-color: var(--muted); }
@@ -385,6 +386,10 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 :root[data-variant="b"] .cfg { border-color: transparent; }
 .cfg-tools { grid-column: 1 / -1; display: flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 8px 10px; border-bottom: 1px solid var(--line); }
 .cfg-tools .input { width: 220px; }
+/* one height for everything in the toolbar: search field, buttons and status chips */
+.cfg-tools { --bar-h: 30px; }
+.cfg-tools > .input, .cfg-tools .btn { min-height: var(--bar-h); height: var(--bar-h); padding-block: 0; }
+.cfg-tools .chip { min-height: var(--bar-h); }
 .outline { border-right: 1px solid var(--line); padding: 8px 6px; display: grid; gap: 1px; align-content: start; overflow: auto; }
 .outline button { display: flex; gap: 6px; align-items: center; font-family: var(--mono); font-size: 12px; text-align: left; background: none; border: 0; color: var(--fg); padding: 4px 8px; border-radius: 6px; cursor: pointer; }
 .outline button:hover { background: var(--soft); }
@@ -1045,6 +1050,8 @@ label.chk > input[type="checkbox"], label.chk > input[type="radio"] { flex: none
 /* кнопки: синяя обводка, главная — заливка */
 :root[data-variant="k"] .btn:not(.ghost) { border-color: var(--accent); color: var(--accent-ink); background: var(--surface); font-weight: 400; min-height: 38px; padding: 6px 18px; }
 :root[data-variant="k"] .btn.small:not(.ghost) { min-height: 32px; padding: 4px 12px; }
+:root[data-variant="k"] .cfg-tools { --bar-h: 36px; }
+:root[data-variant="k"] .cfg-tools > .input { min-height: var(--bar-h); padding-block: 0; }
 :root[data-variant="k"] .btn:not(.ghost):hover { background: var(--accent-soft); }
 :root[data-variant="k"] .btn.primary { background: var(--accent); color: var(--accent-fg); }
 :root[data-variant="k"] .btn.primary:hover { background: var(--accent); filter: brightness(1.07); }
