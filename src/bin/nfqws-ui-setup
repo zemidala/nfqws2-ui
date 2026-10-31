@@ -601,6 +601,17 @@ remove)
 	while iptables -w -t mangle -D OUTPUT -j nfqws_ui_out 2>/dev/null; do :; done
 	iptables -w -t mangle -F nfqws_ui_out 2>/dev/null
 	iptables -w -t mangle -X nfqws_ui_out 2>/dev/null
+	# bypass only for chosen devices (OpenWrt; set up by api.php)
+	for ipt in iptables ip6tables; do
+		command -v $ipt >/dev/null 2>&1 || continue
+		for ch in nfqws_post nfqws_pre; do
+			while $ipt -w -t mangle -D $ch -m connmark --mark 0x800000/0x800000 -j RETURN 2>/dev/null; do :; done
+		done
+		while $ipt -w -t mangle -D PREROUTING -j nfqws_ui_dev 2>/dev/null; do :; done
+		$ipt -w -t mangle -F nfqws_ui_dev 2>/dev/null
+		$ipt -w -t mangle -X nfqws_ui_dev 2>/dev/null
+	done
+	rm -f /tmp/nfqws-ui-dev.sig
 	if [ "$MANAGED" = true ] && [ -f "$LCONF" ]; then
 		standalone=
 		grep -q '^server\.port :=' "$LCONF" && standalone=1

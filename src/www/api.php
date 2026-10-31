@@ -1060,7 +1060,17 @@ function pidLost(?int $pid): bool
 
 // Скрипт запуска (start | stop | restart) с проверкой итога. На Keenetic чиним «потерянный» процесс (см. pidLost):
 // останавливаем его сами и запускаем сервис заново. Возвращает [код, вывод, что сделали сами или null]
+// The init script rebuilds its chains on start: put the device rules back right after it
 function serviceRun(string $action): array
+{
+  $r = serviceRunRaw($action);
+  if ($action !== 'stop') {
+    devicesEnsure(true);
+  }
+  return $r;
+}
+
+function serviceRunRaw(string $action): array
 {
   $before = findPid();
   $started = $before ? processInfo($before)['started'] : null;
@@ -1917,6 +1927,197 @@ function policyProbeOpts(): array
   [$lo, $hi] = array_map('intval', explode(':', PROBE_PORTS));
   $from = mt_rand($lo, $hi - 20);
   return [CURLOPT_LOCALPORT => $from, CURLOPT_LOCALPORTRANGE => $hi - $from + 1];
+}
+
+// ---------- devices: bypass only for chosen devices of the home network (OpenWrt) ----------
+// A device is known by its MAC. When a connection of a device without bypass enters the router from the LAN, it gets
+// our connmark bit (own chain in mangle PREROUTING, untouched by nfqws2 restarts). The first rule of nfqws_post and
+// nfqws_pre sends connections with that bit past nfqws2; the init script flushes those chains on every start, so
+// the two rules are put back after our restarts, on every cron pass and when the interface is opened.
+// The router's own traffic never passes PREROUTING from the LAN, so its checks always go through nfqws2.
+// Keenetic has the same in firmware (access policy, POLICY_NAME) — nothing is set up there.
+const DEV_CHAIN = 'nfqws_ui_dev';
+const DEV_MARK = '0x800000';
+const DEV_SIG = '/tmp/nfqws-ui-dev.sig';
+const DEV_MAX = 256;
+
+function devicesConf(): array
+{
+  $d = (array)(uiSettings()['devices'] ?? []);
+  return ['new_on' => ($d['new_on'] ?? true) !== false, 'list' => is_array($d['list'] ?? null) ? $d['list'] : []];
+}
+
+function devicesActive(array $d): bool
+{
+  return !$d['new_on'] || array_filter($d['list'], fn($x) => empty($x['on']));
+}
+
+// Known devices: DHCP leases, static hosts, neighbours that are online now, and the saved list
+function devicesList(): array
+{
+  $d = devicesConf();
+  $by = [];
+  $put = function (string $mac, array $v) use (&$by) {
+    $mac = strtolower($mac);
+    if (preg_match('/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/', $mac)) {
+      $by[$mac] = array_filter($v, fn($x) => $x !== '' && $x !== null) + ($by[$mac] ?? []) + ['mac' => $mac];
+    }
+  };
+  foreach (@file('/tmp/dhcp.leases', FILE_IGNORE_NEW_LINES) ?: [] as $l) {
+    $f = preg_split('/\s+/', trim($l));
+    if (count($f) >= 4) {
+      $put($f[1], ['ip' => $f[2], 'name' => $f[3] === '*' ? '' : $f[3]]);
+    }
+  }
+  exec('uci -q show dhcp 2>/dev/null', $uci);
+  $host = [];
+  foreach ($uci as $l) {
+    if (preg_match("/^dhcp\.(@host\[\d+\]|\w+)\.(mac|name|ip)='([^']*)'/", $l, $m)) {
+      $host[$m[1]][$m[2]] = $m[3];
+    }
+  }
+  foreach ($host as $h) {
+    foreach (preg_split('/\s+/', trim($h['mac'] ?? '')) as $mac) {
+      $put($mac, ['name' => $h['name'] ?? '', 'ip' => $h['ip'] ?? '']);
+    }
+  }
+  exec('ip neigh show 2>/dev/null', $nb);
+  $online = [];
+  foreach ($nb as $l) {
+    // «IP dev IF lladdr MAC [router] [ref N] [used …] [probes N] STATE»; STALE — was here a while ago, still listed
+    if (preg_match('/^(\S+) .*\blladdr (\S+)\b.* (\w+)$/', trim($l), $m) && $m[3] !== 'FAILED') {
+      if (in_array($m[3], ['REACHABLE', 'DELAY', 'PROBE'], true)) {
+        $online[strtolower($m[2])] = true;
+      }
+      $put($m[2], str_contains($m[1], ':') ? [] : ['ip' => $m[1]]);
+    }
+  }
+  foreach ($d['list'] as $mac => $x) {
+    $put($mac, ['name' => $x['name'] ?? '']);
+  }
+  $items = [];
+  foreach ($by as $mac => $v) {
+    $saved = $d['list'][$mac] ?? null;
+    $items[] = ['mac' => $mac, 'name' => $v['name'] ?? '', 'ip' => $v['ip'] ?? '', 'online' => isset($online[$mac]),
+      'on' => $saved ? !empty($saved['on']) : $d['new_on'], 'saved' => (bool)$saved, 'manual' => !empty($saved['manual'])];
+  }
+  usort($items, fn($a, $b) => [!$a['online'], strtolower($a['name'] ?: '~' . $a['mac'])] <=> [!$b['online'], strtolower($b['name'] ?: '~' . $b['mac'])]);
+  return $items;
+}
+
+function devicesCmds(): array
+{
+  $vars = confRawVars((string)@file_get_contents(CONF_FILE));
+  $cmds = ['iptables'];
+  if (($vars['IPV6_ENABLED'] ?? '0') === '1' && trim((string)shell_exec('command -v ip6tables 2>/dev/null')) !== '') {
+    $cmds[] = 'ip6tables';
+  }
+  return [$cmds, tokens($vars['ISP_INTERFACE'] ?? '')];
+}
+
+function devicesRemove(): void
+{
+  // delete a rule while it is there (duplicates included); at most a few rounds
+  $del = function (string $cmd): void {
+    for ($i = 0; $i < 5; $i++) {
+      exec("$cmd 2>/dev/null", $o, $rc);
+      if ($rc !== 0) {
+        return;
+      }
+    }
+  };
+  foreach (['iptables', 'ip6tables'] as $c) {
+    $ipt = "$c -w -t mangle ";
+    foreach (['nfqws_post', 'nfqws_pre'] as $ch) {
+      $del("$ipt-D $ch -m connmark --mark " . DEV_MARK . '/' . DEV_MARK . ' -j RETURN');
+    }
+    exec($ipt . '-S ' . DEV_CHAIN . ' 2>/dev/null', $o, $rc);
+    if ($rc === 0) {
+      $del("$ipt-D PREROUTING -j " . DEV_CHAIN);
+      exec($ipt . '-F ' . DEV_CHAIN . " 2>/dev/null; $ipt-X " . DEV_CHAIN . ' 2>/dev/null');
+    }
+  }
+  @unlink(DEV_SIG);
+  mangleRules(true);
+}
+
+function devicesApply(): bool
+{
+  $d = devicesConf();
+  if (ROOT !== '' || !devicesActive($d)) {
+    devicesRemove();
+    return true;
+  }
+  [$cmds, $wan] = devicesCmds();
+  $m = DEV_MARK . '/' . DEV_MARK;
+  $rules = array_map(fn($i) => '-i ' . escapeshellarg($i) . ' -j RETURN', $wan);
+  $rules[] = '-m conntrack ! --ctstate NEW -j RETURN';
+  foreach ($d['list'] as $mac => $x) {
+    if (!preg_match('/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/', $mac) || !empty($x['on']) === $d['new_on']) {
+      continue;   // new_on: mark devices switched off; otherwise let devices switched on through and mark the rest
+    }
+    $rules[] = "-m mac --mac-source $mac -j " . ($d['new_on'] ? "CONNMARK --set-xmark $m" : 'RETURN');
+  }
+  if (!$d['new_on']) {
+    $rules[] = "-j CONNMARK --set-xmark $m";
+  }
+  $ok = true;
+  foreach ($cmds as $c) {
+    $ipt = "$c -w -t mangle ";
+    exec($ipt . '-N ' . DEV_CHAIN . ' 2>/dev/null');
+    exec($ipt . '-F ' . DEV_CHAIN . ' 2>/dev/null');
+    foreach ($rules as $r) {
+      exec($ipt . '-A ' . DEV_CHAIN . " $r 2>/dev/null", $o, $rc);
+      $ok = $ok && $rc === 0;
+    }
+    exec($ipt . '-C PREROUTING -j ' . DEV_CHAIN . ' 2>/dev/null', $o, $rc);
+    if ($rc !== 0) {
+      exec($ipt . '-I PREROUTING 1 -j ' . DEV_CHAIN . ' 2>/dev/null');
+    }
+    foreach (['nfqws_post', 'nfqws_pre'] as $ch) {
+      exec("$ipt-C $ch -m connmark --mark $m -j RETURN 2>/dev/null", $o, $rc);
+      if ($rc !== 0) {
+        exec("$ipt-I $ch 1 -m connmark --mark $m -j RETURN 2>/dev/null", $o, $rc);
+        $ok = $ok && ($rc === 0 || !findPid());   // nfqws2 stopped: its chains are absent, nothing to hook into
+      }
+    }
+  }
+  @file_put_contents(DEV_SIG, devicesSig());
+  mangleRules(true);
+  return $ok;
+}
+
+function devicesSig(): string
+{
+  return md5(json_encode([devicesConf(), devicesCmds()]));
+}
+
+// Rules in place? Restores them if nfqws2 was restarted, the router rebooted or the choice changed.
+// Returns null when bypass is for the whole network (nothing to keep).
+function devicesEnsure(bool $fresh = false): ?bool
+{
+  static $memo = 'none';
+  if ($memo !== 'none' && !$fresh) {
+    return $memo;
+  }
+  $d = devicesConf();
+  if (ROOT !== '' || !devicesActive($d)) {
+    if (is_file(DEV_SIG)) {
+      devicesRemove();
+    }
+    return $memo = null;
+  }
+  $running = (bool)findPid();
+  $placed = function (array $all) use ($running): bool {
+    // -v -S puts counters «-c P B» between the match and the target
+    $hook = fn($ch) => (bool)preg_grep('/^-A ' . $ch . ' .*--mark ' . DEV_MARK . '\/' . DEV_MARK . '( -c \d+ \d+)? -j RETURN/', $all);
+    return preg_grep('/^-A PREROUTING .*-j ' . DEV_CHAIN . '\b/', $all) && (!$running || ($hook('nfqws_post') && $hook('nfqws_pre')));
+  };
+  if ($placed(mangleRules($fresh)) && @file_get_contents(DEV_SIG) === devicesSig()) {
+    return $memo = true;
+  }
+  devicesApply();
+  return $memo = $placed(mangleRules(true));
 }
 
 function volumeFrozen(string $url, array $resolve = []): bool
@@ -8162,6 +8363,7 @@ function state(): array
       return $i;
     })(),
     'logs' => nfqLogs(),
+    'devices' => devicesEnsure(),   // null — bypass for the whole network; false — rules could not be put in place
     'leftovers' => array_column(pkgLeftovers(), 'name'),
     'nfq_update' => (function () { $u = nfqUpdateInfo(); return ['latest' => $u['latest'], 'available' => $u['available'], 'running' => $u['running'], 'rollback' => $u['rollback']]; })(),
     'curl' => curlCmdError(),
@@ -8516,6 +8718,15 @@ function reportText(array $sites, bool $hide, string $build): string
       ? "есть, но к $hook НЕ подключена — пакеты в неё не попадают (уже " . (time() - $ic['off_since']) . ' с)'
       : "есть, но к $hook в момент чтения не подключена — вероятно, правила перестраивались")));
   }
+  if (ROOT === '') {
+    // counts only: names and MACs of home devices do not belong in a report people post in chats
+    $dv = devicesConf();
+    $off = count(array_filter($dv['list'], fn($x) => empty($x['on'])));
+    $on = count($dv['list']) - $off;
+    $L[] = 'обход для устройств: ' . (!devicesActive($dv) ? 'для всей сети'
+      : ($dv['new_on'] ? "для всех, кроме выключенных ($off)" : "только для включённых ($on)") . '; правила '
+        . (devicesEnsure() ? 'на месте (цепочка ' . DEV_CHAIN . ', метка ' . DEV_MARK . ')' : 'НЕ стоят'));
+  }
   $L[] = 'правила перехвата (-c пакеты байты; счётчики обнуляются при каждой перезагрузке правил):';
   foreach ($ic['rules'] as $r) {
     $L[] = '  ' . $r;
@@ -8737,6 +8948,7 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
   }
   seenInfo();   // первым — как и в state()
   pendingExpire(60);   // задание проверки после перезапуска могло погибнуть — откат не должен потеряться
+  devicesEnsure();     // nfqws2 restarted outside the interface or the router rebooted
   historyScan('auto');
   nfqLogsTrim();
   monitorRun(false);
@@ -9945,6 +10157,31 @@ switch ($cmd) {
     $s['asn'] = array_values($s['asn']);
     saveUiSettings($s);
     respond(['items' => $s['asn']]);
+
+  case 'devices_get':
+    $d = devicesConf();
+    respond(['keenetic' => ROOT !== '', 'new_on' => $d['new_on'], 'items' => ROOT !== '' ? [] : devicesList(),
+      'active' => devicesActive($d), 'ok' => devicesEnsure(), 'running' => (bool)findPid()]);
+
+  case 'devices_set':
+    ROOT === '' || fail('На Keenetic устройства выбираются политикой доступа прошивки');
+    $list = [];
+    foreach ((array)($in['list'] ?? []) as $mac => $x) {
+      $mac = strtolower(trim((string)$mac));
+      if (!preg_match('/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/', $mac)) {
+        fail("Не похоже на MAC-адрес: $mac");
+      }
+      $name = preg_match('/^.{0,40}/us', (string)($x['name'] ?? ''), $nm) ? preg_replace('/[^\p{L}\p{N} ._()-]/u', '', $nm[0]) : '';
+      $list[$mac] = ['on' => !empty($x['on']), 'name' => $name] + (!empty($x['manual']) ? ['manual' => true] : []);
+    }
+    count($list) <= DEV_MAX || fail('Слишком много устройств: не больше ' . DEV_MAX);
+    $s = uiSettings();
+    $s['devices'] = ['new_on' => !empty($in['new_on']), 'list' => $list];
+    saveUiSettings($s);
+    $ok = devicesApply();
+    $d = devicesConf();
+    respond(['keenetic' => false, 'new_on' => $d['new_on'], 'items' => devicesList(), 'active' => devicesActive($d),
+      'ok' => devicesActive($d) ? $ok : null, 'running' => (bool)findPid()]);
 
   case 'tg_chats':
     $r = tgChats();

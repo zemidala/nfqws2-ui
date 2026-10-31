@@ -5,7 +5,7 @@
   --radius: 6px; --gap: 0px; --side-w: 340px; --top-h: 54px;
   --sans: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
   --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
-  --bg: #f3f5f8; --surface: #ffffff; --line: #dce1e8; --fg: #151a22; --muted: #5b6576; --faint: #868fa0;
+  --bg: #f3f5f8; --surface: #ffffff; --line: #dce1e8; --fg: #151a22; --muted: #5b6576; --faint: #747d8d;
   --accent: #1f5edb; --accent-ink: var(--accent); --accent-fg: #ffffff; --accent-soft: #e6eefc; --soft: #eef1f5;
   --ok: #157a3f; --ok-soft: #e3f4ea; --warn: #9a5b00; --warn-soft: #fbf0dc; --bad: #c0262d; --bad-soft: #fbe7e7;
   --tk-opt: #1f5edb; --tk-fn: #0f7a4a; --tk-key: #8a3ab9; --tk-p: #98a1b0; --tk-var: #9a5b00;
@@ -15,7 +15,7 @@
 :root[data-variant="b"] {
   --radius: 14px; --gap: 14px; --side-w: 360px;
   --sans: "Onest", "Segoe UI", system-ui, -apple-system, sans-serif; --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
-  --bg: #eef2f1; --surface: #ffffff; --line: #d8e1de; --fg: #16211e; --muted: #56675f; --faint: #81928c;
+  --bg: #eef2f1; --surface: #ffffff; --line: #d8e1de; --fg: #16211e; --muted: #56675f; --faint: #6d7e78;
   --accent: #0e6f67; --accent-soft: #dcefec; --soft: #f1f5f4;
   --tk-opt: #0e6f67; --tk-fn: #2f6b12; --tk-key: #9b3d7a; --tk-p: #93a39d;
   --shadow: 0 1px 2px rgba(16, 40, 34, .06);
@@ -23,21 +23,21 @@
 :root[data-variant="c"] {
   --radius: 10px; --gap: 12px; --side-w: 330px;
   --sans: "Golos Text", "Segoe UI", system-ui, -apple-system, sans-serif; --mono: "Fira Code", ui-monospace, Consolas, monospace;
-  --bg: #f7f7f9; --surface: #ffffff; --line: #e1e1e8; --fg: #1b1a22; --muted: #5f5e6d; --faint: #8e8d9d;
+  --bg: #f7f7f9; --surface: #ffffff; --line: #e1e1e8; --fg: #1b1a22; --muted: #5f5e6d; --faint: #7a798a;
   --accent: #b0215f; --accent-soft: #fae6ef; --soft: #f0f0f4;
   --tk-opt: #3b4fc4; --tk-fn: #0f7a4a; --tk-key: #b0215f; --tk-p: #9d9cab;
 }
 /* Тёмная тема: по системе (если не выбрана светлая) или явно */
 @media (prefers-color-scheme: dark) {
   :root:not([data-mode="light"]) { --ok: #4fd18b; --ok-soft: #17301f; --warn: #f0b04a; --warn-soft: #33270f; --bad: #ff9c97; --bad-soft: #3a1c1c; --tk-var: #f0b04a; color-scheme: dark;
-    --bg: #0f1217; --surface: #161a21; --line: #262c36; --fg: #e3e7ed; --muted: #b3b9c4; --faint: #969eaa; --accent: #6c9bff; --accent-fg: #0b1220; --accent-soft: #1b2745; --soft: #1c212a; --tk-opt: #7ea8ff; --tk-fn: #5fd39a; --tk-key: #d59bff; --tk-p: #5d6676; --shadow: none; --accent-ink: #95b7ff; --bad-fg: #2a0b0a; }
-  :root[data-variant="b"]:not([data-mode="light"]) { --bg: #0e1413; --surface: #151d1b; --line: #24302d; --fg: #e1eae7; --muted: #aebcb8; --faint: #91a299; --accent: #3cc7b5; --accent-fg: #06201c; --accent-soft: #143430; --soft: #1a2422; --tk-opt: #5fd6c6; --tk-fn: #9ad96b; --tk-key: #f19ad0; --tk-p: #5f716b; --accent-ink: #46cab9; }
-  :root[data-variant="c"]:not([data-mode="light"]) { --bg: #121216; --surface: #1a1a20; --line: #2b2b34; --fg: #e6e5ee; --muted: #b8b8c2; --faint: #9d9da9; --accent: #ff6fa6; --accent-fg: #2a0616; --accent-soft: #3a1726; --soft: #22222a; --tk-opt: #93a2ff; --tk-fn: #5fd39a; --tk-key: #ff8fbb; --tk-p: #676675; --accent-ink: #ff97bf; }
+    --bg: #0f1217; --surface: #161a21; --line: #262c36; --fg: #e3e7ed; --muted: #b3b9c4; --faint: #abb2bd; --accent: #6c9bff; --accent-fg: #0b1220; --accent-soft: #1b2745; --soft: #1c212a; --tk-opt: #7ea8ff; --tk-fn: #5fd39a; --tk-key: #d59bff; --tk-p: #5d6676; --shadow: none; --accent-ink: #95b7ff; --bad-fg: #2a0b0a; }
+  :root[data-variant="b"]:not([data-mode="light"]) { --bg: #0e1413; --surface: #151d1b; --line: #24302d; --fg: #e1eae7; --muted: #aebcb8; --faint: #a6b6ae; --accent: #3cc7b5; --accent-fg: #06201c; --accent-soft: #143430; --soft: #1a2422; --tk-opt: #5fd6c6; --tk-fn: #9ad96b; --tk-key: #f19ad0; --tk-p: #5f716b; --accent-ink: #46cab9; }
+  :root[data-variant="c"]:not([data-mode="light"]) { --bg: #121216; --surface: #1a1a20; --line: #2b2b34; --fg: #e6e5ee; --muted: #b8b8c2; --faint: #b0b0bb; --accent: #ff6fa6; --accent-fg: #2a0616; --accent-soft: #3a1726; --soft: #22222a; --tk-opt: #93a2ff; --tk-fn: #5fd39a; --tk-key: #ff8fbb; --tk-p: #676675; --accent-ink: #ff97bf; }
 }
 :root[data-mode="dark"] { --ok: #4fd18b; --ok-soft: #17301f; --warn: #f0b04a; --warn-soft: #33270f; --bad: #ff9c97; --bad-soft: #3a1c1c; --tk-var: #f0b04a; color-scheme: dark;
-  --bg: #0f1217; --surface: #161a21; --line: #262c36; --fg: #e3e7ed; --muted: #b3b9c4; --faint: #969eaa; --accent: #6c9bff; --accent-fg: #0b1220; --accent-soft: #1b2745; --soft: #1c212a; --tk-opt: #7ea8ff; --tk-fn: #5fd39a; --tk-key: #d59bff; --tk-p: #5d6676; --shadow: none; --accent-ink: #95b7ff; --bad-fg: #2a0b0a; }
-:root[data-variant="b"][data-mode="dark"] { --bg: #0e1413; --surface: #151d1b; --line: #24302d; --fg: #e1eae7; --muted: #aebcb8; --faint: #91a299; --accent: #3cc7b5; --accent-fg: #06201c; --accent-soft: #143430; --soft: #1a2422; --tk-opt: #5fd6c6; --tk-fn: #9ad96b; --tk-key: #f19ad0; --tk-p: #5f716b; --accent-ink: #46cab9; }
-:root[data-variant="c"][data-mode="dark"] { --bg: #121216; --surface: #1a1a20; --line: #2b2b34; --fg: #e6e5ee; --muted: #b8b8c2; --faint: #9d9da9; --accent: #ff6fa6; --accent-fg: #2a0616; --accent-soft: #3a1726; --soft: #22222a; --tk-opt: #93a2ff; --tk-fn: #5fd39a; --tk-key: #ff8fbb; --tk-p: #676675; --accent-ink: #ff97bf; }
+  --bg: #0f1217; --surface: #161a21; --line: #262c36; --fg: #e3e7ed; --muted: #b3b9c4; --faint: #abb2bd; --accent: #6c9bff; --accent-fg: #0b1220; --accent-soft: #1b2745; --soft: #1c212a; --tk-opt: #7ea8ff; --tk-fn: #5fd39a; --tk-key: #d59bff; --tk-p: #5d6676; --shadow: none; --accent-ink: #95b7ff; --bad-fg: #2a0b0a; }
+:root[data-variant="b"][data-mode="dark"] { --bg: #0e1413; --surface: #151d1b; --line: #24302d; --fg: #e1eae7; --muted: #aebcb8; --faint: #a6b6ae; --accent: #3cc7b5; --accent-fg: #06201c; --accent-soft: #143430; --soft: #1a2422; --tk-opt: #5fd6c6; --tk-fn: #9ad96b; --tk-key: #f19ad0; --tk-p: #5f716b; --accent-ink: #46cab9; }
+:root[data-variant="c"][data-mode="dark"] { --bg: #121216; --surface: #1a1a20; --line: #2b2b34; --fg: #e6e5ee; --muted: #b8b8c2; --faint: #b0b0bb; --accent: #ff6fa6; --accent-fg: #2a0616; --accent-soft: #3a1726; --soft: #22222a; --tk-opt: #93a2ff; --tk-fn: #5fd39a; --tk-key: #ff8fbb; --tk-p: #676675; --accent-ink: #ff97bf; }
 
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
@@ -180,6 +180,32 @@ input[type="checkbox"]:disabled, input[type="radio"]:disabled { opacity: .45; cu
 button.chip { cursor: pointer; font-size: 12px; }
 .chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0; }
 .chips.blobs { flex-direction: column; align-items: flex-start; }
+/* own on/off switch: track in the accent colour when on, in the faint text colour when off — readable in every theme */
+.sw { position: relative; flex: none; width: 40px; height: 22px; padding: 0; border: 0; border-radius: 11px; background: var(--faint); cursor: pointer; transition: background .15s; vertical-align: middle; }
+.sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); transition: left .15s; }
+.sw[aria-checked="true"] { background: var(--accent); }
+.sw[aria-checked="true"]::after { left: 21px; background: var(--accent-fg); }
+.sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.swl { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+/* Устройства */
+.dev-lead { margin: 0 0 12px; max-width: 75ch; }
+.tbl.devs td { vertical-align: middle; }
+.tbl.devs tr.off td:not(:last-child) { color: var(--muted); }
+.tbl.devs td:last-child { width: 1%; }
+.dev-name { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 0; min-width: 0; overflow-wrap: anywhere; }
+.dev-dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 8px; }
+.dev-dot.gone { background: var(--faint); }
+.dev-tag { margin-left: 8px; font-size: 12px; padding: 1px 7px; border-radius: 10px; background: var(--soft); color: var(--muted); white-space: nowrap; }
+.dev-cnt { font-size: 14px; color: var(--muted); } .dev-cnt b { color: var(--fg); font-weight: 500; }
+.dev-act { display: flex; align-items: center; gap: 4px; }
+/* sortable header: the whole header text is the button; the arrow shows the column and direction */
+.th-sort { all: unset; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font: inherit; color: inherit; white-space: nowrap; }
+.th-sort:hover { color: var(--accent-ink); }
+.th-sort:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.th-sort svg { width: 14px; height: 14px; flex: none; }
+.dev-act .slot { width: 30px; flex: none; }
+/* hidden columns still count for the narrow-screen «min-width: 600px» of wide tables — drop it here */
+@media (max-width: 599px) { .tbl.devs .hide-narrow { display: none; } .scroll > table.tbl.devs:has(th) { min-width: 0; } }
 .blob-row { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; min-width: 0; }
 .blob-row .chip { max-width: 100%; overflow-wrap: anywhere; }
 .lvl { display: inline-flex; flex: none; margin-top: 2px; }
@@ -641,7 +667,7 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 .iface { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 5px 10px; border: 1px solid var(--line); border-radius: calc(var(--radius) * .7 + 2px); background: var(--surface); color: var(--fg); font-size: 12.5px; cursor: pointer; text-align: left; }
 .iface:hover { background: var(--soft); }
 .iface.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
-.iface.dim { opacity: .85; }
+.iface.dim { color: var(--muted); }   /* colour, not opacity: opacity also faded the already faint address below Lc 40 */
 .tbl tr.dim > td { opacity: .6; }
 .iface .mono { font-weight: 600; }
 /* «Параметры запуска»: добавление из списков */
@@ -872,6 +898,11 @@ a.over-row:hover { background: var(--soft); }
 /* галочка с длинной подписью: подпись переносится по словам рядом с галочкой, а не уезжает под неё */
 label.row { flex-wrap: nowrap; }
 label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none; }
+/* checkbox with a caption that may wrap: the box sits on the FIRST line, centred on it. Inputs inherit the label's
+   font with its line-height (font: inherit), so 1lh is the caption's line box. */
+label.chk { display: flex; align-items: flex-start; gap: 8px; }
+label.chk > input[type="checkbox"], label.chk > input[type="radio"] { flex: none; margin-top: max(0px, calc((1lh - 18px) / 2)); }
+:root[data-variant="k"] label.chk > input[type="checkbox"] { margin-top: max(0px, calc((1lh - 20px) / 2)); }
 
 /* версия интерфейса у ссылки на репозиторий */
 .repo-link { color: var(--muted); font-size: 12px; font-weight: 500; gap: 5px; }
@@ -928,16 +959,16 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
 :root[data-variant="k"] {
   --radius: 4px; --gap: 18px; --side-w: 340px;
   --sans: "Roboto", "Segoe UI", system-ui, -apple-system, sans-serif; --mono: "Roboto Mono", ui-monospace, Consolas, monospace;
-  --bg: #f2f2f2; --surface: #ffffff; --line: #e3e3e3; --fg: #1f1f1f; --muted: #6e6e6e; --faint: #8e8e8e;
+  --bg: #f2f2f2; --surface: #ffffff; --line: #e3e3e3; --fg: #1f1f1f; --muted: #6e6e6e; --faint: #7c7c7c;
   --accent: #0097dc; --accent-ink: #0090d2; --accent-fg: #ffffff; --accent-soft: #ecf5fa; --soft: #f5f5f5;
   --ok: #1f9d55; --ok-soft: #e4faef; --k-side: #fafafa; --k-active: #ebebeb; --k-field: #b9b9b9;
   --tk-opt: #0081bd; --tk-fn: #1f8a4c; --tk-key: #8a3ab9; --tk-p: #9a9a9a;
   --shadow: 0 1px 3px rgba(0, 0, 0, .05);
 }
 @media (prefers-color-scheme: dark) {
-  :root[data-variant="k"]:not([data-mode="light"]) { --bg: #17181b; --surface: #222428; --line: #31353a; --fg: #e8e8e8; --muted: #b7bcbf; --faint: #9aa1a7; --accent: #2bb0f0; --accent-fg: #06202e; --accent-soft: #16303f; --soft: #2a2d31; --ok: #65cd91; --ok-soft: #173325; --k-side: #1b1d20; --k-active: #2a2d31; --k-field: #50555b; --tk-opt: #5cc4f5; --tk-fn: #5fd39a; --tk-p: #6a6f75; --shadow: none; --accent-ink: #75c4e6; --bad: #ffa09b; --bad-fg: #2a0b0a; --tk-key: #d0ade5; }
+  :root[data-variant="k"]:not([data-mode="light"]) { --bg: #17181b; --surface: #222428; --line: #31353a; --fg: #e8e8e8; --muted: #b7bcbf; --faint: #adb3b9; --accent: #2bb0f0; --accent-fg: #06202e; --accent-soft: #16303f; --soft: #2a2d31; --ok: #65cd91; --ok-soft: #173325; --k-side: #1b1d20; --k-active: #2a2d31; --k-field: #50555b; --tk-opt: #5cc4f5; --tk-fn: #5fd39a; --tk-p: #6a6f75; --shadow: none; --accent-ink: #75c4e6; --bad: #ffa09b; --bad-fg: #2a0b0a; --tk-key: #d0ade5; }
 }
-:root[data-variant="k"][data-mode="dark"] { --bg: #17181b; --surface: #222428; --line: #31353a; --fg: #e8e8e8; --muted: #b7bcbf; --faint: #9aa1a7; --accent: #2bb0f0; --accent-fg: #06202e; --accent-soft: #16303f; --soft: #2a2d31; --ok: #65cd91; --ok-soft: #173325; --k-side: #1b1d20; --k-active: #2a2d31; --k-field: #50555b; --tk-opt: #5cc4f5; --tk-fn: #5fd39a; --tk-p: #6a6f75; --shadow: none; --accent-ink: #75c4e6; --bad: #ffa09b; --bad-fg: #2a0b0a; --tk-key: #d0ade5; }
+:root[data-variant="k"][data-mode="dark"] { --bg: #17181b; --surface: #222428; --line: #31353a; --fg: #e8e8e8; --muted: #b7bcbf; --faint: #adb3b9; --accent: #2bb0f0; --accent-fg: #06202e; --accent-soft: #16303f; --soft: #2a2d31; --ok: #65cd91; --ok-soft: #173325; --k-side: #1b1d20; --k-active: #2a2d31; --k-field: #50555b; --tk-opt: #5cc4f5; --tk-fn: #5fd39a; --tk-p: #6a6f75; --shadow: none; --accent-ink: #75c4e6; --bad: #ffa09b; --bad-fg: #2a0b0a; --tk-key: #d0ade5; }
 :root[data-variant="k"] body { font-size: 14.5px; }
 /* меню: заголовки групп — синие заглавные со значком, пункты — обычным текстом, выбранный — серой полосой */
 :root[data-variant="k"] .mnav { background: var(--k-side); padding: 10px 0 20px; }
@@ -1028,8 +1059,8 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
 :root[data-variant="k"] .mnav .tag.new { font-size: 0; padding: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); border: 0; display: inline-block; }
 /* страница — белая, формы прямо на ней, без рамок: у Keenetic карточки только на «Системном мониторе» */
 :root[data-variant="k"] { --bg: #ffffff; }
-:root[data-variant="k"][data-mode="dark"] { --bg: #222428; --muted: #b7bcbf; --faint: #9aa1a7; --accent-ink: #75c4e6; --ok: #65cd91; --bad: #ffa09b; --bad-fg: #2a0b0a; --tk-key: #d0ade5; }
-@media (prefers-color-scheme: dark) { :root[data-variant="k"]:not([data-mode="light"]) { --bg: #222428; --muted: #b7bcbf; --faint: #9aa1a7; --accent-ink: #75c4e6; --ok: #65cd91; --bad: #ffa09b; --bad-fg: #2a0b0a; --tk-key: #d0ade5; } }
+:root[data-variant="k"][data-mode="dark"] { --bg: #222428; --muted: #b7bcbf; --faint: #adb3b9; --accent-ink: #75c4e6; --ok: #65cd91; --bad: #ffa09b; --bad-fg: #2a0b0a; --tk-key: #d0ade5; }
+@media (prefers-color-scheme: dark) { :root[data-variant="k"]:not([data-mode="light"]) { --bg: #222428; --muted: #b7bcbf; --faint: #adb3b9; --accent-ink: #75c4e6; --ok: #65cd91; --bad: #ffa09b; --bad-fg: #2a0b0a; --tk-key: #d0ade5; } }
 :root[data-variant="k"] .panel { border-color: transparent; box-shadow: none; padding: 8px 0 18px; border-radius: 0; }
 :root[data-variant="k"] .panel + .panel { border-top: 1px solid var(--line); padding-top: 22px; }
 :root[data-variant="k"] .ov .blk, :root[data-variant="k"] .ov .panel, :root[data-variant="k"] .ov-brief > .blk { border: 1px solid var(--line); box-shadow: var(--shadow); border-radius: 4px; }
@@ -1046,9 +1077,9 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
 :root[data-variant="k"] .frow + .frow { margin-top: 10px; }
 /* тёмная тема K — цвета со скриншота тёмной темы KeeneticOS 4.2 (справка Keenetic, Buddy 5):
    фон #1a2533, меню #151c26, рамки #4c545e, текст #c2c2c2, подписи #949b9f, синий #269fd4 */
-:root[data-variant="k"][data-mode="dark"] { --bg: #1a2533; --surface: #1a2533; --line: #3d4652; --fg: #d0d3d6; --muted: #b7bcbf; --faint: #9aa1a7; --accent: #269fd4; --accent-fg: #ffffff; --accent-soft: #1f3a52; --soft: #222e3d; --ok: #65cd91; --ok-soft: #183a2c; --k-side: #151c26; --k-active: #2a3a50; --k-field: #4c545e; --tk-opt: #5cc4f5; --tk-fn: #5fd39a; --tk-p: #6f7880; --shadow: none; --accent-ink: #75c4e6; --bad: #ffa09b; --bad-fg: #2a0b0a; --tk-key: #d0ade5; }
+:root[data-variant="k"][data-mode="dark"] { --bg: #1a2533; --surface: #1a2533; --line: #3d4652; --fg: #d0d3d6; --muted: #b7bcbf; --faint: #adb3b9; --accent: #269fd4; --accent-fg: #ffffff; --accent-soft: #1f3a52; --soft: #222e3d; --ok: #65cd91; --ok-soft: #183a2c; --k-side: #151c26; --k-active: #2a3a50; --k-field: #4c545e; --tk-opt: #5cc4f5; --tk-fn: #5fd39a; --tk-p: #6f7880; --shadow: none; --accent-ink: #75c4e6; --bad: #ffa09b; --bad-fg: #2a0b0a; --tk-key: #d0ade5; }
 @media (prefers-color-scheme: dark) {
-  :root[data-variant="k"]:not([data-mode="light"]) { --bg: #1a2533; --surface: #1a2533; --line: #3d4652; --fg: #d0d3d6; --muted: #b7bcbf; --faint: #9aa1a7; --accent: #269fd4; --accent-fg: #ffffff; --accent-soft: #1f3a52; --soft: #222e3d; --ok: #65cd91; --ok-soft: #183a2c; --k-side: #151c26; --k-active: #2a3a50; --k-field: #4c545e; --tk-opt: #5cc4f5; --tk-fn: #5fd39a; --tk-p: #6f7880; --shadow: none; --accent-ink: #75c4e6; --bad: #ffa09b; --bad-fg: #2a0b0a; --tk-key: #d0ade5; }
+  :root[data-variant="k"]:not([data-mode="light"]) { --bg: #1a2533; --surface: #1a2533; --line: #3d4652; --fg: #d0d3d6; --muted: #b7bcbf; --faint: #adb3b9; --accent: #269fd4; --accent-fg: #ffffff; --accent-soft: #1f3a52; --soft: #222e3d; --ok: #65cd91; --ok-soft: #183a2c; --k-side: #151c26; --k-active: #2a3a50; --k-field: #4c545e; --tk-opt: #5cc4f5; --tk-fn: #5fd39a; --tk-p: #6f7880; --shadow: none; --accent-ink: #75c4e6; --bad: #ffa09b; --bad-fg: #2a0b0a; --tk-key: #d0ade5; }
 }
 /* у Keenetic в тёмной теме у карточек рамка светлее линий внутри */
 :root[data-variant="k"][data-mode="dark"] .ov .blk { border-color: #4c545e; }
@@ -1136,6 +1167,8 @@ label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none
   /* сайты — сеткой, а не «газетными» колонками: строки соседних колонок на одной высоте (порядок тут не важен) */
   .mon-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(620px, 1fr)); column-gap: 64px; row-gap: 0; align-items: stretch; }
   .entries > .ent, .mon-list > .act { break-inside: avoid; }
+  /* in columns the first row of every column draws the line above it, not only the first row of the list */
+  .mon-list > .act:first-child { border-top: 1px solid var(--line); }
   .two { grid-template-columns: minmax(0, 1fr) minmax(340px, 30%); }
 }
 

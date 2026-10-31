@@ -538,7 +538,7 @@ const PAGES = {
   over: ['#/', 'Обзор'],
   pick: ['#/tests/pick', 'Подбор стратегии'], trace: ['#/tests/trace', 'Трассировка'],
   mon: ['#/tests/monitor', 'Мониторинг'], tg: ['#/tests/notify', 'Уведомления'],
-  prof: ['#/settings', 'Профили'], lists: ['#/sites', 'Списки'],
+  prof: ['#/settings', 'Профили'], lists: ['#/sites', 'Списки'], dev: ['#/devices', 'Устройства'],
   basic: ['#/settings/basic', 'Основное'], base: ['#/settings/base', 'Параметры запуска'], raw: ['#/settings/raw', 'Конфиг целиком'],
   backup: ['#/settings/backup', 'Резервные копии'], hist: ['#/settings/hist', 'История изменений'], log: ['#/log', 'Журнал'],
   look: ['#/settings/look', 'Оформление'], about: ['#/settings/about', 'О программе'],
@@ -577,6 +577,7 @@ const FEATURES = [
   ['over:nfqupdate', '1.21.0', 'обновление nfqws2 из интерфейса: метка с новой версией в верхней панели, возврат прежней'],
   ['frz:inconf', '1.22.0', '«Обрыв на 16 КБ»: видно, что найденная стратегия уже стоит в конфиге и работает для этой сети'],
   ['frz:join', '1.23.0', '«Обрыв на 16 КБ»: сеть добавляется в профиль с той же стратегией одной строкой, а не новым профилем'],
+  ['dev', '1.26.0', '«Устройства»: обход только для выбранных устройств домашней сети'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
 // на сколько минорных версий функция старше текущей (у сборки до выпуска — меньше нуля)
@@ -623,17 +624,17 @@ const SOON_HINT = 'Ещё в разработке — появится в одн
 const SYS_PAGES = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 const SYS_NAV = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 // Компоновка «Боковое меню»: группы и их страницы
-const MENU = [[null, ['over']], ['Проверка сайта', ['diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'cfg']], ['Наблюдение', ['mon', 'auto', 'tg']], ['Обход', ['prof', 'lists', 'asn']], ['Система', SYS_NAV]];
+const MENU = [[null, ['over']], ['Проверка сайта', ['diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'cfg']], ['Наблюдение', ['mon', 'auto', 'tg']], ['Обход', ['prof', 'lists', 'dev', 'asn']], ['Система', SYS_NAV]];
 // Упрощённый вид (галочка в «Оформлении»): шесть разделов, страницы раздела — вкладками над страницей (как в TOP_TABS)
 const MENU_SIMPLE = [['over', 'Обзор', 'home', ['over']], ['pick', 'Проверка сайта', 'tests', ['diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'cfg', 'site']], ['mon', 'Наблюдение', 'pulse', ['mon', 'auto', 'tg']],
-  ['prof', 'Профили', 'layers', ['prof']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]];
+  ['prof', 'Профили', 'layers', ['prof', 'dev']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]];
 // Верхние вкладки компоновок: страница по клику, подпись, значок, страницы вкладки, «только на узком экране»
 const TOP_TABS = {
   menu: [],
   tabs: [['over', 'Обзор', 'home', ['over'], true], ['pick', 'Проверка', 'tests', ['diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'cfg', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'auto', 'tg']],
-    ['prof', 'Профили', 'layers', ['prof']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
+    ['prof', 'Профили', 'layers', ['prof', 'dev']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
   site: [['over', 'Обзор', 'home', ['over']], ['mon', 'Сайты', 'pulse', ['mon', 'diag', 'frz', 'pick', 'trace', 'phist', 'comm', 'cfg', 'auto', 'tg', 'site']],
-    ['prof', 'Профили', 'layers', ['prof']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
+    ['prof', 'Профили', 'layers', ['prof', 'dev']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
 };
 // Нижняя панель телефона — одна для всех компоновок; остальное — в меню
 const BOTTOM = [['over', 'Обзор', 'home', ['over']], ['pick', 'Подбор', 'tests', ['diag', 'frz', 'pick', 'trace', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'tg']], ['prof', 'Профили', 'layers', ['prof']]];
@@ -656,6 +657,7 @@ function pageOf(r = parseRoute()) {
   if (r.tab === 'site') return 'site';
   if (r.tab === 'diag') return 'diag';
   if (r.tab === 'asn') return 'asn';
+  if (r.tab === 'devices') return 'dev';
   if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace', history: 'phist', community: 'comm', freeze: 'frz', configs: 'cfg', auto: 'auto' }[r.arg] || 'pick';
   if (r.tab === 'settings') return SYS_PAGES.includes(r.arg) ? r.arg : ['readme', 'changelog'].includes(r.arg) ? 'about' : 'prof';
   return 'over';
@@ -1059,7 +1061,7 @@ async function route(refresh = false) {
   }
   if (seq !== routeSeq) return;
   if (r.tab !== 'settings' || r.arg !== 'raw') setFocus(false);
-  const views = { '': viewOverview, sites: viewSites, tests: viewTests, settings: viewSettings, log: viewLog, site: viewSite, diag: viewDiag, asn: viewAsn };
+  const views = { '': viewOverview, sites: viewSites, tests: viewTests, settings: viewSettings, log: viewLog, site: viewSite, diag: viewDiag, asn: viewAsn, devices: viewDevices };
   // новое на этой странице: метки внутри видны весь этот заход, после отрисовки страница считается открытой
   S.newHere = new Set(pageFeatures(pageOf(r)));
   main.replaceChildren(subTabs(pageOf(r)));
@@ -1257,6 +1259,9 @@ function problemItems() {
   // off — переходов нет дольше 20 с; одно чтение посреди перестройки правил (Keenetic) ошибкой не считается
   if (st.running && st.intercept?.off) {
     items.push({ level: 'error', title: 'Правила перехвата не подключены', text: 'Цепочки nfqws2 в iptables есть, но переходов в них из POSTROUTING / PREROUTING нет — пакеты до nfqws2 не доходят, обход не работает. Перезапустите nfqws2; если повторяется — пришлите «Отчёт для помощи».', href: PAGES.log[0] });
+  }
+  if (st.running && st.devices === false) {
+    items.push({ level: 'warning', title: 'Выбор устройств не действует', text: 'Правила для устройств поставить не удалось — все устройства идут через nfqws2.', href: PAGES.dev[0] });
   }
   const lint = st.lint || { issues: [] };
   if (lint.dry_run && !lint.dry_run.ok) items.push({ level: 'error', title: 'nfqws2 не примет конфиг', text: lint.dry_run.message, href: '#/settings/raw' });
@@ -3427,7 +3432,7 @@ async function paneBasic(content) {
   };
   const hints = (k) => [VAR_INFO[k][1] ? h('span', { class: 'hint', text: VAR_INFO[k][1] }) : null, iss(k).map((x) => h('span', { class: 'hint row', style: `color:var(--${x.level === 'error' ? 'bad' : x.level === 'warning' ? 'warn' : 'accent'})` }, x.msg, fixButton(x)))];
   const input = (k) => [h('label', { class: 'lbl', for: 'f-' + k, text: VAR_INFO[k][0] }), h('input', { class: 'input mono', id: 'f-' + k, value: vals[k], spellcheck: 'false', oninput: (e) => { vals[k] = e.target.value; refresh(); } }), hints(k)];
-  const toggle = (k) => [h('span', { class: 'lbl', text: VAR_INFO[k][0] }), h('label', { class: 'row' }, h('input', { type: 'checkbox', id: 'f-' + k, checked: vals[k] === '1', onchange: (e) => { vals[k] = e.target.checked ? '1' : '0'; refresh(); } }), h('span', { text: 'включено' })), hints(k)];
+  const toggle = (k) => [h('span', { class: 'lbl', text: VAR_INFO[k][0] }), h('label', { class: 'chk' }, h('input', { type: 'checkbox', id: 'f-' + k, checked: vals[k] === '1', onchange: (e) => { vals[k] = e.target.checked ? '1' : '0'; refresh(); } }), h('span', { text: 'включено' })), hints(k)];
   content.append(h('div', { class: 'vh' }, h('h1', { text: 'Основное' })),
     h('section', { class: 'panel' },
       h('div', { class: 'frow' }, input('ISP_INTERFACE'), sys ? ifacePicker(sys.ifaces, () => vals.ISP_INTERFACE, (val) => { vals.ISP_INTERFACE = val; document.getElementById('f-ISP_INTERFACE').value = val; refresh(); }, 'f-ISP_INTERFACE') : null),
@@ -3893,7 +3898,7 @@ function remotePanel(data) {
   return panel('Копии на NAS', c.enabled && !st.error && R.on ? chip('включено', 'ok') : null,
     h('p', { class: 'sm muted', text: 'Роутер сам отправляет каждый новый снимок по ssh на NAS (или другое устройство с ssh). Там хранятся все снимки, на роутере — только последние. Ключ роутера на NAS ограничен одной папкой: им можно положить новый снимок и прочитать старые, но нельзя ни удалить, ни перезаписать их, ни войти в систему.' }),
     status,
-    h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Отправлять' }), h('label', { class: 'row' }, on, h('span', { text: 'каждый новый снимок на NAS' }))),
+    h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Отправлять' }), h('label', { class: 'chk' }, on, h('span', { text: 'каждый новый снимок на NAS' }))),
     inp('rm-host', 'Адрес', c.host, { class: 'input mono', placeholder: '192.168.1.207' }),
     inp('rm-port', 'Порт ssh', c.port, { type: 'number', min: 1, max: 65535, style: 'width:110px' }),
     inp('rm-user', 'Пользователь', c.user, { class: 'input mono', placeholder: 'имя пользователя на NAS' }),
@@ -4045,9 +4050,9 @@ async function paneLook(content) {
     svgEl('0 0 120 68', LAYOUT_THUMB[v], 'lthumb'), h('b', { text: title }), h('span', { class: 'sm muted', text }));
   content.append(h('div', { class: 'vh' }, h('h1', { text: 'Оформление' })),
     panel(null, null,
-      h('label', { class: 'row', style: 'align-items:flex-start' }, h('input', { type: 'checkbox', checked: !!look.simple, style: 'margin-top:3px', onchange: (e) => { setLook({ simple: e.target.checked }); renderShell(); route(); } }),
+      h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: !!look.simple, onchange: (e) => { setLook({ simple: e.target.checked }); renderShell(); route(); } }),
         h('span', {}, h('b', { text: 'Упрощённый вид' }), h('br'), h('span', { class: 'sm muted', text: 'Боковое меню — шесть разделов, страницы раздела — вкладками над страницей; «Обзор» по умолчанию «Кратко»; обновить, HTTPS, GitHub и выход — под кнопкой «⋯». Для тех, кому полный вид кажется перегруженным. Функции те же.' }))),
-      h('label', { class: 'row', style: 'align-items:flex-start' }, h('input', { type: 'checkbox', checked: !look.hideWinTs, style: 'margin-top:3px', onchange: (e) => { setLook({ hideWinTs: !e.target.checked }); updateSide(); } }),
+      h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: !look.hideWinTs, onchange: (e) => { setLook({ hideWinTs: !e.target.checked }); updateSide(); } }),
         h('span', {}, h('b', { text: 'Напоминать про метки TCP в Windows' }), ' ', newTag('look:wints'), h('br'), h('span', { class: 'sm muted', text: `Пункт в «Проблемах» у профиля, стратегия которого маскируется только через tcp_ts: в Windows такие стратегии работают, только если включены временные метки TCP (${WIN_TS_CMD}). Если на ваших компьютерах они уже включены, напоминание можно убрать.` })))),
     panel(null, null,
       h('fieldset', { class: 'looks' }, h('legend', { class: 'sm muted', text: 'Компоновка — как разложены разделы' }),
@@ -4844,16 +4849,16 @@ async function viewTests(main, r, bare = false) {
       h('div', { class: 'frow' }, hostLbl, h('div', { class: 'row' }, host, proto, tab === 'pick' ? newTag('pick:quic') : null)),
       tab === 'pick' ? [multiRow, quicNote,
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Что пробовать' }), h('div', { class: 'row' },
-          h('label', { class: 'row' }, setCfg, 'стратегии из вашего конфига'), h('label', { class: 'row' }, setStd, 'стандартный набор'),
-          h('label', { class: 'row', title: 'Стратегии из истории подборов: сначала работавшие для этого сайта, затем до пяти помогавших другим сайтам' }, setHist, 'что работало раньше'),
-          h('label', { class: 'row', title: 'До восьми стратегий, которые сработали у абонентов вашего провайдера (база на GitHub, раз в сутки). Сначала — открывавшие этот сайт или его сеть.' }, setComm, 'стратегии сообщества', newTag('pick:community')))),
+          h('label', { class: 'chk' }, setCfg, 'стратегии из вашего конфига'), h('label', { class: 'chk' }, setStd, 'стандартный набор'),
+          h('label', { class: 'chk', title: 'Стратегии из истории подборов: сначала работавшие для этого сайта, затем до пяти помогавших другим сайтам' }, setHist, 'что работало раньше'),
+          h('label', { class: 'chk', title: 'До восьми стратегий, которые сработали у абонентов вашего провайдера (база на GitHub, раз в сутки). Сначала — открывавшие этот сайт или его сеть.' }, setComm, 'стратегии сообщества', newTag('pick:community')))),
         ownRow,
         oneRow(h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Каталог zapret2' }), h('div', { class: 'stack', style: 'gap:2px' },
           h('div', { class: 'row', style: 'min-width:0' }, catSel, newTag('pick:catalog')),
           h('span', { class: 'sm muted', text: 'Те же функции, позиции разреза и способы испортить фейк, что перебирает blockcheck2 из zapret2. Большой набор проверяется параллельно, до 15 стратегий сразу (на роутере со 128 МБ — по 5, чтобы он не тормозил); лучшие находки потом перепроверяются по одной.' })))),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Повторов' }), h('div', { class: 'row' }, repeats, h('span', { class: 'sm muted', text: 'Стратегия засчитывается, если сайт открылся каждый раз.' }))),
         oneRow(h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Уточнение' }), h('div', { class: 'stack', style: 'gap:2px' },
-          h('label', { class: 'row' }, refine, 'искать вариант полегче, даже если рабочая стратегия найдена'),
+          h('label', { class: 'chk' }, refine, 'искать вариант полегче, даже если рабочая стратегия найдена'),
           h('span', { class: 'sm muted', text: 'Если рабочих стратегий нет, подбор сам пробует довести лучшую: меняет число фейков (до 20), способ их порчи и имя в фейке. Это ещё 2–5 минут.' }))))] :
         h('p', { class: 'sm muted', text: 'Трассировка открывает сайт через копию текущей конфигурации с подробным журналом nfqws2 — видно, какой профиль сработал и что сделали стратегии.' }),
       h('div', { class: 'row' }, startBtn, h('span', { class: 'sm muted grow note-wide', text: 'Работает отдельный процесс nfqws2 на очереди 301 только для проверочных соединений роутера. Ваш трафик и основной nfqws2 не затрагиваются.' }))),
@@ -4940,7 +4945,7 @@ async function shareStrategy(x, s) {
     info.error ? notice('warn', 'Не всё удалось определить', info.error) : null,
     h('div', { class: 'row' }, h('span', { class: 'sm muted', text: 'Провайдер' }), asn, prov),
     !info.asn ? h('p', { class: 'sm muted', text: 'Номер AS провайдера определить не удалось — впишите его (узнать можно на bgp.he.net по своему адресу).' }) : null,
-    s.host ? h('label', { class: 'row' }, withHost, `указать сайт ${s.host}`) : null,
+    s.host ? h('label', { class: 'chk' }, withHost, `указать сайт ${s.host}`) : null,
     pre,
     h('p', { class: 'sm faint' }, 'Откроется форма в ', h('a', { href: info.repo || '#', target: '_blank', rel: 'noopener', text: 'базе стратегий' }),
       ' на GitHub, уже заполненная, — проверьте и нажмите Create (нужен аккаунт GitHub). Issue публичный: в нём только то, что выше. Ваш IP-адрес не отправляется. ',
@@ -5448,10 +5453,10 @@ async function viewAuto(main) {
         btn('Отклонить', async () => { if (await guarded(() => api('auto_dismiss', { host: o.host }))) { await loadState().catch(() => {}); route(true); } }, 'small ghost'))))) : null,
     panel(null, null,
       h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Автоподбор' }), h('div', { class: 'stack', style: 'gap:2px' },
-        h('label', { class: 'row', style: 'flex-wrap:nowrap;align-items:flex-start' }, enabled, 'подбирать стратегию, когда сайт из мониторинга перестаёт открываться'),
+        h('label', { class: 'chk' }, enabled, 'подбирать стратегию, когда сайт из мониторинга перестаёт открываться'),
         h('span', { class: 'sm muted', text: `Следит за сайтами мониторинга (сейчас ${a.monitor.sites}). Упавший сайт перепроверяется через 10 минут; если он не открывается и снова — запускается подбор. Первым пробуется то, что для этого сайта уже работало.` }))),
       h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Что делать с найденным' }), h('div', { class: 'stack', style: 'gap:2px' },
-        h('label', { class: 'row', style: 'flex-wrap:nowrap;align-items:flex-start' }, apply, 'применять самому — записью в список профиля, если его стратегия подошла, иначе отдельным профилем только для этого сайта'),
+        h('label', { class: 'chk' }, apply, 'применять самому — записью в список профиля, если его стратегия подошла, иначе отдельным профилем только для этого сайта'),
         h('span', { class: 'sm muted', text: 'Без галочки найденное только предлагается: здесь, в «Проблемах» и в Telegram. С галочкой роутер сам создаёт профиль для сайта, перезапускает nfqws2 и проверяет: если сайт не открылся или сломался другой сайт мониторинга — возвращает конфиг как был.' }))),
       h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Считать поломкой' }), h('div', { class: 'row' }, fails, h('span', { class: 'sm muted', text: 'неудачных, после того как сайт открывался' }))),
       h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Повторять не чаще' }), h('div', { class: 'row' }, h('span', { class: 'sm muted', text: 'раз в' }), pause, h('span', { class: 'sm muted', text: 'для одного сайта' }))),
@@ -5486,7 +5491,7 @@ async function paneReport(content) {
     panel(null, null,
       h('p', { class: 'sm muted', text: 'Текст, который можно приложить к вопросу в чате или в issue: версии, состояние сервиса, замечания к конфигу, профили, названия списков, мониторинг, итоги подборов. Паролей, токена Telegram, внешнего адреса и содержимого списков в нём нет.' }),
       h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Проверить сайты' }), sites),
-      h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Имена сайтов' }), h('label', { class: 'row', style: 'flex-wrap:nowrap' }, hide, 'заменить на «сайт-1», «сайт-2»…')),
+      h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Имена сайтов' }), h('label', { class: 'chk' }, hide, 'заменить на «сайт-1», «сайт-2»…')),
       h('div', { class: 'row' }, make)),
     acts, ta);
 }
@@ -5511,7 +5516,7 @@ async function viewAsn(main) {
       r.count ? h('pre', { class: 'box sm', text: r.sample.join('\n') + (r.count > r.sample.length ? `\n… и ещё ${r.count - r.sample.length}` : '') }) : notice('warn', 'У этой сети нет анонсированных префиксов', 'Проверьте номер AS.'),
       r.count > 3000 ? notice('warn', 'Очень большая сеть', 'Такой список затронет множество посторонних сайтов и сервисов — подумайте, нужен ли он целиком.') : null,
       h('p', { class: 'sm faint', text: (r.v6 ? 'IPv4 и IPv6.' : 'Только IPv4: IPv6 в конфиге выключен.') + ' Вложенные префиксы убраны.' }),
-      r.count ? h('div', { class: 'row' }, h('label', { class: 'row', style: 'flex-wrap:nowrap' }, auto, 'обновлять раз в сутки'), h('span', { class: 'grow' }),
+      r.count ? h('div', { class: 'row' }, h('label', { class: 'chk' }, auto, 'обновлять раз в сутки'), h('span', { class: 'grow' }),
         btn(r.exists ? `Обновить ${r.name}` : `Создать список ${r.name}`, async () => {
           const c = await guarded(() => api('asn_create', { asn: r.asn, auto: auto.checked }), 'Готово');
           if (!c) return;
@@ -5532,6 +5537,115 @@ async function viewAsn(main) {
         h('span', { class: 'sm muted', text: `${plural(x.count, 'префикс', 'префикса', 'префиксов')} · ${x.auto ? 'обновляется раз в сутки' : 'не обновляется'} · ${fmtDate(x.last)}` + (x.error ? ` · ${x.error}` : '') })),
       btn('Обновить', () => look('AS' + x.asn), 'small ghost', 'refresh'),
       btn(x.auto ? 'Не обновлять' : 'Обновлять', async () => { if (await guarded(() => api('asn_set', { asn: x.asn, auto: !x.auto }))) route(true); }, 'small ghost')))) : null);
+}
+
+// ---------- Устройства ----------
+// Who in the home network goes through nfqws2. A device is known by MAC; every listed device keeps its own
+// switch, and «new devices» decides only for the ones the router has not seen yet. OpenWrt only: on Keenetic
+// the firmware access policy does the same.
+// Redraw the same page with fresh data and stay where the user was (route() scrolls to the top for page changes)
+async function rerouteHere() {
+  const y = window.scrollY;
+  await route(true);
+  window.scrollTo(0, y);
+}
+
+async function viewDevices(main) {
+  const data = await api('devices_get');
+  main.append(h('div', { class: 'vh' }, h('h1', { text: 'Устройства' })));
+  if (data.keenetic) {
+    main.append(panel(null, null,
+      h('p', { text: 'На Keenetic устройства выбираются в самой прошивке — политикой доступа. Создайте политику в веб-интерфейсе Keenetic, добавьте в неё нужные устройства и впишите её имя в конфиг nfqws2 (POLICY_NAME). Можно и наоборот: обходить всех, кроме устройств политики (POLICY_EXCLUDE=1).' }),
+      h('p', { class: 'sm muted', text: 'Проверки самого роутера (мониторинг, «Проверить сайт») интерфейс и тогда пропускает через nfqws2.' }),
+      h('div', { class: 'row' }, btn('Конфиг целиком', () => go('#/settings/raw'), 'small'))));
+    return;
+  }
+  let newOn = data.new_on;
+  const items = data.items.map((x) => ({ ...x }));
+  const orig = JSON.stringify([newOn, items.map((x) => [x.mac, x.on, x.name])]);
+  const bar = h('div', { class: 'savebar', hidden: true });
+  const tbody = h('tbody');
+  const cnt = h('span', { class: 'dev-cnt' });
+  const sync = () => {
+    const now = JSON.stringify([newOn, items.map((x) => [x.mac, x.on, x.name])]);
+    setDirty(now !== orig);
+    bar.hidden = now === orig;
+    const on = items.filter((x) => x.on).length;
+    cnt.replaceChildren('С обходом ', h('b', { text: String(on) }), ' из ', h('b', { text: String(items.length) }));
+  };
+  const toggle = (on, label, onchange) => {
+    const b = h('button', { class: 'sw', type: 'button', role: 'switch', 'aria-checked': String(on), 'aria-label': label,
+      onclick: () => { const v = b.getAttribute('aria-checked') !== 'true'; b.setAttribute('aria-checked', String(v)); onchange(v); } });
+    return b;
+  };
+  // sorting by a column header; the choice is a per-browser convenience
+  const SORT_KEY = 'nfqws-ui-dev-sort';
+  let sort = { key: 'name', dir: 1 };
+  try { sort = { ...sort, ...JSON.parse(localStorage.getItem(SORT_KEY) || '{}') }; } catch { /* no storage */ }
+  const label = (x) => (x.name || x.mac).toLowerCase();
+  const ipNum = (ip) => ip ? ip.split('.').reduce((a, n) => a * 256 + Number(n), 0) : Infinity;
+  const CMP = {
+    name: (a, b) => label(a).localeCompare(label(b), 'ru'),
+    mac: (a, b) => a.mac.localeCompare(b.mac),
+    ip: (a, b) => ipNum(a.ip) - ipNum(b.ip),
+    online: (a, b) => b.online - a.online,
+    on: (a, b) => b.on - a.on,
+  };
+  const sorted = () => [...items].sort((a, b) => sort.dir * (CMP[sort.key] || CMP.name)(a, b) || CMP.name(a, b));
+  const heads = [['name', 'Устройство', ''], ['mac', 'MAC', 'hide-narrow'], ['ip', 'Адрес', 'hide-narrow'], ['online', 'Сейчас', 'hide-narrow'], ['on', 'Обход', '']];
+  const thead = h('thead');
+  const drawHead = () => thead.replaceChildren(h('tr', {}, heads.map(([k, t, cls]) => h('th', { class: cls, 'aria-sort': sort.key === k ? (sort.dir > 0 ? 'ascending' : 'descending') : 'none' },
+    h('button', { class: 'th-sort', type: 'button', title: 'Сортировать по столбцу «' + t + '»', onclick: () => {
+      sort = { key: k, dir: sort.key === k ? -sort.dir : 1 };
+      try { localStorage.setItem(SORT_KEY, JSON.stringify(sort)); } catch { /* no storage */ }
+      drawHead(); draw();
+    } }, t, sort.key === k ? icon(sort.dir > 0 ? 'up' : 'down') : null)))));
+  const draw = () => {
+    tbody.replaceChildren(...sorted().map((x) => {
+      const tr = h('tr', { class: x.on ? '' : 'off' },
+        h('td', {}, h('div', { class: 'dev-name' }, h('span', { class: 'dev-dot' + (x.online ? '' : ' gone'), title: x.online ? 'в сети' : 'сейчас не в сети' }),
+          h('span', { text: x.name || x.mac }), x.manual ? h('span', { class: 'dev-tag', text: 'вписан вручную' }) : null)),
+        h('td', { class: 'mono sm hide-narrow', text: x.mac }),
+        h('td', { class: 'mono sm hide-narrow ' + (x.ip ? '' : 'muted'), text: x.ip || '—' }),
+        h('td', { class: 'sm muted hide-narrow', text: x.online ? 'в сети' : 'нет' }),
+        // the remove button keeps its place empty in other rows, so the switches stay in one column
+        h('td', {}, h('div', { class: 'dev-act' }, toggle(x.on, 'Обход для ' + (x.name || x.mac), (v) => { x.on = v; tr.classList.toggle('off', !v); sync(); }),
+          x.manual ? btn('', () => { items.splice(items.indexOf(x), 1); draw(); sync(); }, 'small ghost icon slot', 'x', { title: 'Убрать из списка', 'aria-label': 'Убрать ' + x.mac }) : h('span', { class: 'slot' }))));
+      return tr;
+    }));
+  };
+  const mac = h('input', { class: 'input mono grow', placeholder: 'MAC, например 3c:22:fb:00:10:9e', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'MAC-адрес' });
+  const add = () => {
+    const v = mac.value.trim().toLowerCase().replace(/-/g, ':');
+    if (!/^([0-9a-f]{2}:){5}[0-9a-f]{2}$/.test(v)) { toast('Не похоже на MAC-адрес: шесть пар цифр 0–9 и букв a–f через двоеточие', { err: true }); return; }
+    if (items.some((x) => x.mac === v)) { toast('Это устройство уже в списке'); return; }
+    items.push({ mac: v, name: '', ip: '', online: false, on: newOn, manual: true });
+    mac.value = '';
+    draw(); sync();
+  };
+  const save = async () => {
+    const list = Object.fromEntries(items.map((x) => [x.mac, { on: x.on, name: x.name, manual: x.manual }]));
+    const r = await guarded(() => api('devices_set', { new_on: newOn, list }));
+    if (!r) return;
+    setDirty(false);
+    toast(r.ok === false ? 'Сохранено, но правила поставить не удалось — подробности в «Отчёте для помощи»' : 'Сохранено. Новые соединения пойдут по-новому, уже открытые — как шли');
+    rerouteHere();
+  };
+  bar.append(h('span', { text: 'Изменён выбор устройств' }), btn('Отменить', () => { setDirty(false); rerouteHere(); }, 'ghost'), btn('Сохранить', save, 'primary'));
+  drawHead(); draw(); sync();
+  main.append(
+    h('p', { class: 'muted dev-lead', text: 'Кто в домашней сети идёт через nfqws2. Устройство узнаётся по MAC-адресу, поэтому смена его IP ничего не ломает. Проверки самого роутера всегда идут через nfqws2.' }),
+    data.active && data.ok === false && data.running ? notice('warn', 'Выбор устройств сейчас не действует', 'Правила не стоят — все устройства идут через nfqws2. Обычно так бывает, если nfqws2 перезапустили не из интерфейса; правила вернутся сами в течение 10 минут.',
+      btn('Вернуть сейчас', async () => { if (await guarded(() => api('devices_get'))) rerouteHere(); }, 'small')) : null,
+    !data.active ? notice('info', 'Сейчас обход действует для всей сети', 'Выключите обход у устройства, чтобы оно ходило напрямую, мимо nfqws2.') : null,
+    panel(null, null, h('div', { class: 'row' },
+      h('label', { class: 'swl' }, toggle(newOn, 'Новые устройства — с обходом', (v) => { newOn = v; sync(); }), 'Новые устройства — с обходом'),
+      h('span', { class: 'grow' }), cnt),
+      h('p', { class: 'sm muted', style: 'margin:6px 0 0', text: 'Касается только устройств, которых ещё нет в списке ниже: у каждого из списка свой переключатель.' })),
+    panel(null, null,
+      items.length ? h('div', { class: 'scroll' }, h('table', { class: 'tbl devs' }, thead, tbody)) : h('p', { class: 'muted', text: 'Роутер пока не видит устройств: нет аренд DHCP и соседей в сети. Устройство можно вписать по MAC.' }),
+      h('form', { class: 'row', style: 'margin-top:12px', onsubmit: (e) => { e.preventDefault(); add(); } }, mac, h('button', { class: 'btn small', type: 'submit' }, 'Добавить вручную'))),
+    bar);
 }
 
 // navigator.clipboard needs a secure context: over plain http by a non-local address it is absent, then the old
