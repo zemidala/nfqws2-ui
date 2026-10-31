@@ -456,27 +456,60 @@ function getLook() {
 }
 // Z is the K layout with the brand palette: data-variant="k" keeps every K rule, data-palette="zd" swaps colours
 const isKLike = (variant) => variant === 'k' || variant === 'z';
-// Tint of style B («Карточки»): optional, the default stays teal. A hue 0–360 or 'gray'; the palette for both
-// themes is derived from it with the lightness steps of the stock teal palette, so contrast stays the same.
-// The CSS is cached in the browser and applied by index.html before the first paint (no teal flash)
-const B_TINTS = [[null, 'Бирюзовый', 172], [218, 'Синий', 218], [262, 'Фиолетовый', 262], [330, 'Розовый', 330], [28, 'Янтарный', 28], ['gray', 'Графит', 220]];
-function tintCss(t) {
-  if (t === null || t === undefined || t === '') return '';
-  const H = t === 'gray' ? 220 : Math.round(Number(t)) % 360;
-  const k = t === 'gray' ? 0.15 : 1;   // graphite: almost no colour, a hint of blue
-  const c = (s, l) => `hsl(${H} ${Math.round(s * k)}% ${l}%)`;
-  const acc = t === 'gray' ? 'hsl(220 10% 72%)' : c(62, 58);
-  const dark = `--bg: ${c(26, 6)}; --surface: ${c(22, 10)}; --line: ${c(20, 18)}; --soft: ${c(20, 13)}; --fg: ${c(22, 91)}; --muted: ${c(14, 74)}; --faint: ${c(12, 70)};`
-    + ` --accent: ${acc}; --accent-ink: ${t === 'gray' ? 'hsl(220 12% 80%)' : c(66, 66)}; --accent-fg: ${c(60, 8)}; --accent-soft: ${c(42, 16)}; --tk-opt: ${c(60, 70)}; --tk-p: ${c(10, 42)};`;
-  const lacc = t === 'gray' ? 'hsl(220 14% 30%)' : c(72, 30);
-  const light = `--bg: ${c(20, 94)}; --surface: #fff; --line: ${c(18, 86)}; --soft: ${c(18, 96)}; --fg: ${c(28, 11)}; --muted: ${c(11, 36)}; --faint: ${c(9, 44)};`
-    + ` --accent: ${lacc}; --accent-ink: ${lacc}; --accent-fg: #fff; --accent-soft: ${c(42, 90)}; --tk-opt: ${lacc}; --tk-p: ${c(10, 62)};`;
-  return `:root:root[data-variant="b"] { ${light} }\n:root:root[data-variant="b"][data-mode="dark"] { ${dark} }\n`
-    + `@media (prefers-color-scheme: dark) { :root:root[data-variant="b"]:not([data-mode="light"]) { ${dark} } }`;
+// Tint of a style: optional, each style keeps its own colours by default, and every style (except Z, whose point
+// is the brand colours) remembers its own tint in look.tints. A hue 0–360 or 'gray'. Backgrounds, cards, lines and
+// text keep the lightness steps of that style's stock palette (measured from app.css); buttons and marks use one
+// safe lightness for any hue, so white text on a button stays readable even for yellow. The CSS is cached in the
+// browser and applied by index.html before the first paint (no flash of the stock colour)
+const TINTS = [[null, 'Как в стиле', null], [218, 'Синий', 218], [172, 'Бирюзовый', 172], [262, 'Фиолетовый', 262], [330, 'Розовый', 330], [28, 'Янтарный', 28], ['gray', 'Графит', 220]];
+const TINT_VARIANTS = ['a', 'b', 'c', 'k'];
+// [saturation, lightness] of the neutrals per style and theme; K also tints its menu, and its page background is the card colour
+const TINT_STEPS = {
+  a: { light: { bg: [26, 96], line: [21, 89], soft: [26, 95], fg: [24, 11], muted: [13, 41], faint: [10, 50], 'tk-p': [13, 64] },
+    dark: { bg: [21, 7], surface: [20, 11], line: [17, 18], soft: [20, 14], fg: [22, 91], muted: [13, 74], faint: [12, 71], 'tk-p': [12, 41] } },
+  b: { light: { bg: [20, 94], line: [18, 86], soft: [18, 96], fg: [28, 11], muted: [11, 36], faint: [9, 44], 'tk-p': [10, 62] },
+    dark: { bg: [26, 6], surface: [22, 10], line: [20, 18], soft: [20, 13], fg: [22, 91], muted: [14, 74], faint: [12, 70], 'tk-p': [10, 42] } },
+  c: { light: { bg: [14, 97], line: [13, 90], soft: [15, 95], fg: [13, 12], muted: [7, 40], faint: [7, 51], 'tk-p': [8, 64] },
+    dark: { bg: [10, 8], surface: [10, 11], line: [9, 19], soft: [11, 15], fg: [21, 92], muted: [8, 74], faint: [7, 71], 'tk-p': [7, 43] } },
+  k: { light: { line: [12, 89], soft: [14, 96], fg: [10, 12], muted: [6, 43], faint: [6, 49], 'tk-p': [6, 60], 'k-side': [22, 97], 'k-active': [26, 92], 'k-field': [8, 73] },
+    dark: { bg: [10, 15], surface: [10, 15], line: [10, 21], soft: [10, 18], fg: [8, 91], muted: [8, 73], faint: [8, 70], 'tk-p': [6, 44], 'k-side': [10, 12], 'k-active': [12, 18], 'k-field': [8, 34] } },
+};
+// The eye sees blue and violet much darker than yellow at the same HSL lightness, so the accent lightness is picked
+// per hue: the lightest (light theme) or darkest (dark theme) step whose relative luminance still keeps the text
+// on it readable — white on a light-theme button, near-black on a dark-theme one
+function hslLum(h, s, l) {
+  s /= 100; l /= 100;
+  const f = (n) => { const k = (n + h / 30) % 12; return l - s * Math.min(l, 1 - l) * Math.max(-1, Math.min(k - 3, 9 - k, 1)); };
+  const lin = (c) => c <= 0.04045 ? c / 12.92 : ((c + 0.055) / 1.055) ** 2.4;
+  return 0.2126 * lin(f(0)) + 0.7152 * lin(f(8)) + 0.0722 * lin(f(4));
+}
+const accentL = (h, s, from, to, ok) => { for (let l = from; from < to ? l <= to : l >= to; l += from < to ? 1 : -1) if (ok(hslLum(h, s, l))) return l; return to; };
+function tintCss(look) {
+  let css = '';
+  for (const v of TINT_VARIANTS) {
+    const t = look.tints?.[v] ?? (v === 'b' ? look.bTint : undefined);   // bTint: the first, B-only form of this setting
+    if (t === null || t === undefined || t === '') continue;
+    const H = t === 'gray' ? 220 : ((Math.round(Number(t)) % 360) + 360) % 360;
+    const k = t === 'gray' ? 0.15 : 1;   // graphite: almost no colour, a hint of blue
+    const c = (s, l) => `hsl(${H} ${Math.round(s * k)}% ${l}%)`;
+    const vars = (steps) => Object.entries(steps).map(([n, [s, l]]) => `--${n}: ${c(s, l)};`).join(' ');
+    // light theme: the lightest accent with luminance ≤ 0.11 (white text ≈ 7:1); dark theme: the darkest accent with
+    // luminance ≥ 0.36 for buttons and ≥ 0.48 for coloured text on the dark cards
+    const lL = accentL(H, 72 * k, 46, 18, (y) => y <= 0.11);
+    const dL = accentL(H, 66 * k, 52, 88, (y) => y >= 0.36);
+    const iL = accentL(H, 70 * k, 60, 92, (y) => y >= 0.48);
+    const lacc = c(72, lL);
+    const dacc = c(66, dL);
+    const light = vars(TINT_STEPS[v].light) + ` --accent: ${lacc}; --accent-ink: ${lacc}; --accent-fg: #fff; --accent-soft: ${c(45, 92)}; --tk-opt: ${lacc};`;
+    const dark = vars(TINT_STEPS[v].dark) + ` --accent: ${dacc}; --accent-ink: ${c(70, iL)}; --accent-fg: ${c(60, 8)}; --accent-soft: ${c(42, 17)}; --tk-opt: ${c(70, iL)};`;
+    const sel = `:root:root:root[data-variant="${v}"]${v === 'k' ? ':not([data-palette])' : ''}`;
+    css += `${sel} { ${light} }\n${sel}[data-mode="dark"] { ${dark} }\n@media (prefers-color-scheme: dark) { ${sel}:not([data-mode="light"]) { ${dark} } }\n`;
+  }
+  return css;
 }
 
 function applyLook(look = getLook()) {
-  const css = tintCss(look.bTint);
+  const css = tintCss(look);
   let st = document.getElementById('tint-style');
   if (css && !st) st = document.head.appendChild(h('style', { id: 'tint-style' }));
   if (st) st.textContent = css;
@@ -623,7 +656,7 @@ const FEATURES = [
   ['dns', '1.26.0', '«DNS-серверы»: какие DNS отвечают с роутера, не перехвачен ли обычный DNS и не подменяет ли DNS роутера адреса'],
   ['lists:order', '1.26.0', '«Списки»: поиск, группы по профилю и порядок по имени или по числу записей'],
   ['mon:view', '1.26.0', '«Мониторинг»: сводка, таблица с сортировкой и общая шкала времени — видно, когда падало всё сразу'],
-  ['look:tint', '1.27.0', '«Оформление»: свой оттенок для стиля «Карточки» — синий, фиолетовый, графит или любой другой'],
+  ['look:tint', '1.27.0', '«Оформление»: свой оттенок для стилей A, B, C и K — синий, фиолетовый, графит или любой другой'],
   ['conns', '1.27.0', '«Соединения устройства»: куда ходит программа на устройстве сети, приходят ли ответы и видит ли эти порты nfqws2'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
@@ -4146,20 +4179,27 @@ const LAYOUT_THUMB = {
 
 async function paneLook(content) {
   const look = getLook();
-  // tint of «Карточки»: shown while style B is chosen; the slider repaints live, the marks update when let go
-  const cur = look.bTint ?? null;
-  const own = typeof cur === 'number' && !B_TINTS.some(([v]) => v === cur);
-  const tintRow = h('div', { class: 'frow tint-row', hidden: look.variant !== 'b' },
-    h('span', { class: 'lbl', text: 'Оттенок «Карточек»' }),
-    h('div', { class: 'tints', role: 'radiogroup', 'aria-label': 'Оттенок «Карточек»' },
-      B_TINTS.map(([v, name, H]) => h('button', { type: 'button', role: 'radio', 'aria-checked': String(!own && cur === v), class: 'tint' + (!own && cur === v ? ' on' : ''),
-        onclick: () => { setLook({ bTint: v }); route(); } }, h('i', { style: `background:${v === 'gray' ? 'hsl(220 8% 48%)' : `hsl(${H} 62% 48%)`}` }), name + (v === null ? ' (как было)' : ''))),
-      h('label', { class: 'tint tint-own' + (own ? ' on' : '') }, 'Свой',
-        h('input', { type: 'range', class: 'hue', min: 0, max: 359, value: typeof cur === 'number' ? cur : 172, 'aria-label': 'Свой оттенок',
-          oninput: (e) => setLook({ bTint: Number(e.target.value) }), onchange: () => route() }))));
-  const tintNew = newTag('look:tint');
-  if (tintNew) tintRow.querySelector('.lbl').append(' ', tintNew);
-  const card = (v, title, text, thumb) => h('label', { class: 'look' }, h('input', { type: 'radio', name: 'look', value: v, checked: look.variant === v, onchange: () => { setLook({ variant: v }); tintRow.hidden = v !== 'b'; } }), thumb, h('b', { text: title }), h('span', { class: 'sm muted', text }));
+  // tint of the chosen style (not Z): the slider repaints live, the marks update when let go
+  const setTint = (v, t) => { const all = { ...(getLook().tints || {}) }; if (t === null) delete all[v]; else all[v] = t; setLook({ tints: all, bTint: undefined }); };
+  const tintRow = h('div', { class: 'frow tint-row' });
+  const drawTint = () => {
+    const v = getLook().variant;
+    tintRow.hidden = !TINT_VARIANTS.includes(v);
+    if (tintRow.hidden) return;
+    const cur = getLook().tints?.[v] ?? (v === 'b' ? getLook().bTint : undefined) ?? null;
+    const own = typeof cur === 'number' && !TINTS.some(([t]) => t === cur);
+    const tintNew = newTag('look:tint');
+    tintRow.replaceChildren(h('span', { class: 'lbl' }, 'Оттенок стиля', tintNew ? [' ', tintNew] : null),
+      h('div', { class: 'tints', role: 'radiogroup', 'aria-label': 'Оттенок стиля' },
+        TINTS.map(([t, name, H]) => h('button', { type: 'button', role: 'radio', 'aria-checked': String(!own && cur === t), class: 'tint' + (!own && cur === t ? ' on' : ''),
+          onclick: () => { setTint(v, t); drawTint(); } },
+          t === null ? null : h('i', { style: `background:${t === 'gray' ? 'hsl(220 8% 48%)' : `hsl(${H} 62% 48%)`}` }), name)),
+        h('label', { class: 'tint tint-own' + (own ? ' on' : '') }, 'Свой',
+          h('input', { type: 'range', class: 'hue', min: 0, max: 359, value: typeof cur === 'number' ? cur : 218, 'aria-label': 'Свой оттенок',
+            oninput: (e) => setTint(v, Number(e.target.value)), onchange: () => drawTint() }))));
+  };
+  drawTint();
+  const card = (v, title, text, thumb) => h('label', { class: 'look' }, h('input', { type: 'radio', name: 'look', value: v, checked: look.variant === v, onchange: () => { setLook({ variant: v }); drawTint(); } }), thumb, h('b', { text: title }), h('span', { class: 'sm muted', text }));
   const i = (cls, style) => h('i', { class: cls, style });
   // Компоновка: где показаны переходы между страницами. Страницы и их адреса одни и те же.
   const setLayout = (v) => { setLook({ layout: v }); renderShell(); route(); };
