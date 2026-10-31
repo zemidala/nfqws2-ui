@@ -456,7 +456,31 @@ function getLook() {
 }
 // Z is the K layout with the brand palette: data-variant="k" keeps every K rule, data-palette="zd" swaps colours
 const isKLike = (variant) => variant === 'k' || variant === 'z';
+// Tint of style B («Карточки»): optional, the default stays teal. A hue 0–360 or 'gray'; the palette for both
+// themes is derived from it with the lightness steps of the stock teal palette, so contrast stays the same.
+// The CSS is cached in the browser and applied by index.html before the first paint (no teal flash)
+const B_TINTS = [[null, 'Бирюзовый', 172], [218, 'Синий', 218], [262, 'Фиолетовый', 262], [330, 'Розовый', 330], [28, 'Янтарный', 28], ['gray', 'Графит', 220]];
+function tintCss(t) {
+  if (t === null || t === undefined || t === '') return '';
+  const H = t === 'gray' ? 220 : Math.round(Number(t)) % 360;
+  const k = t === 'gray' ? 0.15 : 1;   // graphite: almost no colour, a hint of blue
+  const c = (s, l) => `hsl(${H} ${Math.round(s * k)}% ${l}%)`;
+  const acc = t === 'gray' ? 'hsl(220 10% 72%)' : c(62, 58);
+  const dark = `--bg: ${c(26, 6)}; --surface: ${c(22, 10)}; --line: ${c(20, 18)}; --soft: ${c(20, 13)}; --fg: ${c(22, 91)}; --muted: ${c(14, 74)}; --faint: ${c(12, 70)};`
+    + ` --accent: ${acc}; --accent-ink: ${t === 'gray' ? 'hsl(220 12% 80%)' : c(66, 66)}; --accent-fg: ${c(60, 8)}; --accent-soft: ${c(42, 16)}; --tk-opt: ${c(60, 70)}; --tk-p: ${c(10, 42)};`;
+  const lacc = t === 'gray' ? 'hsl(220 14% 30%)' : c(72, 30);
+  const light = `--bg: ${c(20, 94)}; --surface: #fff; --line: ${c(18, 86)}; --soft: ${c(18, 96)}; --fg: ${c(28, 11)}; --muted: ${c(11, 36)}; --faint: ${c(9, 44)};`
+    + ` --accent: ${lacc}; --accent-ink: ${lacc}; --accent-fg: #fff; --accent-soft: ${c(42, 90)}; --tk-opt: ${lacc}; --tk-p: ${c(10, 62)};`;
+  return `:root:root[data-variant="b"] { ${light} }\n:root:root[data-variant="b"][data-mode="dark"] { ${dark} }\n`
+    + `@media (prefers-color-scheme: dark) { :root:root[data-variant="b"]:not([data-mode="light"]) { ${dark} } }`;
+}
+
 function applyLook(look = getLook()) {
+  const css = tintCss(look.bTint);
+  let st = document.getElementById('tint-style');
+  if (css && !st) st = document.head.appendChild(h('style', { id: 'tint-style' }));
+  if (st) st.textContent = css;
+  try { if (css) localStorage.setItem('nfqws-ui-tint-css', css); else localStorage.removeItem('nfqws-ui-tint-css'); } catch { /* no storage */ }
   document.documentElement.dataset.variant = look.variant === 'z' ? 'k' : look.variant;
   if (look.variant === 'z') document.documentElement.dataset.palette = 'zd'; else delete document.documentElement.dataset.palette;
   document.documentElement.dataset.mode = look.mode;
@@ -599,6 +623,7 @@ const FEATURES = [
   ['dns', '1.26.0', '«DNS-серверы»: какие DNS отвечают с роутера, не перехвачен ли обычный DNS и не подменяет ли DNS роутера адреса'],
   ['lists:order', '1.26.0', '«Списки»: поиск, группы по профилю и порядок по имени или по числу записей'],
   ['mon:view', '1.26.0', '«Мониторинг»: сводка, таблица с сортировкой и общая шкала времени — видно, когда падало всё сразу'],
+  ['look:tint', '1.27.0', '«Оформление»: свой оттенок для стиля «Карточки» — синий, фиолетовый, графит или любой другой'],
   ['conns', '1.27.0', '«Соединения устройства»: куда ходит программа на устройстве сети, приходят ли ответы и видит ли эти порты nfqws2'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
@@ -4121,7 +4146,20 @@ const LAYOUT_THUMB = {
 
 async function paneLook(content) {
   const look = getLook();
-  const card = (v, title, text, thumb) => h('label', { class: 'look' }, h('input', { type: 'radio', name: 'look', value: v, checked: look.variant === v, onchange: () => { setLook({ variant: v }); } }), thumb, h('b', { text: title }), h('span', { class: 'sm muted', text }));
+  // tint of «Карточки»: shown while style B is chosen; the slider repaints live, the marks update when let go
+  const cur = look.bTint ?? null;
+  const own = typeof cur === 'number' && !B_TINTS.some(([v]) => v === cur);
+  const tintRow = h('div', { class: 'frow tint-row', hidden: look.variant !== 'b' },
+    h('span', { class: 'lbl', text: 'Оттенок «Карточек»' }),
+    h('div', { class: 'tints', role: 'radiogroup', 'aria-label': 'Оттенок «Карточек»' },
+      B_TINTS.map(([v, name, H]) => h('button', { type: 'button', role: 'radio', 'aria-checked': String(!own && cur === v), class: 'tint' + (!own && cur === v ? ' on' : ''),
+        onclick: () => { setLook({ bTint: v }); route(); } }, h('i', { style: `background:${v === 'gray' ? 'hsl(220 8% 48%)' : `hsl(${H} 62% 48%)`}` }), name + (v === null ? ' (как было)' : ''))),
+      h('label', { class: 'tint tint-own' + (own ? ' on' : '') }, 'Свой',
+        h('input', { type: 'range', class: 'hue', min: 0, max: 359, value: typeof cur === 'number' ? cur : 172, 'aria-label': 'Свой оттенок',
+          oninput: (e) => setLook({ bTint: Number(e.target.value) }), onchange: () => route() }))));
+  const tintNew = newTag('look:tint');
+  if (tintNew) tintRow.querySelector('.lbl').append(' ', tintNew);
+  const card = (v, title, text, thumb) => h('label', { class: 'look' }, h('input', { type: 'radio', name: 'look', value: v, checked: look.variant === v, onchange: () => { setLook({ variant: v }); tintRow.hidden = v !== 'b'; } }), thumb, h('b', { text: title }), h('span', { class: 'sm muted', text }));
   const i = (cls, style) => h('i', { class: cls, style });
   // Компоновка: где показаны переходы между страницами. Страницы и их адреса одни и те же.
   const setLayout = (v) => { setLook({ layout: v }); renderShell(); route(); };
@@ -4145,6 +4183,7 @@ async function paneLook(content) {
         card('c', 'C · Схема', 'Путь соединения через профили — главный объект.', h('span', { class: 'thumb th-c' }, h('span', { class: 'tl' }, i(), i(), i()), h('span', { class: 'tr' }, [0, 1, 2].map((k) => h('span', { class: 'pl' }, h('span', { class: 'nd' }), i(k === 0 ? 'acc' : '')))))),
         card('k', 'K · Keenetic', 'Как веб-интерфейс Keenetic: светлое меню с разделами, белые карточки, синие кнопки.', h('span', { class: 'thumb th-k' }, h('span', { class: 'tl' }, i('acc'), i(), i(), i('acc'), i()), h('span', { class: 'tr' }, i('card'), i('card')))),
         h('div', { class: 'look-new' }, card('z', 'Z · zemidala', 'Фирменные цвета: чёрное меню, графит, оранжевые кнопки и отметки. Раскладка как у K.', h('span', { class: 'thumb th-z' }, h('span', { class: 'tl' }, i('acc'), i(), i(), i('acc'), i()), h('span', { class: 'tr' }, i('card'), i('card')))), newTag('look:zd'))),
+      tintRow,
       h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Тема' }),
         h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Тема' }, [['auto', 'Как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(([m, t]) =>
           h('button', { type: 'button', role: 'radio', 'aria-checked': String(look.mode === m), class: look.mode === m ? 'on' : '', text: t, onclick: () => { setLook({ mode: m }); route(); } })))),
