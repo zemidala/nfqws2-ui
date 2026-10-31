@@ -5311,11 +5311,13 @@ async function viewFreeze(main) {
 const DNS_SITE_TEXT = { ok: ['верно', 'ok'], fake: ['заглушка', 'bad'], none: ['нет ответа', 'bad'], other: ['другой адрес', 'warn'], podkop: ['podkop', ''], unknown: ['не сверить', ''] };
 
 async function viewDns(main) {
-  const startBtn = btn('Проверить', start, 'primary', 'play');
+  const startBtn = btn('Проверить', start, 'primary');
+  const when = h('span');
   const out = h('div', { class: 'stack', style: 'gap:14px' }, spinner('Загрузка…'));
   main.append(
-    h('div', { class: 'vh' }, h('h1', { text: 'DNS-серверы' }), startBtn),
-    h('p', { class: 'muted dns-lead', text: 'Какие DNS-серверы отвечают с этого роутера, не перехватывает ли провайдер обычный DNS и не подменяет ли адреса закрытых сайтов. Настройки DNS роутера страница не меняет — только показывает и советует.' }),
+    h('div', { class: 'vh' }, h('h1', { text: 'DNS-серверы' }), h('span', { class: 'grow' }), startBtn),
+    h('p', { class: 'muted dns-lead' }, 'Какие DNS-серверы отвечают с этого роутера, не перехватывает ли провайдер обычный DNS и не подменяет ли адреса закрытых сайтов. ', when,
+      'Настройки DNS роутера страница не меняет — только показывает и советует.'),
     out);
   async function start() {
     const s = await guarded(() => api('dns_start'));
@@ -5332,14 +5334,18 @@ async function viewDns(main) {
   }
 
   const who = (u) => u.asn ? `${u.as_name || 'сеть'} (AS${u.asn})` : '';
-  function plainLine(s) {
+  // the fastest working DoT/DoH among the public servers: named in the advice and marked «лучший» on its card
+  const bestOf = (s) => s.servers.filter((x) => x.kind === 'public').flatMap((x) => [['DoT', x, x.dot], ['DoH', x, x.doh]])
+    .filter(([, , r]) => r?.ok).map(([p, x, r]) => ({ p, x, ms: r.ms })).sort((a, b) => a.ms - b.ms)[0];
+  function plainLine(s, faking) {
     const u = s.udp || {};
     if (u.st === 'none') return [chip('нет ответа', 'bad'), null, 'на порт 53 ответа нет'];
     if (u.st === 'intercepted') {
       const why = u.why === 'isp' ? 'ответил сервер провайдера' : u.why === 'local' ? `ответил DNS вашей сети за ${u.ms} мс, а не ${s.name}` : `ответил ${who(u)}, а не ${s.name}`;
       return [chip('перехвачен', 'bad'), u.ms, why];
     }
-    return [chip('отвечает', 'ok'), u.ms, s.kind !== 'public' && u.asn ? 'дальше спрашивает ' + who(u) : null];
+    // the router's and the provider's DNS answer, but when they hand out stub addresses the answer is not to be trusted
+    return [chip('отвечает', s.kind !== 'public' && faking ? 'warn' : 'ok'), u.ms, s.kind !== 'public' && u.asn ? 'дальше спрашивает ' + who(u) : null];
   }
   const secureLine = (r, failText) => !r ? null : r.ok ? [chip('работает', 'ok'), r.ms, null]
     : [chip({ refused: 'отклонён', timeout: 'нет ответа', tls: 'обрыв TLS' }[r.why] || failText, 'bad'), null, null];
@@ -5352,38 +5358,47 @@ async function viewDns(main) {
     const sites = s.sites || [];
     const fake = sites.filter((x) => x.router.st === 'fake');
     const silent = sites.filter((x) => x.router.st === 'none');
-    const t1 = !sites.length ? null : fake.length ? ['bad', `Подменяет ${fake.length} из ${sites.length}`, fake.map((x) => x.host).join(', ') + ' — вместо адреса сайта заглушка.']
+    const t1 = !sites.length ? null : fake.length ? ['warn', `Подменяет ${plural(fake.length, 'сайт', 'сайта', 'сайтов')} из ${sites.length}`, fake.map((x) => x.host).join(', ') + ' — вместо адреса сайта заглушка.']
       : silent.length ? ['warn', `Не отвечает на ${plural(silent.length, 'сайт', 'сайта', 'сайтов')}`, silent.map((x) => x.host).join(', ')]
         : ['ok', 'Отдаёт настоящие адреса', router?.udp?.asn ? 'Дальше спрашивает ' + who(router.udp) + '.' : ''];
     const ic = pub.filter((x) => x.udp?.st === 'intercepted');
     const none = pub.filter((x) => x.udp?.st === 'none');
     const answered = [...new Set(ic.map((x) => x.udp.why === 'isp' ? 'сервер провайдера' : x.udp.why === 'local' ? 'DNS вашей сети' : who(x.udp)))];
-    const t2 = !pub.length ? null : ic.length ? ['bad', 'Перехвачен', `Спрашивали ${ic.map((x) => x.name).join(', ')} — ответил ${answered.join(', ')}.`]
+    const byIsp = ic.length && ic.every((x) => x.udp.why === 'isp');
+    const t2 = !pub.length ? null : ic.length ? ['bad', byIsp ? 'Перехвачен провайдером' : 'Перехвачен', `Спрашивали ${ic.map((x) => x.name).join(', ')} — ответил ${answered.join(', ')}.`]
       : none.length === pub.length ? ['bad', 'Не проходит', 'Ни один сервер не ответил на порт 53.']
         : none.length ? ['warn', 'Отвечают не все', `Нет ответа от ${none.map((x) => x.name).join(', ')}.`] : ['ok', 'Проходит', 'Отвечают те серверы, которых спрашивали.'];
     const sec = pub.flatMap((x) => [['DoT', x, x.dot], ['DoH', x, x.doh]]).filter(([, , r]) => r);
     const okSec = sec.filter(([, , r]) => r.ok);
     const closed = sec.filter(([, , r]) => !r.ok).map(([p, x]) => `${p} к ${x.name}`);
     const t3 = !sec.length ? null : !okSec.length ? ['bad', 'Не проходит', 'Ни DoT, ни DoH не соединились.']
-      : ['ok', `Работает: ${okSec.length} из ${sec.length}`, closed.length ? 'Закрыто: ' + closed.join(', ') + '.' : 'Проходят все.'];
+      : ['ok', `Работает: ${okSec.length} из ${sec.length}`, !closed.length ? 'DoT и DoH проходят.'
+        : closed.length === 1 ? `DoT и DoH проходят; закрыт только ${closed[0]}.` : 'Закрыто: ' + closed.join(', ') + '.'];
     const tile = (k, t) => t && h('div', { class: 'dns-tile ' + t[0] }, h('span', { class: 'k sm muted', text: k }), h('b', { class: 'v', text: t[1] }), t[2] ? h('span', { class: 'd sm muted', text: t[2] }) : null);
     // advice: the fastest working secure server, said only when the router itself gets fake addresses; intercepted
     // plain DNS alone does not matter if the router already asks over a secure channel
-    const best = okSec.map(([p, x, r]) => ({ p, x, ms: r.ms })).sort((a, b) => a.ms - b.ms)[0];
+    const best = bestOf(s);
     const trouble = fake.length > 0;
+    const meaning = [ic.length ? (byIsp ? 'Провайдер перехватывает обычный DNS (порт 53) к чужим серверам и отвечает сам.' : `Обычный DNS (порт 53) к чужим серверам перехвачен — отвечает ${answered.join(', ')}.`) : null,
+      'DNS роутера на часть сайтов отдаёт заглушку вместо настоящего адреса.',
+      okSec.length ? 'Защищённый DNS (DoT и DoH) у вас проходит.' : null].filter(Boolean).join(' ');
     const adv = !sites.length ? null : !trouble && silent.length ? notice('warn', 'DNS роутера отвечает не на все сайты',
       `На ${silent.map((x) => x.host).join(', ')} он не вернул адреса. Если эти сайты нужны — проверьте их в «Диагнозе блокировки»: бывает, что DNS провайдера молчит вместо заглушки.`)
       : !trouble ? notice('ok', 'DNS роутера в порядке', ic.length
       ? 'Обычный DNS к чужим серверам перехвачен, но роутер получает настоящие адреса — менять ничего не нужно.'
       : 'Роутер получает настоящие адреса — менять ничего не нужно.')
-      : best ? notice('info', 'Что сделать', `Поставьте в роутере защищённый DNS — быстрее всех ответил ${best.x.name} по ${best.p} (${best.ms} мс). Тогда настоящие адреса получат и роутер, и все устройства сети.`,
-        h('a', { class: 'btn small', href: wikiDns(), target: '_blank', rel: 'noopener' }, 'Как поставить'))
+      : best ? h('section', { class: 'panel dns-adv-panel' }, h('div', { class: 'dns-adv' },
+        h('p', {}, h('b', { text: 'Что это значит. ' }), meaning),
+        h('p', {}, h('b', { text: 'Совет. ' }), 'Поставьте в роутере защищённый DNS — быстрее всех ответил ', h('b', { text: `${best.x.name} по ${best.p}` }), ` (${best.ms} мс). Как это сделать — `,
+          h('a', { href: wikiDns(), target: '_blank', rel: 'noopener', text: 'в справке, раздел «DNS»' }), '.')))
         : notice('warn', 'Защищённый DNS не проходит', 'Провайдер закрыл и DoT, и DoH к проверенным серверам — сменить DNS на роутере не получится.');
     return [h('div', { class: 'dns-tiles' }, tile('DNS роутера', t1), tile('Обычный DNS, порт 53', t2), tile('Защищённый DNS', t3)), s.running ? null : adv];
   }
 
   function draw(s) {
     startBtn.disabled = !!s.running;
+    startBtn.textContent = s.started ? 'Проверить снова' : 'Проверить';
+    when.textContent = s.finished ? `Проверено ${fmtDate(s.finished)}, заняло ${Math.max(1, s.finished - s.started)} с. ` : '';
     if (!s.started) {
       out.replaceChildren(panel(null, null, h('p', { text: 'Проверка спрашивает DNS роутера, DNS провайдера и пять публичных серверов (Cloudflare, Google, Quad9, AdGuard DNS, Яндекс) тремя способами: обычный DNS на порт 53, DoT и DoH. Потом сверяет, что DNS роутера и провайдера отвечают на закрытые сайты и на сайты из «Мониторинга».' }),
         h('p', { class: 'sm muted', text: 'Занимает 15–40 секунд. Нажмите «Проверить».' })));
@@ -5391,14 +5406,19 @@ async function viewDns(main) {
     }
     const sites = s.sites || [];
     const hasIsp = s.servers.some((x) => x.kind === 'isp');
-    const cards = s.servers.map((x) => h('div', { class: 'dns-card' },
-      h('div', { class: 'hd' }, h('b', { text: x.name }), h('span', { class: 'mono sm muted', text: x.ip })),
-      prRow('порт 53', plainLine(x)), prRow('DoT', secureLine(x.dot, 'закрыт')), prRow('DoH', secureLine(x.doh, 'не отвечает'))));
+    const best = s.running ? null : bestOf(s);
+    const faking = { router: sites.some((x) => x.router.st === 'fake'), isp: sites.some((x) => x.isp?.st === 'fake') };
+    const cards = s.servers.map((x) => h('div', { class: 'dns-card' + (best?.x === x ? ' best' : '') },
+      h('div', { class: 'hd' }, h('b', { text: x.name }), h('span', { class: 'mono sm muted', text: x.ip }), best?.x === x ? h('span', { class: 'dns-best', text: 'лучший' }) : null),
+      prRow('порт 53', plainLine(x, faking[x.kind])), prRow('DoT', secureLine(x.dot, 'закрыт')), prRow('DoH', secureLine(x.doh, 'не отвечает'))));
+    const word = (r) => r ? (DNS_SITE_TEXT[r.st] || ['?'])[0] : null;
     const siteRows = sites.map((x) => {
-      const [t, cls] = DNS_SITE_TEXT[x.router.st] || ['?', ''];
-      const bad = !['ok', 'podkop'].includes(x.router.st);
+      const st = x.router.st;
+      const [t, cls] = st === 'fake' ? ['подменён', 'bad'] : DNS_SITE_TEXT[st] || ['?', ''];
+      const bad = !['ok', 'podkop'].includes(st);
       return h('div', { class: 'dns-site' }, h('span', { class: 'mono', text: x.host }), chip(t, cls),
-        bad ? h('div', { class: 'sm muted', text: `DNS роутера: ${x.router.ips.join(', ') || 'ничего'}` + (x.ref.length ? ` · настоящий адрес: ${x.ref.join(', ')}` : '') }) : null);
+        bad ? h('div', { class: 'sm muted', text: [`DNS роутера: ${word(x.router)}`, x.isp ? `провайдер: ${word(x.isp)}` : null,
+          `защищённый DNS: ${x.ref.length ? 'верно' : 'нет ответа'}`].filter(Boolean).join(' · ') }) : null);
     });
     const cell = (r) => r ? h('td', {}, chip(...(DNS_SITE_TEXT[r.st] || ['?', '']))) : h('td', { class: 'muted' }, '—');
     const matrix = sites.length ? h('details', { class: 'dns-more' }, h('summary', { text: 'Подробно: сайт × DNS' }),
@@ -5413,7 +5433,7 @@ async function viewDns(main) {
       s.running ? notice('info', s.step === 'sites' ? `Сверяю адреса сайтов… ${sites.length}` : `Спрашиваю серверы… ${s.servers.length}`, null, h('span', { class: 'spin' }))
         : s.died ? notice('warn', 'Проверка прервалась', 'Запустите ещё раз.') : null,
       ...tiles(s),
-      s.servers.length ? panel('Серверы', h('span', { class: 'sm muted', text: s.finished ? fmtDate(s.finished) : '' }), h('div', { class: 'dns-cards' }, cards)) : null,
+      s.servers.length ? panel('Серверы', null, h('div', { class: 'dns-cards' }, cards)) : null,
       sites.length ? panel('Сайты через DNS роутера', null, h('div', { class: 'dns-sites' }, siteRows), matrix) : null);
   }
 

@@ -7771,8 +7771,8 @@ function asName(int $asn): string
 // Plain DNS to a server and who really answered: the resolver's outgoing address and its network. $expect — networks of
 // a public server (null for the router's and the provider's own DNS, which are not checked for interception).
 // Intercepted: the answer came from the provider's network, from another network than the server's, or from the
-// router's own resolver ($routerWho) and very fast
-function dnsPlain(string $server, ?array $expect = null, int $my = 0, ?string $routerWho = null): array
+// router's own resolver's network ($routerAsn) and very fast
+function dnsPlain(string $server, ?array $expect = null, int $my = 0, ?int $routerAsn = null): array
 {
   $r = dnsUdp($server, 'ya.ru');
   if (!$r['ok']) {
@@ -7782,7 +7782,8 @@ function dnsPlain(string $server, ?array $expect = null, int $my = 0, ?string $r
   $asn = $who ? ipAsn($who) : null;
   $out = ['st' => 'ok', 'ms' => $r['ms'], 'who' => $who, 'asn' => $asn, 'as_name' => $asn ? asName($asn) : ''];
   if ($expect !== null) {
-    $local = $who && $who === $routerWho && $r['ms'] < DNS_FAST_MS && (!$expect || !in_array($asn, $expect, true));
+    // same network as the router's own resolver (a big resolver asks from many addresses, so not the same address)
+    $local = $asn && $asn === $routerAsn && $r['ms'] < DNS_FAST_MS && (!$expect || !in_array($asn, $expect, true));
     $why = $asn && $my && $asn === $my ? 'isp' : ($local ? 'local' : ($asn && $expect && !in_array($asn, $expect, true) ? 'other' : null));
     if ($why) {
       $out['st'] = 'intercepted';
@@ -7871,7 +7872,7 @@ function dnsJob(): void
   }
   foreach (DNS_SERVERS as [$name, $ip, $host, $expect]) {
     $doh = dohResolve($host, $ip, 'ya.ru');
-    $d['servers'][] = ['name' => $name, 'ip' => $ip, 'host' => $host, 'kind' => 'public', 'udp' => dnsPlain($ip, $expect, $my, $router['who'] ?? null),
+    $d['servers'][] = ['name' => $name, 'ip' => $ip, 'host' => $host, 'kind' => 'public', 'udp' => dnsPlain($ip, $expect, $my, $router['asn'] ?? null),
       'dot' => dotProbe($host, $ip), 'doh' => $doh['ok'] && $doh['ips'] ? ['ok' => true, 'ms' => $doh['ms']] : ['ok' => false, 'ms' => 0, 'error' => $doh['error'] ?? 'пустой ответ']];
     $save();
   }
