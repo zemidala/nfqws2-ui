@@ -38,6 +38,8 @@ const ICONS = {
   download: '<path d="M12 4v11M7 10l5 5 5-5M5 20h14"/>',
   upload: '<path d="M12 20V9M7 14l5-5 5 5M5 4h14"/>',
   copy: '<rect x="9" y="9" width="11" height="11" rx="2"/><path d="M5 15V6a2 2 0 0 1 2-2h8"/>',
+  expand: '<path d="M4 9V4h5M15 4h5v5M20 15v5h-5M9 20H4v-5"/>',
+  shrink: '<path d="M9 4v5H4M20 9h-5V4M15 20v-5h5M4 15h5v5"/>',
   lock: '<rect x="5" y="11" width="14" height="10" rx="2"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/>',
   share: '<path d="M12 15V3M7 8l5-5 5 5M5 12v7a2 2 0 0 0 2 2h10a2 2 0 0 0 2-2v-7"/>',
   pin: '<path d="M9 4h6l-1 6 4 4H6l4-4z"/><path d="M12 14v7"/>',
@@ -543,6 +545,7 @@ function applyLook(look = getLook()) {
   document.documentElement.toggleAttribute('data-simple', !!look.simple);
   document.documentElement.toggleAttribute('data-navmini', !!look.navmini);
   document.documentElement.toggleAttribute('data-nooutline', !!look.nooutline);
+  document.documentElement.toggleAttribute('data-noanim', !!look.noanim);
 }
 function setLook(patch) {
   try { localStorage.setItem('nfqws-ui-look', JSON.stringify({ ...lookStored(), ...patch })); } catch { /* нет хранилища */ }
@@ -679,7 +682,11 @@ const FEATURES = [
   ['lists:order', '1.26.0', '«Списки»: поиск, группы по профилю и порядок по имени или по числу записей'],
   ['mon:view', '1.26.0', '«Мониторинг»: сводка, таблица с сортировкой и общая шкала времени — видно, когда падало всё сразу'],
   ['look:scheme', '1.27.0', '«Оформление»: цветовые схемы для стилей A, B, C и K — Полночь, Океан, Сирень, Хвоя, Янтарь, Вишня, Графит'],
-  ['mon:chart', '1.27.0', '«Мониторинг»: вид графика на выбор — полоски, линия, часы, столбики или словами'],
+  ['mon:chart', '1.27.0', '«Мониторинг»: вид графика на выбор — полоски, часы, столбики или словами'],
+  ['raw:full', '1.28.0', '«Конфиг целиком»: редактор во весь экран, выход по Esc'],
+  ['raw:hide', '1.28.0', '«Конфиг целиком»: «Не показывать» у предупреждений и советов, список скрытых — «Скрыто»'],
+  ['look:load', '1.28.0', '«Оформление»: нагрузка роутера в шапке — процессор и память'],
+  ['look:anim', '1.28.0', '«Оформление»: анимации при переходе между страницами, их можно выключить'],
   ['conns', '1.27.0', '«Соединения устройства»: куда ходит программа на устройстве сети, приходят ли ответы и видит ли эти порты nfqws2'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
@@ -836,6 +843,37 @@ function subTabs(page) {
   return h('nav', { class: 'subtabs', 'aria-label': tab[1] }, ids.map((id) => PAGES[id][0] ? h('a', { href: PAGES[id][0], class: id === page ? 'on' : null }, PAGES[id][1], pageNew(id) ? NEW_TAG() : null) : soonItem(id)));
 }
 
+// Router load in the top bar (Оформление → «Показывать нагрузку роутера»): CPU, memory used, load average.
+// A number turns yellow over 80 % CPU or under 15 % free memory
+function drawLoad() {
+  const el = document.getElementById('load'), elM = document.getElementById('load-m');
+  const l = S.state?.load;
+  if (!el) return;
+  el.hidden = !getLook().showLoad || !l;
+  if (elM) elM.hidden = el.hidden;
+  if (el.hidden) return;
+  S.loadAt = Date.now();
+  const memUsed = l.mem_total && l.mem_free != null ? Math.round(100 * (1 - l.mem_free / l.mem_total)) : null;
+  const up = l.uptime ? (l.uptime >= 86400 ? Math.floor(l.uptime / 86400) + ' д ' : '') + Math.floor(l.uptime % 86400 / 3600) + ' ч' : '';
+  const chip = (label, val, warn, cls = '') => h('span', { class: 'lchip' + (warn ? ' warn' : '') + cls }, h('span', {}, label + ' ', h('b', { text: val })));
+  el.replaceChildren(
+    l.cpu != null ? chip('ЦП', l.cpu + ' %', l.cpu > 80) : null,
+    memUsed != null ? chip('Память', memUsed + ' %', memUsed > 85) : null,
+    l.la ? chip('Нагрузка', String(l.la[0]).replace('.', ','), false, ' opt') : null,
+    h('span', { class: 'lsep' }));
+  if (elM) elM.replaceChildren(...[...el.children].map((c) => c.cloneNode(true)));
+  el.dataset.tip = [l.mem_total ? `свободно ${Math.round(l.mem_free / 1024)} из ${Math.round(l.mem_total / 1024)} МБ` : '',
+    l.la ? 'нагрузка ' + l.la.map((x) => String(x).replace('.', ',')).join(' ') : '', up ? 'работает ' + up : ''].filter(Boolean).join(' · ');
+}
+// a light request every 10 s while the numbers are shown; on a weak router (lowmem) every request is a php-cgi
+// process, so there only when the usual state has not brought fresh numbers for 30 s (it skips while one types)
+setInterval(async () => {
+  if (!S.auth || !getLook().showLoad || document.visibilityState !== 'visible') return;
+  if (S.state?.lowmem && Date.now() - (S.loadAt || 0) < 29000) return;
+  const r = await api('load').catch(() => null);
+  if (r && S.state) { S.state.load = r; drawLoad(); }
+}, 10000);
+
 function renderShell() {
   const link = ([id, label, ic, pages, narrow]) => h('a', { href: PAGES[id][0], 'data-pages': pages.join(' '), title: label, 'aria-label': label, class: narrow ? 'only-narrow' : null }, icon(ic), h('span', { text: label }));
   const quick = h('input', { class: 'input', placeholder: 'проверить сайт…', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', inputmode: 'url', enterkeyhint: 'go', 'aria-label': 'Сайт для проверки' });
@@ -856,10 +894,13 @@ function renderShell() {
         h('form', { class: 'quick', onsubmit: (e) => { e.preventDefault(); const v = quick.value.trim(); if (!v) return; quick.value = ''; quick.blur(); checkHost(v); } },
           quick, h('button', { class: 'btn primary icon', type: 'submit', title: 'Проверить: открывается ли сайт и каким профилем nfqws2 он пойдёт', 'aria-label': 'Проверить' }, icon('arrow'))),
         h('span', { class: 'grow' }),
-        h('span', { class: 'svc-box' }, h('span', { class: 'svc-name', title: 'Версия nfqws2 на роутере' }, 'nfqws2', h('small', { id: 'ver' })),
+        h('span', { class: 'svc-box' }, h('span', { id: 'load', class: 'load', hidden: true }),
+          h('span', { class: 'svc-name', title: 'Версия nfqws2 на роутере' }, 'nfqws2', h('small', { id: 'ver' })),
           h('button', { id: 'nfq-up', class: 'nfq-up', type: 'button', hidden: true, onclick: () => openNfqUpdate() }),
           h('span', { id: 'svc', class: 'pill muted' }, h('span', { class: 'dot' }), '…'),
-          h('span', { id: 'svc-ctl', class: 'svc-ctl' })))),
+          h('span', { id: 'svc-ctl', class: 'svc-ctl' }))),
+      // on a narrow screen the load has no room in the bar — a thin line under it
+      h('div', { id: 'load-m', class: 'load load-m', hidden: true })),
     h('div', { id: 'banner' }),
     h('div', { id: 'upd-banner' }),
     h('div', { id: 'pending', 'aria-live': 'polite' }),
@@ -921,6 +962,7 @@ function updateChrome() {
         btn(h('span', { class: 'ctl-label', text: 'Остановить' }), () => service('stop'), 'small danger', 'stop', { title: 'Остановить nfqws2 — обход блокировок перестанет работать', 'aria-label': 'Остановить', disabled: busy })]
       : btn(h('span', { class: 'ctl-label', text: 'Запустить' }), () => service('start'), 'small primary', 'play', { title: 'Запустить nfqws2', 'aria-label': 'Запустить' }));
   document.getElementById('ver').textContent = st.version ? 'v' + st.version : '';
+  drawLoad();
   // вышла новая версия nfqws2 — метка за номером версии (на узком экране — значок с точкой)
   const nu = st.nfq_update, upB = document.getElementById('nfq-up');
   if (upB) {
@@ -1157,6 +1199,9 @@ async function route(refresh = false) {
   }
   openDrawer(false);
   updateChrome();
+  // a full-screen config editor sits in <body>: it goes away with the page; leaving the page ends full screen
+  document.querySelectorAll('body > .cfg').forEach((e) => e.remove());
+  if (r.tab !== 'settings' || r.arg !== 'raw') S.cfgFull = false;
   const main = document.getElementById('main');
   if (!S.state || refresh) {
     if (!S.state) main.replaceChildren(skel(2, 5));
@@ -1177,6 +1222,13 @@ async function route(refresh = false) {
     await (views[r.tab] || viewOverview)(target, r);
     wait.remove();
     if (seq === routeSeq) seenPage(pageOf(r));
+    // another page — it fades in (Оформление → «Анимации»); a refresh of the same page does not blink
+    if (seq === routeSeq && S.shownPage !== location.hash.split('?')[0]) {
+      S.shownPage = location.hash.split('?')[0];
+      target.classList.remove('pg-in');
+      void target.offsetWidth;
+      target.classList.add('pg-in');
+    }
   } catch (e) {
     console.error(e);
     target.replaceChildren(notice('bad', 'Ошибка', e.message));
@@ -2469,11 +2521,44 @@ function renderHelp(box, info, tokIssues) {
 
 function issuesListEl(issues, onPick, lineOf, fixFor = fixButton) {
   if (!issues.length) return null;
-  return h('ul', { class: 'iss-list' }, issues.map((x) => h('li', {},
-    h('div', { class: 'row', style: 'flex-wrap:nowrap;align-items:flex-start' },
-      h('button', { type: 'button', class: 'iss-item', onclick: () => onPick?.(x) }, levelIcon(x.level),
-        h('span', {}, lineOf ? h('span', { class: 'muted', text: lineOf(x) + ': ' }) : null, x.msg)),
-      fixFor(x)))));
+  let tagged = false;
+  return h('ul', { class: 'iss-list' }, issues.map((x) => {
+    const tag = x.key && !tagged ? (tagged = true, newTag('raw:hide')) : null;
+    const li = h('li', {},
+      h('div', { class: 'row iss-row' },
+        h('button', { type: 'button', class: 'iss-item', onclick: () => onPick?.(x) }, levelIcon(x.level),
+          h('span', {}, lineOf ? h('span', { class: 'muted', text: lineOf(x) + ': ' }) : null, x.msg)),
+        h('div', { class: 'iss-acts' }, fixFor(x),
+          // config warnings and tips only (they carry a key); errors stay — nfqws2 will not start with them
+          x.key ? btn('Не показывать', async () => { if (await lintHide(x, true)) li.remove(); }, 'small ghost', null,
+            { title: 'Скрыть это замечание на всех страницах и в «Проблемах». Вернуть — «Скрыто» в «Конфиге целиком»' }) : null, tag)));
+    return li;
+  }));
+}
+
+// «Don't show» on a config note (or show it again). The router keeps the list, so every browser sees the same.
+// A page that keeps its own copy of the notes (the config editor) sets S.lintHook to re-check after the change.
+async function lintHide(x, on) {
+  const r = await guarded(() => api('lint_hide', { key: x.key, msg: x.msg, on }));
+  if (!r) return false;
+  S.state.lint = r.lint;
+  updateSide();
+  if (S.lintHook?.()) { /* the config editor re-checks itself */ }
+  // a page without its own hook (a profile, «Основное») shows the note again by redrawing, unless there are unsaved edits
+  else if (!on && !S.dirty && !document.querySelector('.modal-bg')) route();
+  if (on) toast('Замечание скрыто', { undo: () => lintHide(x, false) });
+  return true;
+}
+
+function hiddenNotesDialog() {
+  const list = h('div', { class: 'stack', style: 'gap:0' });
+  const draw = () => {
+    const hid = Object.entries(S.state.lint?.hidden || {});
+    list.replaceChildren(hid.length ? hid.map(([key, msg]) => h('div', { class: 'row hid-row' }, h('span', { class: 'grow', text: msg }),
+      btn('Показать снова', async () => { if (await lintHide({ key, msg }, false)) draw(); }, 'small ghost'))) : h('p', { class: 'muted', text: 'Скрытых замечаний нет.' }));
+  };
+  draw();
+  modal('Скрытые замечания', h('div', {}, h('p', { class: 'sm muted', style: 'margin-top:0', text: 'Ошибки не скрываются. Если в конфиге изменится то, о чём говорит замечание, и его текст станет другим, оно снова появится.' }), list));
 }
 
 // ============ Сайты: менеджер списков ============
@@ -3867,11 +3952,13 @@ async function paneRaw(content) {
     const e = issues.filter((x) => x.level === 'error').length;
     const w = issues.filter((x) => x.level === 'warning').length;
     const notes = issues.filter((x) => x.level === 'info' && x.var);
+    const hidN = Object.keys(S.state.lint?.hidden || {}).length;
     // замечание «к сведению» подчёркнуто в тексте — по метке курсор встаёт на место, справка под редактором показывает текст
     let ni = 0;
     const toNote = () => { const x = notes[ni++ % notes.length]; const p = locate(x); if (p) ed.select(p.start, p.end); };
     counts.replaceChildren(e ? chip(plural(e, 'ошибка', 'ошибки', 'ошибок'), 'bad') : null, w ? chip(plural(w, 'предупреждение', 'предупреждения', 'предупреждений'), 'warn') : null, !e && !w ? chip('ошибок нет', 'ok') : null,
       notes.length ? h('button', { type: 'button', class: 'chip', title: 'Не ошибка, а пояснение. Нажмите — курсор встанет на место, текст появится под редактором', onclick: toNote }, plural(notes.length, 'замечание', 'замечания', 'замечаний')) : null,
+      hidN ? h('button', { type: 'button', class: 'chip', title: 'Замечания, скрытые кнопкой «Не показывать». Нажмите — список, вернуть любое', onclick: hiddenNotesDialog }, `Скрыто: ${hidN}`) : null,
       e || w ? btn('К ошибке ↓', () => { const x = issues.find((i) => i.level === 'error') || issues.find((i) => i.level === 'warning'); const p = x && locate(x); if (p) ed.select(p.start, p.end); }, 'small') : null);
   }
   function drawStatus() {
@@ -3947,6 +4034,31 @@ async function paneRaw(content) {
       } else toast(e.message, { err: true });
     }
   };
+  // Full screen: the editor with its bar, notes and status takes the whole browser window; Esc or the same button —
+  // back. Not on a phone: there the editor already spans the width
+  // While full, the block lives in <body>: inside main (a size container) a fixed box may be held by main's frame.
+  // The choice survives a save (the page redraws) and ends with Esc, the button or leaving the page.
+  const cfgEl = h('div', { class: 'cfg' });   // filled below, once the bar is built
+  const spot = document.createComment('cfg');
+  const setFull = (on) => {
+    S.cfgFull = on;
+    if (on && cfgEl.parentNode !== document.body) { cfgEl.replaceWith(spot); document.body.append(cfgEl); }
+    if (!on && spot.parentNode) spot.replaceWith(cfgEl);
+    cfgEl.classList.toggle('full', on);
+    fsBtn.replaceChildren(icon(on ? 'shrink' : 'expand'));
+    fsBtn.setAttribute('aria-label', on ? 'Обычный размер' : 'Во весь экран');
+    fsBtn.dataset.tip = on ? 'Обычный размер (Esc)' : 'Во весь экран — редактор на всё окно браузера, выход по Esc';
+    ed.ta.focus();
+  };
+  const fsBtn = h('button', { type: 'button', class: 'btn small icon cfg-fs', 'aria-label': 'Во весь экран', 'data-tip': 'Во весь экран — редактор на всё окно браузера, выход по Esc',
+    onclick: () => setFull(!cfgEl.classList.contains('full')) }, icon('expand'));
+  // capture phase: runs before a dropdown, menu or dialog closes itself on the same Esc — then full screen stays
+  document.addEventListener('keydown', function onEsc(e) {
+    if (!cfgEl.isConnected) { document.removeEventListener('keydown', onEsc, true); return; }
+    if (e.key === 'Escape' && cfgEl.classList.contains('full') && !document.querySelector('.modal-bg, .dd-pop, .more-pop:not([hidden]), .menu-list')) { e.preventDefault(); setFull(false); }
+  }, true);
+  // after «don't show» elsewhere on the page the editor's notes are checked again (the server leaves hidden ones out)
+  S.lintHook = () => { if (ed.ta.isConnected) { relint(ed.ta.value); return true; } S.lintHook = null; return false; };
   const outlineBtn = btn('Структура', () => { setLook({ nooutline: !getLook().nooutline }); outlineBtn.classList.toggle('on', !getLook().nooutline); }, 'small' + (getLook().nooutline ? '' : ' on'), 'layers',
     { title: 'Показать или скрыть колонку «Структура» — без неё больше места под текст конфига' });
   const tools = h('div', { class: 'cfg-tools' }, outlineBtn, find, findN, counts,
@@ -3968,14 +4080,17 @@ async function paneRaw(content) {
     }, 'small', 'wand', { title: 'Привести конфиг к одному виду: параметр на строку, выравнивание под кавычку, пустая строка перед --new. Меняются только пробелы и переносы — nfqws2 получит те же аргументы. Текст попадает в редактор, сохранение — как обычно' }),
     newTag('raw:format'),
     copyBtn(() => ed.ta.value, 'Копировать', 'small'),
+    fsBtn, newTag('raw:full'),
     h('span', { class: 'grow' }),
     btn('Сравнить с сохранённым', () => openDiff('nfqws2.conf: изменения', conf.content, ed.ta.value), 'small'),
     btn('История', () => openHistory('nfqws2.conf', () => route(true)), 'small', 'history'),
     btn('Сохранить', () => save(), 'primary small'));
   ed.setIssues(issues);
+  cfgEl.append(tools, banner, outline, h('div', { class: 'cfg-body' }, ed.el), status, extra);
+  if (S.cfgFull) queueMicrotask(() => setFull(true));   // was full before the redraw (a save)
   content.append(h('div', { class: 'vh' }, h('h1', { text: 'Конфиг целиком' }), h('span', { class: 'sm muted mono', text: S.state?.ui?.conf_file || 'nfqws2.conf' }), h('span', { class: 'grow' }),
     overviewCol() ? btn('Показать обзор', () => setFocus(false), 'small') : null),
-  h('div', { class: 'cfg' }, tools, banner, outline, h('div', { class: 'cfg-body' }, ed.el), status, extra));
+  cfgEl);
   drawOutline(); drawCounts(); drawStatus(); drawExtra();
 }
 
@@ -4300,7 +4415,11 @@ async function paneLook(content) {
       h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: !!look.simple, onchange: (e) => { setLook({ simple: e.target.checked }); renderShell(); route(); } }),
         h('span', {}, h('b', { text: 'Упрощённый вид' }), h('br'), h('span', { class: 'sm muted', text: 'Боковое меню — шесть разделов, страницы раздела — вкладками над страницей; «Обзор» по умолчанию «Кратко»; обновить, HTTPS, GitHub и выход — под кнопкой «⋯». Для тех, кому полный вид кажется перегруженным. Функции те же.' }))),
       h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: !look.hideWinTs, onchange: (e) => { setLook({ hideWinTs: !e.target.checked }); updateSide(); } }),
-        h('span', {}, h('b', { text: 'Напоминать про метки TCP в Windows' }), ' ', newTag('look:wints'), h('br'), h('span', { class: 'sm muted', text: `Пункт в «Проблемах» у профиля, стратегия которого маскируется только через tcp_ts: в Windows такие стратегии работают, только если включены временные метки TCP (${WIN_TS_CMD}). Если на ваших компьютерах они уже включены, напоминание можно убрать.` })))),
+        h('span', {}, h('b', { text: 'Напоминать про метки TCP в Windows' }), ' ', newTag('look:wints'), h('br'), h('span', { class: 'sm muted', text: `Пункт в «Проблемах» у профиля, стратегия которого маскируется только через tcp_ts: в Windows такие стратегии работают, только если включены временные метки TCP (${WIN_TS_CMD}). Если на ваших компьютерах они уже включены, напоминание можно убрать.` }))),
+      h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: !!look.showLoad, onchange: (e) => { setLook({ showLoad: e.target.checked }); drawLoad(); } }),
+        h('span', {}, h('b', { text: 'Показывать нагрузку роутера' }), ' ', newTag('look:load'), h('br'), h('span', { class: 'sm muted', text: 'В шапке, рядом с nfqws2: загрузка процессора и занятая память в процентах, на широком экране — ещё средняя нагрузка. Цифра желтеет, если процессор занят больше чем на 80 % или свободной памяти меньше 15 %. Подробности — при наведении. Обновляется раз в 10 секунд, на роутере с малой памятью — раз в 30.' }))),
+      h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: !look.noanim, onchange: (e) => { setLook({ noanim: !e.target.checked }); } }),
+        h('span', {}, h('b', { text: 'Анимации' }), ' ', newTag('look:anim'), h('br'), h('span', { class: 'sm muted', text: 'Страница плавно появляется при переходе, меню и окна — при открытии. Если в системе включено «уменьшить движение», анимаций нет независимо от этой галочки.' })))),
     panel(null, null,
       h('fieldset', { class: 'looks' }, h('legend', { class: 'sm muted', text: 'Компоновка — как разложены разделы' }),
         lay('menu', 'Боковое меню', 'Все разделы списком слева, любой — в один клик.'),

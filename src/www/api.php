@@ -234,6 +234,7 @@ function uiSettings(): array
     'seen' => null,        // метки «новое»: см. seenInfo()
     'asn' => [],
     'subs' => [],
+    'lint_hide' => [],     // config notes hidden by «don't show»: key => text, see lintMark()
   ];
   $s = json_decode((string)@file_get_contents(UI_SETTINGS), true);
   $s = is_array($s) ? $s : [];
@@ -3730,11 +3731,74 @@ function dryRun(array $exp): array
 
 function lintCurrent(): array
 {
+  return lintMark(lintCurrentRaw());
+}
+
+// every note, hidden ones included (the help report)
+function lintCurrentRaw(): array
+{
   $deps = array_merge([CONF_FILE, LISTS_DIR, NFQWS_BIN], array_values(luaFiles()));
   return cached('lint-current', $deps, function () {
     $text = file_get_contents(CONF_FILE);
     return lintConf(confRawVars($text), $text);
   }, fn() => helpInfo()['full']);
+}
+
+// Hidden lint notes: the owner said «don't show» for a warning or tip. Key — the variable and the exact text, so the
+// same note on several tokens hides together, and a changed situation (other text) shows again. Errors never hide.
+function lintHideKey(array $i): string
+{
+  return substr(md5(($i['var'] ?? '') . "\n" . $i['msg']), 0, 12);
+}
+
+function lintMark(array $lint): array
+{
+  // hidden notes leave «issues» altogether, so counters, «Problems» and editor marks skip them without extra code
+  $hide = uiSettings()['lint_hide'];
+  $shown = [];
+  foreach ($lint['issues'] ?? [] as $i) {
+    if ($i['level'] !== 'error') {
+      $i['key'] = lintHideKey($i);
+      if (isset($hide[$i['key']])) {
+        continue;
+      }
+    }
+    $shown[] = $i;
+  }
+  $lint['issues'] = $shown;
+  $lint['hidden'] = (object)$hide;   // key => text; an object even when empty
+  return $lint;
+}
+
+// Router load for the top bar: CPU from the difference of two /proc/stat readings (the previous one is kept in /tmp),
+// memory from MemAvailable. Three small /proc reads — cheap enough for every state request.
+function routerLoad(): array
+{
+  $cpu = null;
+  if (preg_match('/^cpu\s+(.+)$/m', (string)@file_get_contents('/proc/stat'), $m)) {
+    // user nice system idle iowait irq softirq steal; guest time is already inside user and nice
+    $v = array_slice(array_map('intval', preg_split('/\s+/', trim($m[1]))), 0, 8);
+    $idle = ($v[3] ?? 0) + ($v[4] ?? 0);
+    $total = array_sum($v);
+    $f = '/tmp/nfqws-ui-cpu';
+    [$pt, $pi, $ptime, $last] = array_pad(array_map('floatval', explode(' ', (string)@file_get_contents($f))), 4, -1);
+    $age = $ptime > 0 ? microtime(true) - $ptime : -1;
+    if ($age >= 1 && $age < 600 && $total > $pt) {
+      $cpu = (int)round(100 * (1 - ($idle - $pi) / ($total - $pt)));
+      @file_put_contents($f, "$total $idle " . microtime(true) . " $cpu");
+    } else {
+      // a base younger than a second (two requests in a row) measures a handful of ticks: give the last figure instead
+      $cpu = $age >= 0 && $age < 1 && $last >= 0 ? (int)$last : null;
+      if ($age < 0 || $age >= 600) {
+        @file_put_contents($f, "$total $idle " . microtime(true) . ' -1');
+      }
+    }
+  }
+  $mem = (string)@file_get_contents('/proc/meminfo');
+  $kb = fn($k) => preg_match('/^' . $k . ':\s+(\d+)/m', $mem, $x) ? (int)$x[1] : null;
+  $la = explode(' ', (string)@file_get_contents('/proc/loadavg'));
+  return ['cpu' => $cpu === null ? null : max(0, min(100, $cpu)), 'mem_total' => $kb('MemTotal'), 'mem_free' => $kb('MemAvailable'),
+    'la' => isset($la[2]) ? array_map('floatval', array_slice($la, 0, 3)) : null, 'uptime' => (int)(float)@file_get_contents('/proc/uptime')];
 }
 
 // ---------- проверка списков ----------
@@ -8889,6 +8953,7 @@ function state(): array
     'php_upgrade' => phpCurlOld($pc) ? (pkgApk() ? PHP_UPGRADE_APK : PHP_UPGRADE_OPKG) : null,
     'pkg_apk' => pkgApk(),
     'lint' => lintCurrent(),
+    'load' => routerLoad(),
     'conf_tokens' => array_map('tokens', array_intersect_key(confRawVars(file_get_contents(CONF_FILE)), array_flip(ARG_VARS))),
     // Профили по конфигу (для редактора) — могут отличаться от запущенных до перезапуска
     'conf_profiles' => $pid === null ? $profiles : loadProfiles(null, $expected, $globals),
@@ -8973,12 +9038,12 @@ function saveConf(string $text, array $raw, bool $force, string $note = 'пра�
   // Отказ nfqws2 или ошибка sh — сервис не запустится, такое не сохраняем даже с force
   $fatal = !$lint['dry_run'] || !$lint['dry_run']['ok'];
   if ($errors && (!$force || $fatal)) {
-    respond(['error' => 'В конфиге есть ошибки', 'issues' => $lint['issues'], 'fatal' => $fatal, 'dry_run' => $lint['dry_run']], 422);
+    respond(['error' => 'В конфиге есть ошибки', 'issues' => lintMark($lint)['issues'], 'fatal' => $fatal, 'dry_run' => $lint['dry_run']], 422);
   }
   if (!writeWithBackup(CONF_FILE, $text, $note)) {
     fail('Не удалось записать конфиг', 500);
   }
-  respond(['ok' => true, 'issues' => $lint['issues']]);
+  respond(['ok' => true, 'issues' => lintMark($lint)['issues']]);
 }
 
 function currentProfiles(): array
@@ -9197,9 +9262,11 @@ function reportText(array $sites, bool $hide, string $build): string
   $L[] = 'другие обходчики: ' . ($st['rivals'] ? implode(', ', $st['rivals']) : 'не найдены') . (is_file('/etc/init.d/podkop') ? ' · podkop установлен' : '');
   $L[] = '';
   $L[] = '== Замечания к конфигу ==';
-  $issues = array_filter($st['lint']['issues'], fn($x) => $x['level'] !== 'info');
+  // the report shows notes hidden with «don't show» too: whoever helps should see them
+  $hide = uiSettings()['lint_hide'];
+  $issues = array_filter(lintCurrentRaw()['issues'], fn($x) => $x['level'] !== 'info');
   foreach ($issues as $x) {
-    $L[] = ($x['level'] === 'error' ? 'ОШИБКА: ' : 'предупреждение: ') . $x['msg'];
+    $L[] = ($x['level'] === 'error' ? 'ОШИБКА: ' : 'предупреждение: ') . $x['msg'] . ($x['level'] !== 'error' && isset($hide[lintHideKey($x)]) ? ' (скрыто в интерфейсе)' : '');
   }
   if (!$issues) {
     $L[] = 'нет';
@@ -9913,11 +9980,32 @@ switch ($cmd) {
 
   case 'lint':
     [$text, $raw] = candidateFromVars(is_array($in['vars'] ?? null) ? $in['vars'] : []);
-    respond(lintConf($raw, $text));
+    respond(lintMark(lintConf($raw, $text)));
 
   case 'lint_raw':
     $text = normalizeText($str('content'));
-    respond(lintConf(confRawVars($text), $text));
+    respond(lintMark(lintConf(confRawVars($text), $text)));
+
+  case 'lint_hide':
+    // «don't show» on a config note, or show it again (on = false); key comes from lintMark()
+    $key = $str('key');
+    if (!preg_match('/^[0-9a-f]{12}$/', $key)) {
+      fail('Неверный ключ замечания');
+    }
+    $s = uiSettings();
+    if (!empty($in['on'])) {
+      $msg = $str('msg');
+      $s['lint_hide'][$key] = preg_match('/^.{301}/us', $msg) && preg_match('/^.{0,300}/us', $msg, $cut) ? $cut[0] . '…' : $msg;   // by characters: no mbstring on the router
+      $s['lint_hide'] = array_slice($s['lint_hide'], -200, null, true);
+    } else {
+      unset($s['lint_hide'][$key]);
+    }
+    saveUiSettings($s);
+    respond(['lint' => lintCurrent()]);
+
+  case 'load':
+    session_write_close();
+    respond(routerLoad());
 
   case 'conf_adapt':
     // Переделка текста из редактора под этот роутер — без сохранения
