@@ -162,7 +162,7 @@ function cardTable(t) {
 // A heading row (heading + date, count or buttons) that does not fit in one line gets .wrapped: the heading takes the
 // whole first line and the rest starts from the left edge under it, not pushed to the right on a line of its own.
 // Measured without the class each time, so a wider window brings the row back to one line.
-const WRAP_ROWS = '.panel-h, .blk-h, .vh, main .row';
+const WRAP_ROWS = '.panel-h, .blk-h, .vh, main .row, .conn-sum';
 function markWraps() {
   for (const row of document.querySelectorAll(WRAP_ROWS)) {
     if (!row.firstElementChild || row.children.length < 2 || !row.offsetParent) continue;

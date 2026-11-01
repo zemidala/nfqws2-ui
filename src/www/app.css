@@ -257,6 +257,15 @@ button.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
 .th-sort:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
 .th-sort svg { width: 14px; height: 14px; flex: none; }
 .dev-act .slot { width: 30px; flex: none; }
+/* every row one height: the «forget» button is as small as its empty slot, not a 34–40 px control beside a switch */
+:root:root:root .dev-act .btn.slot { width: 30px; height: 30px; min-height: 30px; padding: 0; }
+.dev-act { min-height: 30px; }
+/* phone: the table is exactly the screen wide — the name column takes the rest and ends with «…» */
+@media (max-width: 599px) {
+  :root:root .scroll > table.tbl.devs { table-layout: fixed; width: 100%; min-width: 0; }
+  :root:root .tbl.devs td:last-child, :root:root .tbl.devs th:last-child { width: 96px; }
+  :root:root .tbl.devs td, :root:root .tbl.devs th { padding-top: 6px; padding-bottom: 6px; }
+}
 /* hidden columns still count for the narrow-screen «min-width: 600px» of wide tables — drop it here */
 @media (max-width: 599px) { .tbl.devs .hide-narrow { display: none; } .scroll > table.tbl.devs:has(th) { min-width: 0; } }
 .blob-row { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; min-width: 0; }
