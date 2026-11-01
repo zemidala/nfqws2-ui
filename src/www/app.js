@@ -5854,7 +5854,8 @@ async function dnsExtended() {
     if (!u.ok) return h('span', { class: 'muted sm', text: 'нет ответа' });
     const nm = (u.as_name || '').split(/\s+/)[0];
     const why = { isp: 'ответил сервер провайдера', ripn: 'ответил национальный резолвер (RIPN), а не этот сервер', local: 'ответил DNS вашей сети' }[u.intercept];
-    return h('span', { class: 'mono sm ' + (u.intercept ? 'bad-t' : 'muted'), title: why || '', text: `${u.who || '?'}${nm ? ' — ' + nm : ''}` });
+    const t = `${u.who || '?'}${nm ? ' — ' + nm : ''}`;
+    return h('span', { class: 'mono sm ' + (u.intercept ? 'bad-t' : 'muted'), title: why ? `${t}: ${why}` : t, text: t });
   };
   const subCell = (x) => !x.sub ? chip('—', '') : x.sub.bad === 0 ? chip('нет', 'ok') : chip(`${x.sub.bad} из ${x.sub.of}`, x.sub.bad >= 2 ? 'bad' : 'warn');
   const KEYS = { name: (x) => x.name, doh: (x) => okMs(x.doh) ?? 1e9, dot: (x) => okMs(x.dot) ?? 1e9, udp: (x) => udpMs(x) ?? (x.udp?.ok ? 5e5 + x.udp.ms : 1e9),   // an intercepted answer is not this server's time sub: (x) => x.sub ? x.sub.bad : 99,
@@ -5879,7 +5880,7 @@ async function dnsExtended() {
       h('thead', {}, h('tr', {}, th('name', 'Провайдер'), h('th', { class: 'hide-narrow', text: 'Адрес' }), th('doh', 'DoH', 'num'), th('dot', 'DoT', 'num'), th('udp', 'UDP', 'num'),
         h('th', { text: 'Кто ответил на UDP 53' }), th('sub', 'Подмена'))),
       h('tbody', {}, rows.map((x) => h('tr', { class: x === top ? 'best' : null },
-        h('td', { class: 'nm', text: x.name }), h('td', { class: 'mono sm hide-narrow', text: x.ip || '—' }),
+        h('td', { class: 'nm', text: x.name, title: x.ip || null }), h('td', { class: 'mono sm hide-narrow', text: x.ip || '—' }),
         h('td', { class: 'num t-doh', 'data-h': 'DoH' }, cell(x.doh)),
         h('td', { class: 'num t-dot', 'data-h': 'DoT', title: x.dot?.ok && !x.dot.q ? 'время соединения: запрос по DoT без программы openssl на роутере не отправить' : null }, cell(x.dot)), h('td', { class: 'num t-udp', 'data-h': 'UDP' }, cell(x.udp)),
         h('td', { class: 'who' }, whoCell(x)), h('td', { class: 'sub' }, subCell(x)))))));

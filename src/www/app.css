@@ -1118,7 +1118,12 @@ a.over-row:hover { background: var(--soft); }
 .dnsx-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .tbl.dnsx-tbl td { vertical-align: middle; }
 :root:root:root .tbl.dnsx-tbl td, :root:root:root .tbl.dnsx-tbl th { padding-top: 7px; padding-bottom: 7px; }
-.tbl.dnsx-tbl td.mono, .tbl.dnsx-tbl td.who, .tbl.dnsx-tbl td.num { white-space: nowrap; }
+.tbl.dnsx-tbl td.mono, .tbl.dnsx-tbl td.num { white-space: nowrap; }
+/* the table fits its block at any width, never scrolls sideways: «who answered» is cut with «…» (the whole in the
+   tooltip), the address column goes when the block is narrow (the address is in the name's tooltip) */
+.scroll > .tbl.dnsx-tbl { min-width: 0; width: 100%; }
+.tbl.dnsx-tbl td.who { max-width: 0; width: 34%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@container main (max-width: 1499px) { .tbl.dnsx-tbl .hide-narrow { display: none; } }
 .tbl.dnsx-tbl tr.best td { background: var(--accent-soft); }
 .tbl.dnsx-tbl td.num, .tbl.dnsx-tbl th.num { text-align: right; }
 @container main (max-width: 760px) { .dnsx-best { grid-template-columns: minmax(0, 1fr); gap: 6px; }
