@@ -658,6 +658,7 @@ const FEATURES = [
   ['lists:order', '1.26.0', '«Списки»: поиск, группы по профилю и порядок по имени или по числу записей'],
   ['mon:view', '1.26.0', '«Мониторинг»: сводка, таблица с сортировкой и общая шкала времени — видно, когда падало всё сразу'],
   ['look:scheme', '1.27.0', '«Оформление»: цветовые схемы для стилей A, B, C и K — Полночь, Океан, Сирень, Хвоя, Янтарь, Вишня, Графит'],
+  ['mon:chart', '1.27.0', '«Мониторинг»: вид графика на выбор — полоски, линия, часы, столбики или словами'],
   ['conns', '1.27.0', '«Соединения устройства»: куда ходит программа на устройстве сети, приходят ли ответы и видит ли эти порты nfqws2'],
 ];
 const vcmp = (a, b) => { const x = a.split('.').map(Number), y = b.split('.').map(Number); for (let i = 0; i < 3; i++) if (x[i] !== y[i]) return x[i] - y[i]; return 0; };
@@ -1268,8 +1269,55 @@ function msSpark(items, cls = '') {
   el.insertAdjacentHTML('afterbegin', `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><path class="ar" d="${area}"/>${marks}<path class="ln" d="${line}"/></svg>`);
   return el;
 }
+// Monitoring chart, one of five looks chosen on the page (look.monChart). Input: checks as {ok, ms, tip} or null for
+// none, oldest first. Ticks, columns and blocks are a fixed multiple of 4 px wide with 4 px gaps: at 125, 150 and
+// 175 % scaling those land on whole screen pixels, so they stay even. When the cell is narrower, the oldest are cut.
+const MON_CHARTS = [['ticks', 'Полоски'], ['line', 'Линия'], ['hours', 'Часы'], ['cols', 'Столбики'], ['words', 'Словами']];
+const monChart = () => MON_CHARTS.some(([k]) => k === getLook().monChart) ? getLook().monChart : 'ticks';
+const chKind = (x) => !x ? 'none' : !x.ok ? 'bad' : x.ms > SLOW_MS ? 'slow' : 'ok';
+// n checks → n/size buckets: failed if any failed, slow if any slow, the mean answer time; tooltips joined
+function chBuckets(items, size) {
+  const out = [];
+  for (let i = 0; i < items.length; i += size) {
+    const xs = items.slice(i, i + size).filter(Boolean);
+    if (!xs.length) { out.push(null); continue; }
+    const okMs = xs.filter((x) => x.ok).map((x) => x.ms);
+    const bad = xs.some((x) => !x.ok), slow = okMs.some((m) => m > SLOW_MS);
+    out.push({ ok: !bad, ms: slow ? Math.max(...okMs) : Math.round(okMs.reduce((a, b) => a + b, 0) / (okMs.length || 1)), tip: xs.map((x) => x.tip).filter(Boolean).join('\n') });
+  }
+  return out;
+}
+const chTicks = (items, cls = '') => h('div', { class: ('ch-ticks ' + cls).trim() }, items.map((x) => h('i', { class: chKind(x), title: x?.tip || null })));
+function chCols(items, cls = '') {
+  const max = Math.max(1, ...items.filter((x) => x?.ok).map((x) => Math.min(x.ms, 3000)));
+  return h('div', { class: ('ch-cols ' + cls).trim() }, items.map((x) => h('i', { class: chKind(x), title: x?.tip || null,
+    style: x?.ok && x.ms <= SLOW_MS ? `height:${Math.max(12, Math.round(Math.min(x.ms, 3000) / max * 100))}%` : null })));
+}
+// by the clock: yesterday and today, an hour per cell; hours still to come are empty frames
+function chHours(checks) {
+  const d = new Date(), t0 = new Date(d.getFullYear(), d.getMonth(), d.getDate() - 1).getTime() / 1000, now = d.getTime() / 1000;
+  const cells = Array.from({ length: 48 }, () => []);
+  for (const x of checks) { const i = Math.floor((x.t - t0) / 3600); if (i >= 0 && i < 48) cells[i].push(x); }
+  const cell = (xs, i) => { const b = xs.length ? chBuckets(xs, xs.length)[0] : null; return h('i', { class: t0 + i * 3600 > now ? 'future' : chKind(b), title: b?.tip || null }); };
+  return h('div', { class: 'ch-hours' }, h('span', { text: 'вчера' }), h('div', {}, cells.slice(0, 24).map((xs, i) => cell(xs, i))),
+    h('span', { text: 'сегодня' }), h('div', {}, cells.slice(24).map((xs, i) => cell(xs, i + 24))));
+}
+// in words: no failures / still down for N / M failures, last one at …; under it 12 blocks of the history
+function chWords(items) {
+  const runs = []; let cur = null;
+  items.forEach((x, i) => { if (x && !x.ok) { if (cur && cur.end === i - 1) cur.end = i; else runs.push(cur = { start: i, end: i }); } });
+  const last = items.at(-1), down = last && !last.ok;
+  const text = !runs.length ? h('b', { class: 'ok', text: 'без сбоев' })
+    : down ? h('b', { class: 'bad', text: 'не открывается' + (runs.at(-1).end - runs.at(-1).start ? `, ${runs.at(-1).end - runs.at(-1).start + 1} проверок подряд` : '') })
+    : h('span', {}, h('b', { class: 'bad', text: plural(runs.length, 'сбой', 'сбоя', 'сбоев') }), h('span', { class: 'muted', text: ' · последний ' + (items[runs.at(-1).end]?.when || '') }));
+  return h('div', { class: 'ch-words' }, text, h('div', { class: 'ch-blocks' }, chBuckets(items, Math.ceil(items.length / 12)).map((x) => h('i', { class: chKind(x), title: x?.tip || null }))));
+}
 // the column's recent checks: response time in ms, 0 — failed (a server before 1.27 sends true/false)
-const uptimeBar = (recent) => msSpark(recent.map((v) => ({ ok: !!v, ms: v === true ? 1 : Number(v) || 0 })), 'mini');
+function uptimeBar(recent) {
+  const items = recent.slice(-16).map((v) => ({ ok: !!v, ms: v === true ? 1 : Number(v) || 0 }));   // 16 × (4 + 4) px fits the column
+  const k = monChart();
+  return k === 'line' ? msSpark(items, 'mini') : k === 'cols' ? chCols(items, 'mini') : chTicks(items, 'mini');
+}
 
 function renderSideMonitor(el) {
   const m = S.state.monitor;
@@ -4351,9 +4399,16 @@ async function viewMonitor(main) {
     btn('', () => remove(host), 'small icon', 'x', { title: 'Убрать из мониторинга', 'aria-label': 'Убрать ' + host }));
   // how long the 96 checks of the history cover at the current interval: «48 часов», «4 дня»
   const spanText = () => { const hrs = Math.round(96 * Number(interval.value) / 60); return hrs <= 72 ? plural(hrs, 'час', 'часа', 'часов') : plural(Math.round(hrs / 24), 'день', 'дня', 'дней'); };
-  const item = (x) => x && { ok: !!x[1], ms: x[2], tip: cellTitle(x) };
-  // the last 96 checks, the oldest on the left; fewer — empty on the left, so the lines of all rows end at «now»
-  const histBar = (hist) => msSpark([...Array(Math.max(0, 96 - hist.length)).fill(null), ...hist.slice(-96).map(item)]);
+  const item = (x) => x && { ok: !!x[1], ms: x[2], tip: cellTitle(x), t: x[0], when: fmtDate(x[0]) };
+  // the last 96 checks in the chosen look, the oldest on the left; fewer — empty on the left, so all rows end at «now»
+  const histBar = (hist) => {
+    const items = [...Array(Math.max(0, 96 - hist.length)).fill(null), ...hist.slice(-96).map(item)];
+    const k = monChart();
+    return k === 'line' ? msSpark(items) : k === 'cols' ? chCols(chBuckets(items, 2)) : k === 'hours' ? chHours(hist.map(item))
+      : k === 'words' ? chWords(hist.slice(-96).map(item)) : chTicks(chBuckets(items, 2));
+  };
+  const chartSel = h('select', { class: 'select', 'aria-label': 'Вид графика' }, MON_CHARTS.map(([k, t]) => h('option', { value: k, text: t, selected: k === monChart() })));
+  chartSel.addEventListener('change', () => { setLook({ monChart: chartSel.value }); draw(); updateSide(); });
   const sumBox = h('div', { class: 'mon-tiles' });
   const tile = (big, lbl, cls = '') => h('div', { class: 'mon-tile' }, h('b', { class: cls, text: big }), h('span', { text: lbl }));
   const drawSum = () => {
@@ -4375,14 +4430,14 @@ async function viewMonitor(main) {
   const drawSeg = () => viewSeg.replaceChildren(...[['tbl', 'Таблица'], ['tl', 'Шкала времени']].map(([v, t]) =>
     h('button', { type: 'button', class: view === v ? 'on' : '', 'aria-pressed': String(view === v), text: t, onclick: () => { view = v; setLook({ monView: v }); drawSeg(); draw(); } })));
   const drawTable = () => {
-    const heads = [['host', 'Сайт', ''], ['now', 'Сейчас', ''], [null, spanText(), 'mon-wide'], ['pct', 'Доступность', 'num'], ['when', 'Проверен', 'num mon-wide'], [null, '', '']];
+    const heads = [['host', 'Сайт', ''], ['now', 'Сейчас', ''], [null, monChart() === 'hours' ? 'По часам' : spanText(), 'mon-wide'], ['pct', 'Доступность', 'num'], ['when', 'Проверен', 'num mon-wide mon-when'], [null, '', '']];
     const th = ([k, t, cls]) => h('th', { class: cls, 'aria-sort': k && sort.key === k ? (sort.dir > 0 ? 'ascending' : 'descending') : null },
       !k ? t : h('button', { class: 'th-sort', type: 'button', title: `Сортировать по столбцу «${t}»`, onclick: () => {
         sort = { key: k, dir: sort.key === k ? -sort.dir : 1 };
         try { localStorage.setItem('nfqws-ui-mon-sort', JSON.stringify(sort)); } catch { /* no storage */ }
         draw();
       } }, k === 'pct' ? [h('span', { class: 'mon-wide', text: t }), h('span', { class: 'mon-narrow', text: '%' })] : t, sort.key === k ? icon(sort.dir > 0 ? 'up' : 'down') : null));
-    return h('div', { class: 'scroll' }, h('table', { class: 'tbl mon-tbl' }, h('thead', {}, h('tr', {}, heads.map(th))),
+    return h('div', { class: 'scroll' }, h('table', { class: 'tbl mon-tbl' + (monChart() === 'line' ? '' : ' ch-fixed') }, h('thead', {}, h('tr', {}, heads.map(th))),
       h('tbody', {}, sorted().map((host) => {
         const hist = histOf(host), x = hist.at(-1), p = pctOf(hist);
         const down = x && !x[1] && !checking.has(host);
@@ -4393,7 +4448,7 @@ async function viewMonitor(main) {
           h('td', {}, statusChip(host, x)),
           h('td', { class: 'mon-wide mon-hcell' }, histBar(hist)),
           h('td', { class: 'num', text: p === null ? '—' : p + '%' }),
-          h('td', { class: 'num sm muted mon-wide', text: x ? fmtAgo(nowS() - x[0]) : '—' }),
+          h('td', { class: 'num sm muted mon-wide mon-when', text: x ? fmtAgo(nowS() - x[0]) : '—' }),
           h('td', {}, acts(host)));
       }))));
   };
@@ -4432,7 +4487,8 @@ async function viewMonitor(main) {
     return h('div', { class: 'mtl' },
       grid.map(([host, cells]) => [
         h('div', { class: 'mono mtl-host' }, h('span', { class: 'mtl-dot ' + kindOf(histOf(host).at(-1)) }), host),
-        msSpark(line(cells)),
+        (() => { const its = line(cells), k = monChart(), b = its.length > 48 ? chBuckets(its, 2) : its;
+          return k === 'line' ? msSpark(its) : k === 'cols' ? chCols(b) : chTicks(b); })(),   // hours and words do not fit a shared time axis — ticks there
         h('div', { class: 'num sm', text: pctOf(histOf(host)) === null ? '—' : pctOf(histOf(host)) + '%' })]).flat(),
       h('div', { class: 'mtl-axis' }, [1, 0.75, 0.5, 0.25, 0].map((f) => h('span', { text: f ? ago(span * f) + ' назад' : 'сейчас' }))),
       run ? h('div', { class: 'mtl-note', text: `${fmtDate(Math.round(slotT(run[0])))} — ${fmtDate(Math.round(slotT(run[1] + 1)))}: не открывался ни один сайт. Похоже на сбой провайдера или роутера, а не на блокировку.` }) : null,
@@ -4479,7 +4535,7 @@ async function viewMonitor(main) {
       h('p', { class: 'sm muted', text: 'Сайты открываются с самого роутера через основной nfqws2. В таблице — время ответа при последних 96 проверках: серая линия — сколько шёл ответ, красная черта — сайт не открылся, жёлтая — ответ дольше 5 секунд. При смене «открывается ↔ нет» может прийти сообщение в Telegram — см. «Уведомления».' }),
       sumBox,
       h('div', { class: 'row' }, add, btn('Добавить', addSite, 'primary', 'plus')), addNote,
-      h('div', { class: 'row mon-viewrow' }, viewSeg, newTag('mon:view')), listBox));
+      h('div', { class: 'row mon-viewrow' }, viewSeg, newTag('mon:view'), h('span', { class: 'grow' }), h('label', { class: 'sm muted', text: 'График' }), chartSel, newTag('mon:chart')), listBox));
   drawSeg();
   interval.addEventListener('change', () => { save(); draw(); });
 }

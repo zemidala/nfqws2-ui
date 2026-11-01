@@ -574,11 +574,51 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .spark .sl { fill: color-mix(in srgb, var(--warn) 45%, #e89400); }
 .spark-hits { position: absolute; inset: 0; display: flex; }
 .spark-hits i { flex: 1 1 0; }
-.spark.mini { width: 88px; min-width: 0; height: 18px; flex: none; }
+.spark.mini { min-width: 60px; height: 18px; }
+/* the other chart looks (MON_CHARTS); widths and gaps are multiples of 4 px — whole screen pixels at 125–175 %.
+   Laid out from the right: when the cell is narrower, the oldest are cut, the newest stay */
+.ch-ticks, .ch-cols, .ch-blocks { display: flex; justify-content: flex-end; gap: 4px; overflow: hidden; }
+.ch-ticks { height: 16px; }
+.ch-ticks i, .ch-cols i { width: 4px; flex: none; border-radius: 1px; background: var(--ok); }
+.ch-ticks i.none, .ch-cols i.none { background: var(--line); }
+.ch-cols { height: 28px; align-items: flex-end; }
+.ch-cols i { background: var(--muted); height: 100%; }
+.ch-cols i.none { height: 4px; }
+:is(.ch-ticks, .ch-cols, .ch-blocks, .ch-hours) i.bad { background: var(--bad); }
+:is(.ch-ticks, .ch-cols, .ch-blocks, .ch-hours) i.slow { background: var(--warn); }
+.ch-ticks.mini, .ch-cols.mini { height: 14px; min-width: 60px; }
+.ch-hours { display: grid; grid-template-columns: max-content max-content; gap: 4px 8px; align-items: center; font-size: 12px; color: var(--muted); }
+.ch-hours > div { display: grid; grid-template-columns: repeat(24, 12px); grid-auto-rows: 12px; gap: 4px; }
+.ch-hours i { border-radius: 3px; background: color-mix(in srgb, var(--fg) 16%, var(--surface)); }
+.ch-hours i.none { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.ch-hours i.future { background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line) 60%, transparent); }   /* hours still to come */
+/* a fixed-size chart: its column is as wide as the chart, the room left goes to the other columns */
+.mon-tbl.ch-fixed .mon-hcell { width: 1%; min-width: 0; }
+.ch-words { min-width: 380px; } .ch-words > :first-child { white-space: nowrap; }   /* words on one line, all 12 blocks */
+/* the table watches its own width: with little room the «checked» column goes (the time is in the tooltips),
+   with even less a fixed chart shows only its newest marks — max-width also caps what the table reserves for it */
+.mon-box { container: monbox / inline-size; }
+@container monbox (max-width: 1000px) { .mon-tbl .mon-when { display: none; } }
+@container monbox (max-width: 880px) {
+  .ch-ticks, .ch-cols { max-width: 188px; }
+  /* hours and blocks get smaller instead of cut: all 24 hours and all 12 blocks stay (8 and 12 px — still whole pixels) */
+  .ch-hours > div { grid-template-columns: repeat(24, 8px); grid-auto-rows: 8px; }
+  .ch-hours i { border-radius: 2px; }
+  .ch-words .ch-blocks i { width: 12px; }
+  .ch-words { min-width: 0; }
+  .mon-tbl .mon-acts > .btn:not(:first-child) { display: none; }   /* only «check now»; the rest through the site name */
+}
+.ch-words { display: grid; gap: 6px; font-size: 13.5px; }
+.ch-words .ok { color: var(--ok); } .ch-words .bad { color: var(--bad); }
+.ch-blocks { justify-content: flex-start; }
+.ch-blocks i { width: 28px; height: 12px; flex: none; border-radius: 3px; background: color-mix(in srgb, var(--fg) 16%, var(--surface)); }
+.ch-blocks i.none { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
 .mon-mini { display: grid; gap: 2px; margin-inline: -6px; }
 .mon-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 7px; background: none; border: 0; cursor: pointer; text-align: left; min-width: 0; }
 .mon-row:hover { background: var(--soft); }
-.mon-row .ellipsis { flex: 1; }
+/* laid out like a table: names on the left, charts of one width (16 × 8 px) lined up on the right */
+.mon-row .ellipsis { flex: 1 1 0; min-width: 0; }
+.mon-row > :is(.spark, .ch-ticks, .ch-cols) { flex: none; width: 124px; min-width: 0; }
 /* Monitoring: three equal summary tiles, the switch row, the table and the timeline */
 .mon-ctrls { align-items: center; }
 .mon-sw { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
