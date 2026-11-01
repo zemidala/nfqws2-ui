@@ -77,6 +77,10 @@ svg { width: 17px; height: 17px; flex: none; }
 @keyframes pop-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
 @keyframes sheet-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 :root:not([data-noanim]) .pg-in { animation: pg-in 140ms ease-out; }
+/* a still copy of the page over the spot while the same page is rebuilt with other data (route()) */
+:has(> .route-ghost) { position: relative; }
+.route-ghost { position: absolute !important; left: 0; top: 0; width: 100%; box-sizing: border-box; margin: 0 !important; z-index: 5; overflow: clip; background: var(--bg);   /* clip, not hidden: hidden makes a scroll box and sticky lists inside it slide down */ pointer-events: none; animation: none !important; }
+.route-ghost.out { opacity: 0; transition: opacity 140ms ease-out; }
 :root:not([data-noanim]) :is(.more-pop, .menu-list, .dd-pop:not(.sheet)) { animation: pop-in 120ms ease-out; }
 :root:not([data-noanim]) .modal-bg { animation: pg-in 140ms ease-out; }
 :root:not([data-noanim]) :is(.modal, .dd-pop.sheet) { animation: sheet-in 160ms cubic-bezier(.2, .7, .3, 1); }
@@ -133,7 +137,7 @@ main { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap:
 .blk-h, .panel-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .blk-h h2 { font-size: var(--fs-md); flex: 1; }
 .panel-h h2 { flex: 1; }
-.vh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+.vh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: var(--ctl-h); }   /* one height with or without buttons: the heading stands in the same place on every page */
 /* Control sizes in one place: every field, dropdown, button, switch half and icon button takes its height from
    these two; a style or the phone changes only them, never an element on its own */
 /* one height for everything: a «small» button differs only by its font, so it lines up with fields and switches */
@@ -342,6 +346,8 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
   .nav.scrollable a { width: auto; white-space: nowrap; flex: none; }
 }
 .pn { width: 20px; height: 20px; border-radius: 50%; display: block; text-align: center; align-content: center; text-box: trim-both cap alphabetic; font-size: var(--fs-xs); font-weight: 700; border: 2px solid var(--ok); flex: none; font-variant-numeric: tabular-nums lining-nums; }
+.pn.pi { display: grid; place-items: center; text-box: none; color: var(--accent-ink); border-color: currentColor; }   /* «Свой профиль», «Вставить чужой»: an icon in the circle */
+.pn.pi svg { width: 12px; height: 12px; display: block; }
 .pn.partial { border-color: var(--warn); } .pn.dead, .pn.excludes-only { border-color: var(--bad); } .pn.err { border-color: var(--bad); color: var(--bad); }
 .errdot { width: 7px; height: 7px; border-radius: 50%; background: var(--bad); flex: none; }
 .warndot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); flex: none; }
@@ -868,6 +874,12 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 .cmd-row { grid-template-columns: 290px minmax(0, 1fr); }
 .cmd-row > .lbl code { white-space: nowrap; color: var(--fg); }
 @media (max-width: 759px) { .cmd-row { grid-template-columns: 1fr; gap: 2px; } }
+/* a command and its caption are one item: caption right under the command, items 12 px apart; the copy button is
+   small so the command line is not 40 px tall */
+:root:root:root .frow.cmd-row { row-gap: 2px; align-items: center; }
+:root:root:root .frow.cmd-row + .frow.cmd-row { margin-top: 0; }   /* the panel's 14 px gap is the step between items */
+:root:root:root .cmd-row > .lbl { padding: 0; min-height: 0; }
+:root:root:root .cmd-row > .lbl .btn { height: 24px; min-height: 24px; width: 24px; }
 .tbl td.date { white-space: nowrap; font-variant-numeric: tabular-nums; }
 
 /* поиск в списке: на узком экране уходит на свою строку, а не сжимается рядом с сортировкой */
@@ -1030,22 +1042,28 @@ a.over-row:hover { background: var(--soft); }
 /* device connections page */
 .conn-form { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; }
 @media (max-width: 599px) { .conn-form { grid-template-columns: minmax(0, 1fr); } }
-.conn-sum { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 10px; }
+.conn-sum { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }   /* the panel's gap is the step to the table */
 .conn-tbl td { vertical-align: top; }
 .conn-tbl td.nowrap { white-space: nowrap; }
 .conn-tbl td.warnc { color: var(--warn); }
 /* phone: a row is a card — address and verdict on top, port, then sent / received side by side, nfqws2 below */
-/* :root:root — above the K table rules and the shared «wide table keeps 600px» rule */
+/* :root ×4 — above every style's table cell padding (it gave each cell 12 px top and bottom: half a screen per card).
+   Card: address and verdict on top, the port right under the address, sent / received side by side, nfqws2 below;
+   related lines 2 px apart, groups 8 px, cards 10 px */
 @media (max-width: 599px) {
-  :root:root .conn-tbl thead { display: none; }
-  :root:root .scroll > .conn-tbl, :root:root .conn-tbl tbody { display: block; width: 100%; min-width: 0; }
-  :root:root .conn-tbl tr { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px 12px; padding: 12px 0; border-bottom: 1px solid var(--line); }
-  :root:root .conn-tbl td { display: block; padding: 0; border: 0; text-align: left; background: none; }
-  :root:root .conn-tbl td.c-dst { grid-column: 1; grid-row: 1; }
-  :root:root .conn-tbl td.c-res { grid-column: 2; grid-row: 1; justify-self: end; }
-  :root:root .conn-tbl td.c-port { grid-column: 1 / -1; }
-  :root:root .conn-tbl td.c-nfq { grid-column: 1 / -1; }
-  :root:root .conn-tbl td[data-h]::before { content: attr(data-h); display: block; font-size: var(--fs-xs); color: var(--muted); }
+  :root:root:root:root .conn-tbl thead { display: none; }
+  :root:root:root:root .scroll > .conn-tbl, :root:root:root:root .conn-tbl tbody { display: block; width: 100%; min-width: 0; }
+  :root:root:root:root .conn-tbl tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  :root:root:root:root .conn-tbl tr:first-child { padding-top: 0; }
+  :root:root:root:root .conn-tbl td.c-dst > .sm { font-size: var(--fs-xs); overflow-wrap: anywhere; }   /* the network name under the address, not bigger than it */
+  :root:root:root:root .conn-tbl td { display: block; padding: 0; border: 0; text-align: left; background: none; line-height: 1.35; }
+  :root:root:root:root .conn-tbl td.c-dst { grid-column: 1; grid-row: 1; }
+  :root:root:root:root .conn-tbl td.c-res { grid-column: 2; grid-row: 1; justify-self: end; align-self: start; }
+  :root:root:root:root .conn-tbl td.c-port { grid-column: 1 / -1; grid-row: 2; margin-top: -6px; font-size: var(--fs-xs); color: var(--muted); }
+  :root:root:root:root .conn-tbl td.num { grid-row: 3; }
+  :root:root:root:root .conn-tbl td.num + td.num { grid-column: 2; justify-self: end; text-align: right; }
+  :root:root:root:root .conn-tbl td.c-nfq { grid-column: 1 / -1; }
+  :root:root:root:root .conn-tbl td[data-h]::before { content: attr(data-h); display: block; margin-bottom: 2px; font-size: var(--fs-xs); color: var(--muted); }
 }
 /* DNS servers page */
 .dns-lead { margin: -4px 0 14px; max-width: 860px; }
@@ -1488,7 +1506,7 @@ main { container: main / inline-size; }   /* at every width: the narrow-table ru
 .mcol { display: grid; gap: 14px; align-content: start; min-width: 0; }
 
 /* формы, проверки и таблицы: справа колонка состояния (сервис, замечания, мониторинг, копии) */
-@container main (min-width: 1480px) {
+@container main (min-width: 1360px) {   /* a 1700 px window with the open menu and a page scrollbar leaves ~1395 — the column fits */
   .mwrap { grid-template-columns: minmax(0, 1fr) 340px; }
   /* part of the page, not a scroller of its own: two scrollbars side by side read as a fault */
   .rail { display: grid; gap: 14px; align-content: start; }
@@ -1612,7 +1630,8 @@ main { container: main / inline-size; }   /* at every width: the narrow-table ru
 :is(.panel, .stack, .mcol, .blk) > :empty:not(input, textarea, select, canvas, img, i, .spin, .grow, hr) { display: none; }
 /* a field standing in a row with buttons or a dropdown: all of them one height (the tallest), in every style —
    styles size fields and buttons separately and they ended up 4–8 px apart; plain text in the row stays centred */
-:is(.row, .quick, .search):has(> .input) > :is(.input, .btn, .dd-btn) { align-self: stretch; }
+/* exactly the control height, not «the tallest»: a three-line hint in the same row stretched the button to its size */
+:is(.row, .quick, .search):has(> .input) > :is(input.input, .btn, .dd-btn) { align-self: center; height: var(--ctl-h); min-height: var(--ctl-h); }
 /* an icon button is a square: as wide as it is tall in every style (K made them 28 × 34) */
 :root .btn.icon { width: var(--ctl-h); min-height: var(--ctl-h); padding: 0; flex: none; }
 :root .btn.small.icon { width: var(--ctl-hs); min-height: var(--ctl-hs); }

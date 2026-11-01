@@ -1213,26 +1213,49 @@ async function route(refresh = false) {
   const views = { '': viewOverview, sites: viewSites, tests: viewTests, settings: viewSettings, log: viewLog, site: viewSite, diag: viewDiag, asn: viewAsn, devices: viewDevices };
   // новое на этой странице: метки внутри видны весь этот заход, после отрисовки страница считается открытой
   S.newHere = new Set(pageFeatures(pageOf(r)));
-  const target = railTarget(main, pageOf(r));
-  // the page draws itself after its data arrives; until then a skeleton holds its place
-  const wait = skel(2, 5);
-  target.replaceChildren(subTabs(pageOf(r)), wait);
+  const page = pageOf(r);
+  // While the next page loads, a still copy of what was on screen covers main and the new page is built under it —
+  // no empty frame, no skeleton, nothing jumps. Then the copy goes: at once on the same page (profile → profile,
+  // a refresh), fading out on another page (Оформление → «Анимации»). A skeleton only when there is nothing to show yet.
+  // The copy keeps id="main" (its styles hang on it; getElementById still finds the real main, which comes first)
+  // and loses every other id, so the new content's ids stay unique.
+  document.querySelectorAll('.route-ghost').forEach((g) => g.remove());   // a click before the last page finished
+  let ghost = null;
+  if (main.firstElementChild && !main.querySelector(':scope > .skel, :scope .mcol > .skel')) {
+    ghost = main.cloneNode(true);
+    ghost.querySelectorAll('[id]').forEach((e) => e.removeAttribute('id'));
+    ghost.querySelectorAll('.pg-in').forEach((e) => e.classList.remove('pg-in'));
+    ghost.classList.remove('pg-in');
+    ghost.classList.add('route-ghost');
+    ghost.setAttribute('aria-hidden', 'true');
+    ghost.inert = true;
+    ghost.style.height = main.offsetHeight + 'px';
+  }
+  const target = railTarget(main, page);
+  const wait = ghost ? null : skel(2, 5);
+  target.replaceChildren(subTabs(page), wait || '');
+  if (ghost) main.append(ghost);
   placeSide();
   updatedNote();
+  const other = S.shownPageId !== page;
   try {
     await (views[r.tab] || viewOverview)(target, r);
-    wait.remove();
-    if (seq === routeSeq) seenPage(pageOf(r));
-    // another page — it fades in (Оформление → «Анимации»); a refresh of the same page does not blink
-    if (seq === routeSeq && S.shownPage !== location.hash.split('?')[0]) {
-      S.shownPage = location.hash.split('?')[0];
-      target.classList.remove('pg-in');
-      void target.offsetWidth;
-      target.classList.add('pg-in');
-    }
+    wait?.remove();
+    if (seq === routeSeq) seenPage(page);
+    if (seq === routeSeq) S.shownPageId = page;
   } catch (e) {
     console.error(e);
     target.replaceChildren(notice('bad', 'Ошибка', e.message));
+  }
+  if (ghost) {
+    if (other && !getLook().noanim && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
+      ghost.classList.add('out');
+      setTimeout(() => ghost.remove(), 160);
+    } else ghost.remove();
+  } else if (seq === routeSeq && other) {
+    target.classList.remove('pg-in');
+    void target.offsetWidth;
+    target.classList.add('pg-in');
   }
   if (!r.q.get('var') && !r.q.get('hl')) window.scrollTo(0, 0);
 }
@@ -1281,7 +1304,7 @@ function placeSide() {
 // Колонка состояния справа — на страницах-формах, проверках и таблицах, когда для неё хватает ширины
 // (показывает CSS по ширине области содержимого). Во «Вкладках» не нужна: обзор и так слева.
 // Списки, профили, конфиг, журнал и мониторинг отдают всю ширину своему содержимому, «Обзор» — карточкам.
-const RAIL_PAGES = ['diag', 'frz', 'dns', 'conns', 'cfg', 'pick', 'trace', 'phist', 'comm', 'auto', 'tg', 'asn', 'basic', 'base', 'backup', 'hist', 'report', 'look', 'about', 'site'];
+const RAIL_PAGES = ['diag', 'frz', 'dns', 'conns', 'cfg', 'pick', 'trace', 'phist', 'comm', 'auto', 'tg', 'asn', 'basic', 'base', 'hist', 'report', 'look', 'about', 'site'];
 // Where the page is drawn. With the status column the page goes into .mcol and the column stays put: moving between
 // two such pages redraws only the middle, the column is not torn down and built again after the page has loaded.
 function railTarget(main, page) {
@@ -3174,8 +3197,8 @@ function drawSettingsNav(nav, current) {
       }
       return a;
     }),
-    h('button', { class: 'ni', type: 'button', onclick: addCustomProfile }, h('span', { class: 'pn', text: '+' }), h('span', { class: 'nm muted', text: 'Свой профиль' })),
-    h('button', { class: 'ni', type: 'button', onclick: pasteProfile }, h('span', { class: 'pn', text: '⇩' }), h('span', { class: 'nm muted', text: 'Вставить чужой' })));
+    h('button', { class: 'ni', type: 'button', onclick: addCustomProfile }, h('span', { class: 'pn pi' }, icon('plus')), h('span', { class: 'nm muted', text: 'Свой профиль' })),
+    h('button', { class: 'ni', type: 'button', onclick: pasteProfile }, h('span', { class: 'pn pi' }, icon('download')), h('span', { class: 'nm muted', text: 'Вставить чужой' })));
 }
 
 // Профиль одним куском для чата: подпись + параметры
