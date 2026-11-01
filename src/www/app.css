@@ -464,11 +464,26 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 .cfg-extra { grid-column: 1 / -1; padding: 10px 12px; border-top: 1px solid var(--line); display: grid; gap: 8px; overflow-wrap: anywhere; }
 @media (max-width: 899px) { .cfg { grid-template-columns: minmax(0, 1fr); } .outline { display: none; } .cfg-body .ed-ta { height: 60vh; } }
 /* full screen: the editor block over the whole window (below dialogs, tooltips and lists) */
-.cfg.full { position: fixed; inset: 0; z-index: 45; border: 0; border-radius: 0; box-shadow: none; grid-template-rows: auto auto minmax(0, 1fr) auto auto; }
+.cfg-x { display: contents; }
+.cfg-xh { display: none; }
+.cfg.full { position: fixed; inset: 0; z-index: 45; border: 0; border-radius: 0; box-shadow: none; grid-template-rows: auto auto minmax(0, 1fr) auto; }
 .cfg.full > .cfg-tools { grid-row: 1; } .cfg.full > .cfg-adapt { grid-row: 2; }
 .cfg.full > .outline, .cfg.full > .cfg-body { grid-row: 3; min-height: 0; }
-.cfg.full > .cfg-status { grid-row: 4; } .cfg.full > .cfg-extra { grid-row: 5; max-height: 30vh; overflow: auto; }
-.cfg.full .cfg-body { display: flex; }
+/* explicit columns: the strip spans row 3 too, and without them the grid pushes the text into new columns */
+.cfg.full > .outline { grid-column: 1; } .cfg.full > .cfg-body { grid-column: -2 / -1; }
+.cfg.full > .cfg-status { grid-row: 4; }
+.cfg.full .cfg-body { display: flex; padding-bottom: var(--ctl-h); }   /* room for the folded strip below the text */
+.cfg.full > .outline { padding-bottom: calc(var(--ctl-h) + 8px); }
+/* notes and help: a strip at the bottom of the text, slides up over it on a click */
+.cfg.full > .cfg-x { display: grid; grid-row: 3; grid-column: 1 / -1; align-self: end; position: relative; z-index: 3; background: var(--surface); border-top: 1px solid var(--line); box-shadow: 0 -6px 18px rgba(0, 0, 0, .14); }
+.cfg.full .cfg-xh { display: flex; align-items: center; gap: 8px; height: var(--ctl-h); padding: 0 14px; border: 0; background: none; color: var(--fg); font: inherit; font-size: var(--fs-sm); font-weight: 600; text-align: left; cursor: pointer; }
+.cfg.full .cfg-xh:hover { color: var(--accent-ink); }
+.cfg.full .cfg-xh > span { text-box: trim-both cap alphabetic; }
+.cfg.full .cfg-xh svg { width: 16px; height: 16px; transform: rotate(-90deg); transition: transform .15s; }   /* up: slides up */
+.cfg.full.xopen .cfg-xh svg { transform: rotate(90deg); }
+.cfg.full .cfg-x > .cfg-extra { display: none; border-top: 1px solid var(--line); max-height: 45vh; overflow: auto; }
+.cfg.full.xopen .cfg-x > .cfg-extra { display: grid; }
+:root:not([data-noanim]) .cfg.full.xopen .cfg-x > .cfg-extra { animation: sheet-in 160ms cubic-bezier(.2, .7, .3, 1); }
 html.cfg-fs, html.cfg-fs body { overflow: hidden; }
 .cfg.full .cfg-body .ed { flex: 1 1 auto; }
 .cfg.full .cfg-body .ed-ta { height: 100%; min-height: 0; }

@@ -1202,7 +1202,10 @@ async function route(refresh = false) {
   // a full-screen config editor sits in <body>: it goes away with the page; leaving the page ends full screen
   document.querySelectorAll('body > .cfg').forEach((e) => e.remove());
   document.documentElement.classList.remove('cfg-fs');
-  if (r.tab !== 'settings' || r.arg !== 'raw') S.cfgFull = false;
+  if (r.tab !== 'settings' || r.arg !== 'raw') {
+    if (S.cfgFull && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
+    S.cfgFull = false;
+  }
   const main = document.getElementById('main');
   if (!S.state || refresh) {
     if (!S.state) main.replaceChildren(skel(2, 5));
@@ -3924,7 +3927,7 @@ async function paneRaw(content) {
   };
   const ed = codeEditor({
     value: conf.content, mode: 'conf', maxHeight: 0, gutter: true, suggest: sug,
-    onInput: (val) => { setDirty(val !== conf.content); relint(val); drawOutline(); drawStatus(); },
+    onInput: (val) => { mark(val !== conf.content); relint(val); drawOutline(); drawStatus(); },
     onCaret: (pos, text) => {
       const before = text.slice(0, pos).split('\n');
       caretInfo = `строка ${before.length}, столбец ${before[before.length - 1].length + 1}`;
@@ -3949,7 +3952,14 @@ async function paneRaw(content) {
       return h('button', { type: 'button', class: lvl || '', onclick: () => ed.select(r.pos, r.pos + r.name.length) }, r.name, h('span', { class: 'tail', text: (lvl ? '● ' : '') + r.line }));
     }));
   }
+  // full screen: notes and help fold into a strip at the bottom and slide up over the text on a click
+  function drawDrawer() {
+    const n = issues.length;
+    drawerBtn.replaceChildren(icon('chev'), h('span', { text: n ? `Замечания: ${n} · справка` : 'Справка по аргументу' }));
+    drawerBtn.setAttribute('aria-expanded', String(cfgEl.classList.contains('xopen')));
+  }
   function drawCounts() {
+    drawDrawer();
     const e = issues.filter((x) => x.level === 'error').length;
     const w = issues.filter((x) => x.level === 'warning').length;
     const notes = issues.filter((x) => x.level === 'info' && x.var);
@@ -3973,7 +3983,7 @@ async function paneRaw(content) {
     const r = await guarded(() => api('conf_adapt', { content: ed.ta.value }));
     if (!r) return;
     const before = ed.ta.value;
-    const put = (text) => { ed.setValue(text); setDirty(text !== conf.content); relint(text); drawOutline(); };
+    const put = (text) => { ed.setValue(text); mark(text !== conf.content); relint(text); drawOutline(); };
     put(r.text);
     toast(`В редакторе: ${plural(r.changes.length, 'правка', 'правки', 'правок')}. Проверьте и сохраните.`, { undo: () => put(before) });
   };
@@ -4019,10 +4029,11 @@ async function paneRaw(content) {
     if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); save(); }
   });
   const save = async (force = false) => {
+    if (!force && ed.ta.value === conf.content) { toast('Изменений нет — сохранять нечего'); return; }
     try {
       await api('conf_save_raw', { content: ed.ta.value, force, note: 'правка конфига текстом' });
       toast('Конфиг сохранён. Перезапустите nfqws2, чтобы применить.');
-      setDirty(false);
+      mark(false);
       await loadState();
       await loadConf();
       route();
@@ -4047,17 +4058,34 @@ async function paneRaw(content) {
     if (!on && spot.parentNode) spot.replaceWith(cfgEl);
     cfgEl.classList.toggle('full', on);
     document.documentElement.classList.toggle('cfg-fs', on);   // the page behind does not scroll (no second scrollbar)
+    // the browser's own full screen too (its bars go away, like F11); the whole page goes full screen, not the block,
+    // so dialogs, lists and toasts still show. Without the API (or refused) the block still fills the window
+    if (on && !document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
+    if (!on && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
     fsBtn.replaceChildren(icon(on ? 'shrink' : 'expand'));
     fsBtn.setAttribute('aria-label', on ? 'Обычный размер' : 'Во весь экран');
     fsBtn.dataset.tip = on ? 'Обычный размер (Esc)' : 'Во весь экран — редактор на всё окно браузера, выход по Esc';
     ed.ta.focus();
   };
+  // «Save» and «Compare» work only when the text differs from the saved file
+  const diffBtn = btn('Сравнить с сохранённым', () => openDiff('nfqws2.conf: изменения', conf.content, ed.ta.value), 'small', null,
+    { disabled: true, title: 'Что изменилось в редакторе по сравнению с файлом на роутере. Доступно, когда есть изменения' });
+  const saveBtn = btn('Сохранить', () => save(), 'primary small', null, { disabled: true, title: 'Доступно, когда в тексте есть изменения. Ctrl+S' });
+  const mark = (v) => { setDirty(v); saveBtn.disabled = diffBtn.disabled = !v; };
+  const drawerBtn = h('button', { type: 'button', class: 'cfg-xh', onclick: () => { cfgEl.classList.toggle('xopen'); drawDrawer(); } });
   const fsBtn = h('button', { type: 'button', class: 'btn small icon cfg-fs', 'aria-label': 'Во весь экран', 'data-tip': 'Во весь экран — редактор на всё окно браузера, выход по Esc',
     onclick: () => setFull(!cfgEl.classList.contains('full')) }, icon('expand'));
+  // the browser left full screen by itself (Esc there is taken by the browser, or F11) — the editor follows
+  document.addEventListener('fullscreenchange', function onFs() {
+    if (!cfgEl.isConnected) { document.removeEventListener('fullscreenchange', onFs); return; }
+    if (!document.fullscreenElement && cfgEl.classList.contains('full')) setFull(false);
+  });
   // capture phase: runs before a dropdown, menu or dialog closes itself on the same Esc — then full screen stays
   document.addEventListener('keydown', function onEsc(e) {
     if (!cfgEl.isConnected) { document.removeEventListener('keydown', onEsc, true); return; }
-    if (e.key === 'Escape' && cfgEl.classList.contains('full') && !document.querySelector('.modal-bg, .dd-pop, .more-pop:not([hidden]), .menu-list')) { e.preventDefault(); setFull(false); }
+    if (e.key !== 'Escape' || !cfgEl.classList.contains('full') || document.querySelector('.modal-bg, .dd-pop, .more-pop:not([hidden]), .menu-list')) return;
+    e.preventDefault();
+    if (cfgEl.classList.contains('xopen')) { cfgEl.classList.remove('xopen'); drawDrawer(); } else setFull(false);
   }, true);
   // after «don't show» elsewhere on the page the editor's notes are checked again (the server leaves hidden ones out)
   S.lintHook = () => { if (ed.ta.isConnected) { relint(ed.ta.value); return true; } S.lintHook = null; return false; };
@@ -4077,18 +4105,18 @@ async function paneRaw(content) {
       ta.setSelectionRange(0, 0);
       ta.scrollTop = 0;
       const text = ta.value;
-      setDirty(text !== conf.content); relint(text); drawOutline();
+      mark(text !== conf.content); relint(text); drawOutline();
       toast(`Оформлено: ${plural(r.lines, 'строка', 'строки', 'строк')} — только пробелы и переносы, аргументы nfqws2 те же. Ещё не сохранено; Ctrl+Z — вернуть как было`);
     }, 'small', 'wand', { title: 'Привести конфиг к одному виду: параметр на строку, выравнивание под кавычку, пустая строка перед --new. Меняются только пробелы и переносы — nfqws2 получит те же аргументы. Текст попадает в редактор, сохранение — как обычно' }),
     newTag('raw:format'),
     copyBtn(() => ed.ta.value, 'Копировать', 'small'),
     fsBtn, newTag('raw:full'),
     h('span', { class: 'grow' }),
-    btn('Сравнить с сохранённым', () => openDiff('nfqws2.conf: изменения', conf.content, ed.ta.value), 'small'),
+    diffBtn,
     btn('История', () => openHistory('nfqws2.conf', () => route(true)), 'small', 'history'),
-    btn('Сохранить', () => save(), 'primary small'));
+    saveBtn);
   ed.setIssues(issues);
-  cfgEl.append(tools, banner, outline, h('div', { class: 'cfg-body' }, ed.el), status, extra);
+  cfgEl.append(tools, banner, outline, h('div', { class: 'cfg-body' }, ed.el), status, h('div', { class: 'cfg-x' }, drawerBtn, extra));
   if (S.cfgFull) queueMicrotask(() => setFull(true));   // was full before the redraw (a save)
   content.append(h('div', { class: 'vh' }, h('h1', { text: 'Конфиг целиком' }), h('span', { class: 'sm muted mono', text: S.state?.ui?.conf_file || 'nfqws2.conf' }), h('span', { class: 'grow' }),
     overviewCol() ? btn('Показать обзор', () => setFocus(false), 'small') : null),
