@@ -5695,6 +5695,10 @@ async function viewFreeze(main) {
 
 const DNS_SITE_TEXT = { ok: ['верно', 'ok'], fake: ['заглушка', 'bad'], none: ['нет ответа', 'bad'], other: ['другой адрес', 'warn'], podkop: ['podkop', ''], unknown: ['не сверить', ''] };
 
+// DNS page (approved mockup local/design/dns-page.html): one «Проверить» runs the quick check (own DNS, five servers,
+// blocked sites) and then the extended one (about fifty public servers) in one background job. Four blocks: three
+// verdict tiles; one piece of advice (nothing to change, or what to set with the three best servers); one table of
+// all servers with the router's and the provider's own DNS first; sites — only those with a problem, the rest folded
 async function viewDns(main) {
   const startBtn = btn('Проверить', start, 'primary');
   const when = h('span');
@@ -5704,40 +5708,89 @@ async function viewDns(main) {
     h('p', { class: 'muted dns-lead' }, 'Какие DNS-серверы отвечают с этого роутера, не перехватывает ли провайдер обычный DNS и не подменяет ли адреса закрытых сайтов. ', when,
       'Настройки DNS роутера страница не меняет — только показывает и советует.'),
     out);
+  let q = {}, x = {}, sort = { key: 'best', dir: 1 }, all = false;
+  const busy = () => !!(q.running || x.running);
   async function start() {
     const s = await guarded(() => api('dns_start'));
-    if (s) { draw(s); poll(); }
+    if (!s) return;
+    q = s; x = await api('dnsx_get').catch(() => ({})); all = false;
+    draw(); poll();
   }
   function poll() {
     pollTest(async () => {
       if (!out.isConnected) return false;
-      const s = await api('dns_get').catch(() => null);
-      if (!s) return true;
-      draw(s);
-      return !!s.running;
-    }, 1500);
+      const a = await api('dns_get').catch(() => null);
+      const b = await api('dnsx_get').catch(() => null);
+      if (a) q = a;
+      if (b) x = b;
+      draw();
+      return busy();
+    }, 2000);
+  }
+
+  // ---- the extended table: times, failures, who answered, stubs ----
+  const okMs = dnsxOkMs;
+  const udpMs = (r) => r.udp?.ok && !r.udp.intercept ? r.udp.ms : null;   // an intercepted answer is not this server's
+  // DoT counts when it was a real query (r.dot.q — the router has openssl); otherwise only the connection was timed
+  const bestMs = (r) => { const v = [okMs(r.doh), udpMs(r), r.dot?.q ? okMs(r.dot) : null].filter((m) => m != null); return v.length ? Math.min(...v) : okMs(r.dot); };
+  const bestHow = (r) => { const m = bestMs(r); return m == null ? '' : m === okMs(r.doh) ? 'DoH' : m === udpMs(r) ? 'UDP 53' : 'DoT'; };
+  const clean = (r) => !r.udp?.intercept && r.sub && r.sub.bad === 0 && bestMs(r) != null;   // answers itself, no stubs found
+  const FAIL = { syn: ['SYN DROP', 'TCP не соединился — адрес закрыт'], tls: ['TLS DROP', 'TCP соединился, TLS оборван — режут по имени'],
+    timeout: ['TIMEOUT', 'нет ответа'], bad: ['ошибка', 'сервер ответил не DNS-ответом или с ошибкой'], name: ['нет адреса', 'имя сервера не разрешилось'],
+    cert: ['сертификат', 'сертификат не подходит к имени сервера'], slow: ['медленно', 'соединение есть, но ответа не было 5 секунд'] };
+  const tcell = (r) => !r ? h('span', { class: 'muted', text: '—' }) : r.ok ? h('span', { class: 'num ok-t', text: r.ms + ' мс' })
+    : h('span', { class: 'bad-t sm', text: (FAIL[r.why] || ['нет'])[0], title: (FAIL[r.why] || ['', ''])[1] });
+  const whoCell = (r) => {
+    const u = r.udp;
+    if (!u) return h('span', { class: 'muted', text: '' });
+    if (!u.ok) return h('span', { class: 'muted sm', text: 'нет ответа' });
+    const nm = (u.as_name || '').split(/\s+/)[0];
+    const why = { isp: 'ответил сервер провайдера', ripn: 'ответил национальный резолвер (RIPN), а не этот сервер', local: 'ответил DNS вашей сети' }[u.intercept];
+    const t = `${u.who || '?'}${nm ? ' — ' + nm : ''}`;
+    return h('span', { class: 'mono sm ' + (u.intercept ? 'bad-t' : 'muted'), title: why ? `${t}: ${why}` : t, text: t });
+  };
+  const subCell = (r) => !r.sub ? chip('—', '') : r.sub.bad === 0 ? chip('нет', 'ok') : chip(`${r.sub.bad} из ${r.sub.of}`, r.sub.bad >= 2 ? 'bad' : 'warn');
+  const KEYS = { name: (r) => r.name, doh: (r) => okMs(r.doh) ?? 1e9, dot: (r) => okMs(r.dot) ?? 1e9,
+    udp: (r) => udpMs(r) ?? (r.udp?.ok ? 5e5 + r.udp.ms : 1e9),
+    sub: (r) => r.sub ? r.sub.bad : 99,
+    best: (r) => (clean(r) ? 0 : 1e6) + (bestMs(r) ?? 9e5) };   // default: clean servers first, each group by its fastest way
+  const SHOW = 9;   // public servers shown before «Ещё N»
+  // the router's and the provider's own DNS as table rows (from the quick check): stubs over the checked sites
+  function ownRows() {
+    const sites = q.sites || [];
+    const subOf = (k) => { const s = sites.filter((v) => v[k] && v.ref.length); return s.length ? { bad: s.filter((v) => ['fake', 'none'].includes(v[k].st)).length, of: s.length } : null; };
+    return (q.servers || []).filter((v) => v.kind !== 'public').map((v) => ({ name: v.name, ip: v.ip, own: true, doh: null, dot: null,
+      udp: v.udp?.st === 'none' ? { ok: false, why: 'timeout' } : { ok: true, ms: v.udp?.ms, who: v.udp?.who, as_name: v.udp?.as_name },
+      sub: subOf(v.kind) }));
+  }
+  function table() {
+    const pub = [...(x.servers || [])].sort((a, b) => { const k = KEYS[sort.key]; const va = k(a), vb = k(b); return (typeof va === 'string' ? va.localeCompare(vb) : va - vb) * sort.dir || a.name.localeCompare(b.name); });
+    const top = pub.find(clean);
+    const shown = all ? pub : pub.slice(0, SHOW);
+    const th = (key, text, cls = '') => h('th', { class: cls, 'aria-sort': sort.key === key ? (sort.dir > 0 ? 'ascending' : 'descending') : null },
+      h('button', { type: 'button', class: 'th-sort', onclick: () => { sort = { key, dir: sort.key === key ? -sort.dir : 1 }; draw(); } }, text, sort.key === key ? icon(sort.dir > 0 ? 'up' : 'down') : null));
+    const row = (r) => h('tr', { class: r.own ? 'own' : r === top ? 'best' : null },
+      h('td', { class: 'nm', text: r.name, title: r.ip || null }), h('td', { class: 'mono sm hide-narrow', text: r.ip || '—' }),
+      h('td', { class: 'num t-doh', 'data-h': 'DoH' }, tcell(r.doh)),
+      h('td', { class: 'num t-dot', 'data-h': 'DoT', title: r.dot?.ok && !r.dot.q ? 'время соединения: запрос по DoT без программы openssl на роутере не отправить' : null }, tcell(r.dot)),
+      h('td', { class: 'num t-udp', 'data-h': 'UDP' }, tcell(r.udp)),
+      h('td', { class: 'who' }, whoCell(r)), h('td', { class: 'sub' }, subCell(r)));
+    return [h('div', { class: 'scroll' }, h('table', { class: 'tbl dnsx-tbl' },
+      h('thead', {}, h('tr', {}, th('name', 'Сервер'), h('th', { class: 'hide-narrow', text: 'Адрес' }), th('doh', 'DoH', 'num'), th('dot', 'DoT', 'num'), th('udp', 'UDP', 'num'),
+        h('th', { text: 'Кто ответил на UDP 53' }), th('sub', 'Подмена'))),
+      h('tbody', {}, ownRows().map(row),
+        pub.length ? h('tr', { class: 'sep' }, h('td', { colspan: 7, text: sort.key === 'best' ? 'Публичные — сверху те, что без перехвата и подмены, по скорости' : 'Публичные' })) : null,
+        shown.map(row)))),
+      pub.length > SHOW ? h('div', { class: 'row' }, btn(all ? 'Свернуть' : `Ещё ${plural(pub.length - SHOW, 'сервер', 'сервера', 'серверов')}`, () => { all = !all; draw(); }, 'small', all ? 'up' : 'down')) : null];
   }
 
   const who = (u) => u.asn ? `${u.as_name || 'сеть'} (AS${u.asn})` : '';
-  // the fastest working DoT/DoH among the public servers: named in the advice and marked «лучший» on its card
-  const bestOf = (s) => s.servers.filter((x) => x.kind === 'public').flatMap((x) => [['DoT', x, x.dot], ['DoH', x, x.doh]])
-    .filter(([, , r]) => r?.ok).map(([p, x, r]) => ({ p, x, ms: r.ms })).sort((a, b) => a.ms - b.ms)[0];
-  function plainLine(s, faking) {
-    const u = s.udp || {};
-    if (u.st === 'none') return [chip('нет ответа', 'bad'), null, 'на порт 53 ответа нет'];
-    if (u.st === 'intercepted') {
-      const why = u.why === 'isp' ? 'ответил сервер провайдера' : u.why === 'local' ? `ответил DNS вашей сети за ${u.ms} мс, а не ${s.name}` : `ответил ${who(u)}, а не ${s.name}`;
-      return [chip('перехвачен', 'bad'), u.ms, why];
-    }
-    // the router's and the provider's DNS answer, but when they hand out stub addresses the answer is not to be trusted
-    return [chip('отвечает', s.kind !== 'public' && faking ? 'warn' : 'ok'), u.ms, s.kind !== 'public' && u.asn ? 'дальше спрашивает ' + who(u) : null];
-  }
-  const secureLine = (r, failText) => !r ? null : r.ok ? [chip('работает', 'ok'), r.ms, null]
-    : [chip({ refused: 'отклонён', timeout: 'нет ответа', tls: 'обрыв TLS' }[r.why] || failText, 'bad'), null, null];
-  const prRow = (label, line) => line && h('div', { class: 'dns-pr' }, h('span', { class: 'p sm muted', text: label }), line[0],
-    h('span', { class: 'sm muted num', text: line[1] ? line[1] + ' мс' : '' }), line[2] ? h('div', { class: 'why sm muted', text: line[2] }) : null);
+  // the fastest working DoT/DoH of the quick check's five servers: the advice when the extended check did not run
+  const bestOf = (s) => s.servers.filter((v) => v.kind === 'public').flatMap((v) => [['DoT', v, v.dot], ['DoH', v, v.doh]])
+    .filter(([, , r]) => r?.ok).map(([p, v, r]) => ({ p, x: v, ms: r.ms })).sort((a, b) => a.ms - b.ms)[0];
 
   function tiles(s) {
+    s = { servers: [], sites: [], ...s };
     const pub = s.servers.filter((x) => x.kind === 'public');
     const router = s.servers.find((x) => x.kind === 'router');
     const sites = s.sites || [];
@@ -5756,174 +5809,128 @@ async function viewDns(main) {
     const sec = pub.flatMap((x) => [['DoT', x, x.dot], ['DoH', x, x.doh]]).filter(([, , r]) => r);
     const okSec = sec.filter(([, , r]) => r.ok);
     const closed = sec.filter(([, , r]) => !r.ok).map(([p, x]) => `${p} к ${x.name}`);
-    const t3 = !sec.length ? null : !okSec.length ? ['bad', 'Не проходит', 'Ни DoT, ни DoH не соединились.']
+    // with the extended check done, the secure-DNS tile counts all its servers
+    const xs = (x.servers || []).filter((r) => r.dot || r.doh);
+    const xOk = xs.filter((r) => r.dot?.ok || r.doh?.ok);
+    const xClosed = xs.filter((r) => !(r.dot?.ok || r.doh?.ok)).map((r) => r.name);
+    const t3 = xs.length && !x.running ? (!xOk.length ? ['bad', 'Не проходит', 'Ни DoT, ни DoH не соединились ни с одним сервером.']
+      : ['ok', `Работает у ${xOk.length} из ${xs.length}`, !xClosed.length ? 'DoT и DoH проходят ко всем.'
+        : 'Закрыты: ' + xClosed.slice(0, 2).join(', ') + (xClosed.length > 2 ? ` и ещё ${xClosed.length - 2}` : '') + '.'])
+      : !sec.length ? null : !okSec.length ? ['bad', 'Не проходит', 'Ни DoT, ни DoH не соединились.']
       : ['ok', `Работает: ${okSec.length} из ${sec.length}`, !closed.length ? 'DoT и DoH проходят.'
         : closed.length === 1 ? `DoT и DoH проходят; закрыт только ${closed[0]}.` : 'Закрыто: ' + closed.join(', ') + '.'];
     const tile = (k, t) => t && h('div', { class: 'dns-tile ' + t[0] }, h('span', { class: 'k sm muted', text: k }), h('b', { class: 'v', text: t[1] }), t[2] ? h('span', { class: 'd sm muted', text: t[2] }) : null);
-    // advice: the fastest working secure server, said only when the router itself gets fake addresses; intercepted
-    // plain DNS alone does not matter if the router already asks over a secure channel
-    const best = bestOf(s);
-    const trouble = fake.length > 0;
-    const meaning = [ic.length ? (byIsp ? 'Провайдер перехватывает обычный DNS (порт 53) к чужим серверам и отвечает сам.' : `Обычный DNS (порт 53) к чужим серверам перехвачен — отвечает ${answered.join(', ')}.`) : null,
-      'DNS роутера на часть сайтов отдаёт заглушку вместо настоящего адреса.',
-      okSec.length ? 'Защищённый DNS (DoT и DoH) у вас проходит.' : null].filter(Boolean).join(' ');
-    const adv = !sites.length ? null : !trouble && silent.length ? notice('warn', 'DNS роутера отвечает не на все сайты',
-      `На ${silent.map((x) => x.host).join(', ')} он не вернул адреса. Если эти сайты нужны — проверьте их в «Диагнозе блокировки»: бывает, что DNS провайдера молчит вместо заглушки.`)
-      : !trouble ? notice('ok', 'DNS роутера в порядке', ic.length
-      ? 'Обычный DNS к чужим серверам перехвачен, но роутер получает настоящие адреса — менять ничего не нужно.'
-      : 'Роутер получает настоящие адреса — менять ничего не нужно.')
-      : best ? h('section', { class: 'panel dns-adv-panel' }, h('div', { class: 'dns-adv' },
-        h('p', {}, h('b', { text: 'Что это значит. ' }), meaning),
-        h('p', {}, h('b', { text: 'Совет. ' }), 'Поставьте в роутере защищённый DNS — быстрее всех ответил ', h('b', { text: `${best.x.name} по ${best.p}` }), ` (${best.ms} мс). Как это сделать — `,
-          h('a', { href: wikiDns(), target: '_blank', rel: 'noopener', text: 'в справке, раздел «DNS»' }), '.')))
-        : notice('warn', 'Защищённый DNS не проходит', 'Провайдер закрыл и DoT, и DoH к проверенным серверам — сменить DNS на роутере не получится.');
-    return [h('div', { class: 'dns-tiles' }, tile('DNS роутера', t1), tile('Обычный DNS, порт 53', t2), tile('Защищённый DNS', t3)), s.running ? null : adv];
+    return h('div', { class: 'dns-tiles' }, tile('DNS роутера', t1), tile('Обычный DNS, порт 53', t2), tile('Защищённый DNS', t3));
   }
 
-  function draw(s) {
-    startBtn.disabled = !!s.running;
-    startBtn.textContent = s.started ? 'Проверить снова' : 'Проверить';
-    when.textContent = s.finished ? `Проверено ${fmtDate(s.finished)}, заняло ${Math.max(1, s.finished - s.started)} с. ` : '';
-    if (!s.started) {
-      out.replaceChildren(panel(null, null, h('p', { text: 'Проверка спрашивает DNS роутера, DNS провайдера и пять публичных серверов (Cloudflare, Google, Quad9, AdGuard DNS, Яндекс) тремя способами: обычный DNS на порт 53, DoT и DoH. Потом сверяет, что DNS роутера и провайдера отвечают на закрытые сайты и на сайты из «Мониторинга».' }),
-        h('p', { class: 'sm muted', text: 'Занимает 15–40 секунд. Нажмите «Проверить».' })));
-      return;
+  // One piece of advice. The router gets real addresses — nothing to change (plain DNS intercepted does not matter, the
+  // router already asks over a secure channel), with the fastest servers named in one line. It gets stubs — what to set,
+  // the three best clean servers from the extended check (or the fastest secure one from the quick check)
+  function advice() {
+    const sites = q.sites || [];
+    const fake = sites.filter((v) => v.router.st === 'fake');
+    const silent = sites.filter((v) => v.router.st === 'none');
+    const best = (x.servers || []).filter(clean).sort((a, b) => bestMs(a) - bestMs(b)).slice(0, 3);
+    const quick = bestOf({ servers: q.servers || [] });
+    const names = best.map((r) => h('b', { text: r.name })).flatMap((b, i) => [i ? ', ' : '', b, ` (${bestMs(best[i])} мс)`]);
+    if (!sites.length) return null;
+    if (!fake.length && silent.length) {
+      return notice('warn', 'DNS роутера отвечает не на все сайты', `На ${silent.map((v) => v.host).join(', ')} он не вернул адреса. Если эти сайты нужны — проверьте их в «Диагнозе блокировки»: бывает, что DNS провайдера молчит вместо заглушки.`);
     }
-    const sites = s.sites || [];
-    const hasIsp = s.servers.some((x) => x.kind === 'isp');
-    const best = s.running ? null : bestOf(s);
-    const faking = { router: sites.some((x) => x.router.st === 'fake'), isp: sites.some((x) => x.isp?.st === 'fake') };
-    const cards = s.servers.map((x) => h('div', { class: 'dns-card' + (best?.x === x ? ' best' : '') },
-      h('div', { class: 'hd' }, h('b', { text: x.name }), h('span', { class: 'mono sm muted', text: x.ip }), best?.x === x ? h('span', { class: 'dns-best', text: 'лучший' }) : null),
-      prRow('порт 53', plainLine(x, faking[x.kind])), prRow('DoT', secureLine(x.dot, 'закрыт')), prRow('DoH', secureLine(x.doh, 'не отвечает'))));
+    if (!fake.length) {
+      return h('section', { class: 'panel dns-adv ok' }, h('div', { class: 'panel-h' }, h('h2', { text: 'Менять ничего не нужно' })),
+        h('p', {}, 'Роутер получает настоящие адреса.',
+          (q.servers || []).some((v) => v.udp?.st === 'intercepted') ? ' Обычный DNS к чужим серверам перехвачен, но роутер уже спрашивает по защищённому каналу.' : '',
+          best.length ? [' Если когда-нибудь понадобится сменить DNS, быстрее всех у вас: ', ...names, '.'] : ''));
+    }
+    const how = h('p', { class: 'sm muted' }, 'Как поставить: OpenWrt — Сеть → DHCP и DNS; Keenetic — Интернет → DNS. Подробно — ',
+      h('a', { href: wikiDns(), target: '_blank', rel: 'noopener', text: 'в справке, раздел «DNS»' }), '. Интерфейс DNS роутера не меняет.');
+    if (!best.length && !quick) {
+      return notice('warn', 'Защищённый DNS не проходит', 'Провайдер закрыл и DoT, и DoH к проверенным серверам — сменить DNS на роутере не получится.');
+    }
+    return h('section', { class: 'panel dns-adv bad' }, h('div', { class: 'panel-h' }, h('h2', { text: 'Что делать' })),
+      h('p', { text: 'DNS роутера на часть сайтов отдаёт заглушку — никакая стратегия nfqws2 это не исправит. Поставьте в роутере защищённый DNS: быстрее всех у вас отвечают эти, без перехвата и подмены.' }),
+      best.length ? h('div', { class: 'dnsx-best' }, best.map((r, i) => h('div', { class: 'dnsx-tile' + (i ? '' : ' top') },
+        h('b', { text: r.name }), h('span', { class: 'big num', text: bestMs(r) + ' мс' }), h('span', { class: 'sm muted', text: `${bestHow(r)} · ${r.ip || 'по имени'}` }))))
+        : h('p', {}, 'Быстрее всех ответил ', h('b', { text: `${quick.x.name} по ${quick.p}` }), ` (${quick.ms} мс).`),
+      how);
+  }
+
+  // Sites: only those with a problem in view; the rest folded
+  function sitesBlock() {
+    const sites = q.sites || [];
+    if (!sites.length) return null;
+    const hasIsp = sites.some((v) => v.isp);
     const word = (r) => r ? (DNS_SITE_TEXT[r.st] || ['?'])[0] : null;
-    const siteRows = sites.map((x) => {
-      const st = x.router.st;
+    // a problem is a stub or no answer; «другой адрес» is normal for big sites and podkop (each DNS gets its own address)
+    const bad = sites.filter((v) => ['fake', 'none'].includes(v.router.st));
+    const line = (v) => {
+      const st = v.router.st;
       const [t, cls] = st === 'fake' ? ['подменён', 'bad'] : DNS_SITE_TEXT[st] || ['?', ''];
-      const bad = !['ok', 'podkop'].includes(st);
-      return h('div', { class: 'dns-site' }, h('span', { class: 'mono', text: x.host }), chip(t, cls),
-        bad ? h('div', { class: 'sm muted', text: [`DNS роутера: ${word(x.router)}`, x.isp ? `провайдер: ${word(x.isp)}` : null,
-          `защищённый DNS: ${x.ref.length ? 'верно' : 'нет ответа'}`].filter(Boolean).join(' · ') }) : null);
-    });
-    const cell = (r) => r ? h('td', {}, chip(...(DNS_SITE_TEXT[r.st] || ['?', '']))) : h('td', { class: 'muted' }, '—');
-    const matrix = sites.length ? h('details', { class: 'dns-more' }, h('summary', { text: 'Подробно: сайт × DNS' }),
-      h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
-        h('thead', {}, h('tr', {}, h('th', { text: 'Сайт' }), h('th', { text: 'DNS роутера' }), hasIsp ? h('th', { text: 'DNS провайдера' }) : null, h('th', { text: 'Защищённый DNS' }))),
-        h('tbody', {}, sites.map((x) => h('tr', {}, h('td', { class: 'mono' }, x.host), cell(x.router), hasIsp ? cell(x.isp) : null,
-          h('td', { class: 'mono sm' }, x.ref.join(', ') || '—')))),
-        // the note is a table row, so it starts where the cell text starts in every style
-        sites.some((x) => x.router.st === 'podkop' || x.isp?.st === 'podkop') ? h('tfoot', {}, h('tr', {}, h('td', { class: 'sm muted', colspan: hasIsp ? 4 : 3,
-          text: 'podkop — адреса 198.18.x выдаёт podkop: такие сайты идут через него, так и задумано.' }))) : null))) : null;
-    out.replaceChildren(
-      s.running ? notice('info', s.step === 'sites' ? `Сверяю адреса сайтов… ${sites.length}` : `Спрашиваю серверы… ${s.servers.length}`, null, h('span', { class: 'spin' }))
-        : s.died ? notice('warn', 'Проверка прервалась', 'Запустите ещё раз.') : null,
-      ...tiles(s),
-      s.servers.length ? panel('Серверы', null, h('div', { class: 'dns-cards' }, cards)) : null,
-      sites.length ? panel('Сайты через DNS роутера', null, h('div', { class: 'dns-sites' }, siteRows), matrix) : null);
+      const ips = (v.router.ips || []).join(', ');
+      return h('div', { class: 'dns-site' }, h('span', { class: 'mono', text: v.host }), chip(t, cls),
+        ['fake', 'none'].includes(st) ? h('div', { class: 'sm muted', text: [`DNS роутера: ${ips || word(v.router)}`, hasIsp && v.isp ? `провайдер: ${word(v.isp)}` : null,
+          v.ref.length ? `настоящий: ${v.ref.join(', ')}` : 'защищённый DNS не ответил'].filter(Boolean).join(' · ') }) : null);
+    };
+    const ok = sites.filter((v) => !bad.includes(v));
+    const podkopNote = sites.some((v) => v.router.st === 'podkop') ? h('p', { class: 'sm muted', text: 'podkop — адреса 198.18.x выдаёт podkop: такие сайты идут через него, так и задумано.' }) : null;
+    if (!bad.length) {
+      return h('details', { class: 'panel dns-more-panel' }, h('summary', { text: `Сайты через DNS роутера — ${sites.length} проверено, подмены нет` }),
+        h('div', { class: 'dns-sites' }, sites.map(line)), podkopNote);
+    }
+    return panel(bad.some((v) => v.router.st === 'fake') ? 'Подменённые сайты' : 'Сайты с проблемами', h('span', { class: 'sm muted', text: `${bad.length} из ${sites.length} проверенных` }),
+      h('div', { class: 'dns-sites' }, bad.map(line)),
+      ok.length ? h('details', { class: 'dns-more' }, h('summary', { text: `Остальные ${plural(ok.length, 'сайт', 'сайта', 'сайтов')} — без подмены` }), h('div', { class: 'dns-sites' }, ok.map(line))) : null,
+      podkopNote);
   }
 
-  const s0 = await api('dns_get').catch(() => ({}));
-  draw(s0);
-  if (s0.running) poll();
-  main.append(await dnsExtended());
-}
+  function progress() {
+    const quickDone = !q.running;
+    const text = !quickDone ? (q.step === 'sites' ? `Свои DNS проверены; сверяю адреса сайтов… ${(q.sites || []).length}` : `Спрашиваю свои DNS и пять серверов… ${(q.servers || []).length}`)
+      : x.queued ? 'Начинаю проверку публичных серверов…'
+      : x.step === 'tls' ? `Свои DNS и сайты проверены; публичные серверы — обычный DNS у всех ${x.total}, проверяю DoT и DoH…`
+      : `Свои DNS и сайты проверены; публичные серверы — ${x.done || 0} из ${x.total || 55}`;
+    const pct = !quickDone ? 10 + 15 * ((q.servers || []).length / 7) : x.step === 'tls' ? 85 : 25 + 55 * ((x.done || 0) / (x.total || 55));
+    return panel('Проверка', [h('span', { class: 'grow' }), btn('Остановить', () => guarded(() => api('dnsx_stop')), 'small')],
+      h('div', { class: 'sm muted', text: text }), h('div', { class: 'dnsx-prog' }, h('i', { style: `width:${Math.round(pct)}%` })));
+  }
 
-// Extended DNS check (approved mockup local/design/dns-full.html): about fifty public servers — DoH, DoT, UDP 53 with the
-// best time, how a closed one fails, who really answered on UDP 53, stubs for five blocked sites; on top the three best
-// servers for this network. A background job on the router (dnsx_start / dnsx_get / dnsx_stop)
-async function dnsExtended() {
-  const box = h('div', { class: 'stack', style: 'gap:14px' });
-  let sort = { key: 'best', dir: 1 };
-  const okMs = (r) => r && r.ok ? r.ms : null;
-  const udpMs = (x) => x.udp?.ok && !x.udp.intercept ? x.udp.ms : null;   // an intercepted UDP answer is not this server's
-  // DoT is timed as the handshake only (PHP on the router cannot send a DNS query over TLS), so it does not compete
-  // with full DoH and UDP answers for «the best»; it counts only for a server that has nothing else
-  // DoT counts when it was a real query (x.dot.q — the router has openssl); otherwise only the connection was timed
-  const bestMs = (x) => { const v = [okMs(x.doh), udpMs(x), x.dot?.q ? okMs(x.dot) : null].filter((m) => m != null); return v.length ? Math.min(...v) : okMs(x.dot); };
-  const bestHow = (x) => { const m = bestMs(x); return m == null ? '' : m === okMs(x.doh) ? 'DoH' : m === udpMs(x) ? 'UDP 53' : 'DoT'; };
-  // clean: answers itself (not intercepted) and the stub check ran and found none
-  const clean = (x) => !x.udp?.intercept && x.sub && x.sub.bad === 0 && bestMs(x) != null;
-  const FAIL = { syn: ['SYN DROP', 'TCP не соединился — адрес закрыт'], tls: ['TLS DROP', 'TCP соединился, TLS оборван — режут по имени'],
-    timeout: ['TIMEOUT', 'на UDP 53 нет ответа'], bad: ['ошибка', 'сервер ответил не DNS-ответом или с ошибкой'], name: ['нет адреса', 'имя сервера не разрешилось'],
-    cert: ['сертификат', 'сертификат не подходит к имени сервера'], slow: ['медленно', 'соединение есть, но ответа не было 5 секунд'] };
-  const cell = (r) => !r ? h('span', { class: 'muted', text: '—' }) : r.ok ? h('span', { class: 'num ok-t', text: r.ms + ' мс' })
-    : h('span', { class: 'bad-t sm', text: (FAIL[r.why] || ['нет'])[0], title: (FAIL[r.why] || ['', ''])[1] });
-  const whoCell = (x) => {
-    const u = x.udp;
-    if (!u) return h('span', { class: 'muted', text: '' });
-    if (!u.ok) return h('span', { class: 'muted sm', text: 'нет ответа' });
-    const nm = (u.as_name || '').split(/\s+/)[0];
-    const why = { isp: 'ответил сервер провайдера', ripn: 'ответил национальный резолвер (RIPN), а не этот сервер', local: 'ответил DNS вашей сети' }[u.intercept];
-    const t = `${u.who || '?'}${nm ? ' — ' + nm : ''}`;
-    return h('span', { class: 'mono sm ' + (u.intercept ? 'bad-t' : 'muted'), title: why ? `${t}: ${why}` : t, text: t });
-  };
-  const subCell = (x) => !x.sub ? chip('—', '') : x.sub.bad === 0 ? chip('нет', 'ok') : chip(`${x.sub.bad} из ${x.sub.of}`, x.sub.bad >= 2 ? 'bad' : 'warn');
-  const KEYS = { name: (x) => x.name, doh: (x) => okMs(x.doh) ?? 1e9, dot: (x) => okMs(x.dot) ?? 1e9, udp: (x) => udpMs(x) ?? (x.udp?.ok ? 5e5 + x.udp.ms : 1e9),   // an intercepted answer is not this server's time sub: (x) => x.sub ? x.sub.bad : 99,
-    // default order: servers without interception and stubs first, each group by its fastest way
-    best: (x) => (clean(x) ? 0 : 1e6) + (bestMs(x) ?? 9e5) };
-  const startBtn = btn('Расширенная проверка', async () => { const s = await guarded(() => api('dnsx_start')); if (s) { draw(s); poll(); } }, 'small', 'search');
-  function poll() {
-    pollTest(async () => {
-      if (!box.isConnected) return false;
-      const s = await api('dnsx_get').catch(() => null);
-      if (!s) return true;
-      draw(s);
-      return !!s.running;
-    }, 2000);
-  }
-  function table(s) {
-    const rows = [...s.servers].sort((a, b) => { const k = KEYS[sort.key]; const va = k(a), vb = k(b); return (typeof va === 'string' ? va.localeCompare(vb) : va - vb) * sort.dir || a.name.localeCompare(b.name); });
-    const top = rows.find(clean);
-    const th = (key, text, cls = '') => h('th', { class: cls, 'aria-sort': sort.key === key ? (sort.dir > 0 ? 'ascending' : 'descending') : null },
-      h('button', { type: 'button', class: 'th-sort', onclick: () => { sort = { key, dir: sort.key === key ? -sort.dir : 1 }; draw(s); } }, text, sort.key === key ? icon(sort.dir > 0 ? 'up' : 'down') : null));
-    return h('div', { class: 'scroll' }, h('table', { class: 'tbl dnsx-tbl' },
-      h('thead', {}, h('tr', {}, th('name', 'Провайдер'), h('th', { class: 'hide-narrow', text: 'Адрес' }), th('doh', 'DoH', 'num'), th('dot', 'DoT', 'num'), th('udp', 'UDP', 'num'),
-        h('th', { text: 'Кто ответил на UDP 53' }), th('sub', 'Подмена'))),
-      h('tbody', {}, rows.map((x) => h('tr', { class: x === top ? 'best' : null },
-        h('td', { class: 'nm', text: x.name, title: x.ip || null }), h('td', { class: 'mono sm hide-narrow', text: x.ip || '—' }),
-        h('td', { class: 'num t-doh', 'data-h': 'DoH' }, cell(x.doh)),
-        h('td', { class: 'num t-dot', 'data-h': 'DoT', title: x.dot?.ok && !x.dot.q ? 'время соединения: запрос по DoT без программы openssl на роутере не отправить' : null }, cell(x.dot)), h('td', { class: 'num t-udp', 'data-h': 'UDP' }, cell(x.udp)),
-        h('td', { class: 'who' }, whoCell(x)), h('td', { class: 'sub' }, subCell(x)))))));
-  }
-  function draw(s) {
-    startBtn.disabled = !!s.running;
-    startBtn.querySelector('btn-l').textContent = s.started ? 'Повторить расширенную' : 'Расширенная проверка';   // the quick check above has its own «Проверить снова»
-    // nothing to show yet (never run, or stopped before the first server) — the intro with the start button
-    if (!s.started || (!s.running && !s.servers?.length)) {
-      box.replaceChildren(panel('Расширенная проверка', [h('span', { class: 'grow' }), startBtn, newTag('dns:full')],
-        s.stopped || s.died ? h('p', { class: 'sm muted', text: s.died ? 'Прошлая проверка прервалась.' : 'Прошлая проверка остановлена.' }) : null,
-        h('p', { class: 'sm muted', text: 'Около 50 публичных DNS-серверов: время DoH, DoT и обычного DNS (UDP 53), как закрыт недоступный — TLS DROP (режут по имени), SYN DROP (адрес закрыт), TIMEOUT, кто на самом деле ответил на UDP 53 и сколько из пяти закрытых сайтов сервер подменяет. Сверху — три лучших сервера для этой сети. Занимает 1–3 минуты, идёт в фоне. Настройки DNS роутера не меняет.' })));
+  function draw() {
+    startBtn.disabled = busy();
+    startBtn.querySelector('btn-l').textContent = busy() ? 'Проверяю…' : q.started ? 'Проверить снова' : 'Проверить';
+    const fin = Math.max(q.finished || 0, x.finished || 0);
+    when.textContent = !busy() && fin ? `Проверено ${fmtDate(fin)}, заняло ${Math.max(1, fin - (q.started || fin))} с. ` : '';
+    if (!q.started) {
+      out.replaceChildren(panel(null, null, h('p', { text: 'Проверка спрашивает DNS роутера, DNS провайдера и около 50 публичных серверов (Cloudflare, Google, Quad9, AdGuard, Яндекс, Comss.one, XboxDNS и другие) тремя способами: обычный DNS на порт 53, DoT и DoH. Смотрит, кто на самом деле отвечает на порт 53, и сверяет, не подменяет ли DNS роутера адреса закрытых сайтов.' }),
+        h('p', { class: 'sm muted' }, 'Занимает 1–2 минуты, идёт в фоне. Нажмите «Проверить». ', newTag('dns:full'))));
       return;
     }
-    const parts = [];
-    if (s.running) {
-      parts.push(panel('Расширенная проверка', [h('span', { class: 'grow' }), btn('Остановить', () => guarded(() => api('dnsx_stop')), 'small')],
-        h('div', { class: 'sm muted', text: s.step === 'tls' ? `Обычный DNS проверен у всех ${s.total}; проверяю DoT и DoH…` : `Проверено ${s.done} из ${s.total} серверов` }),
-        h('div', { class: 'dnsx-prog' }, h('i', { style: `width:${Math.round(100 * (s.step === 'tls' ? 0.8 : 0.8 * s.done / s.total))}%` }))));
-    } else if (s.died) parts.push(notice('warn', 'Расширенная проверка прервалась', 'Запустите ещё раз.'));
-    if (!s.running && s.servers?.length) {
-      const best = s.servers.filter(clean).sort((a, b) => bestMs(a) - bestMs(b)).slice(0, 3);
-      parts.push(panel('Лучшие для этой сети', h('span', { class: 'sm muted', text: 'без перехвата и подмены · по самому быстрому способу' }),
-        best.length ? h('div', { class: 'dnsx-best' }, best.map((x, i) => h('div', { class: 'dnsx-tile' + (i ? '' : ' top') },
-          h('b', { text: x.name }), h('span', { class: 'big num', text: bestMs(x) + ' мс' }), h('span', { class: 'sm muted', text: `${bestHow(x)} · ${x.ip || (x.dot ? 'по имени' : '')}` }))))
-          : h('p', { class: 'muted', text: 'Ни один сервер не прошёл без перехвата и подмены.' }),
-        h('p', { class: 'sm muted', text: 'Сменить DNS роутера — в его настройках (OpenWrt: Сеть → DHCP и DNS; Keenetic: Интернет → DNS). Интерфейс DNS роутера не меняет.' })));
-      parts.push(panel(`${s.servers.length} серверов`, [h('span', { class: 'sm muted', text: `проверено ${fmtDate(s.finished)} · заняло ${Math.max(1, s.finished - s.started)} с` + (s.stopped ? ' · остановлено' : '') }), h('span', { class: 'grow' }), startBtn],
-        table(s),
-        h('div', { class: 'dnsx-legend sm muted' }, h('span', {}, h('b', { class: 'bad-t', text: 'TLS DROP' }), ' — соединился, TLS оборван (режут по имени)'),
-          h('span', {}, h('b', { class: 'bad-t', text: 'SYN DROP' }), ' — адрес закрыт'), h('span', {}, h('b', { class: 'bad-t', text: 'TIMEOUT' }), ' — на UDP 53 нет ответа'),
-          h('span', { text: 'красный в «Кто ответил» — ответил не тот, кого спрашивали (перехват)' }),
-          h('span', { text: s.servers.some((x) => x.dot?.q) ? 'время — с роутера: запрос по уже открытому соединению, лучшее из нескольких'
-            : 'время — с роутера; у DoT — время соединения (на роутере нет openssl, чтобы отправить запрос)' }),
-          h('span', { text: 'подмена «—» — не проверялась: у сервера нет обычного DNS или он не ответил' }))));
+    if (busy()) {
+      out.replaceChildren(progress(), (q.servers || []).length ? tiles(q) : null);
+      return;
     }
-    box.replaceChildren(...parts);
+    const died = q.died || x.died;
+    out.replaceChildren(
+      died ? notice('warn', 'Проверка прервалась', 'Запустите ещё раз.') : null,
+      x.stopped ? notice('info', 'Проверка остановлена', 'Публичные серверы проверены не все.') : null,
+      tiles(q), advice(),
+      panel('Серверы', h('span', { class: 'sm muted', text: (x.servers || []).length ? `свои и ${x.servers.length} публичных` : 'свои' }), ...table(),
+        h('div', { class: 'dnsx-legend sm muted' }, h('span', {}, h('b', { class: 'bad-t', text: 'TLS DROP' }), ' — соединился, TLS оборван (режут по имени)'),
+          h('span', {}, h('b', { class: 'bad-t', text: 'SYN DROP' }), ' — адрес закрыт'), h('span', {}, h('b', { class: 'bad-t', text: 'TIMEOUT' }), ' — нет ответа'),
+          h('span', { text: 'красный в «Кто ответил» — ответил не тот, кого спрашивали (перехват)' }),
+          h('span', { text: (x.servers || []).some((r) => r.dot?.q) ? 'время — с роутера, запрос по уже открытому соединению' : 'время — с роутера; у DoT — время соединения (нет openssl)' }),
+          h('span', { text: 'подмена «—» — не проверялась' }))),
+      sitesBlock());
   }
-  const s0 = await api('dnsx_get').catch(() => ({}));
-  draw(s0);
-  if (s0.running) poll();
-  return box;
+
+  const [a0, b0] = [await api('dns_get').catch(() => ({})), await api('dnsx_get').catch(() => ({}))];
+  q = a0; x = b0;
+  draw();
+  if (busy()) poll();
 }
+
+// a time from a probe result, or null when the probe failed
+const dnsxOkMs = (r) => r && r.ok ? r.ms : null;
 
 // ============ Device connections: what a program on a home device talks to, and whether answers come back ============
 

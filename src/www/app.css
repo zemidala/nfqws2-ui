@@ -1108,6 +1108,12 @@ a.over-row:hover { background: var(--soft); }
 .dns-site { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .dns-site > .sm { grid-column: 1 / -1; overflow-wrap: anywhere; }
 .dns-card.best { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+/* DNS page: one advice block (border by verdict), own DNS rows on top of the table, a caption row before the public ones */
+:root:root main .panel.dns-adv.ok { border-top-color: var(--ok); } :root:root main .panel.dns-adv.bad { border-top-color: var(--bad); }   /* outrank the style's own top line */
+.panel.dns-adv p { margin: 0; }
+.tbl.dnsx-tbl tr.own td { background: var(--soft); } .tbl.dnsx-tbl tr.own td.nm { font-weight: 600; }
+.tbl.dnsx-tbl tr.sep td { padding-top: 6px; padding-bottom: 4px; font-size: var(--fs-xs); color: var(--muted); background: none; }
+details.dns-more-panel > summary { cursor: pointer; color: var(--accent-ink); }
 /* extended DNS check */
 .ok-t { color: var(--ok); } .bad-t { color: var(--bad); }
 .dnsx-prog { height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; } .dnsx-prog i { display: block; height: 100%; background: var(--accent); transition: width .3s; }
@@ -1135,6 +1141,9 @@ a.over-row:hover { background: var(--soft); }
   :root:root:root:root .scroll > .dnsx-tbl, :root:root:root:root .dnsx-tbl tbody { display: block; width: 100%; min-width: 0; }
   :root:root:root:root .dnsx-tbl tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 2px 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
   :root:root:root:root .dnsx-tbl tr.best { padding: 8px; border-radius: var(--radius); background: var(--accent-soft); }
+  :root:root:root:root .dnsx-tbl tr.own { padding: 8px; margin-bottom: 4px; border-radius: var(--radius); background: var(--soft); border: 0; }
+  :root:root:root:root .dnsx-tbl tr.sep { display: block; padding: 6px 0 2px; border: 0; }
+  :root:root:root:root .dnsx-tbl tr.sep td { display: block; }
   :root:root:root:root .dnsx-tbl td { display: block; padding: 0; border: 0; background: none; text-align: left; }
   :root:root:root:root .dnsx-tbl td.nm { grid-column: 1 / 4; font-weight: 600; } :root:root:root:root .dnsx-tbl td.sub { grid-column: 4; grid-row: 1; justify-self: end; }
   :root:root:root:root .dnsx-tbl td.hide-narrow { display: none; }
@@ -1145,9 +1154,6 @@ a.over-row:hover { background: var(--soft); }
   :root:root:root:root .dnsx-tbl td.who { grid-column: 1 / -1; }
 }
 .dns-best { margin-left: auto; font-size: var(--fs-xs); font-weight: 600; padding: 0 6px; border-radius: 4px; background: var(--accent); color: var(--accent-fg); }
-.dns-adv { display: grid; gap: 6px; padding: 12px 16px; border-radius: var(--radius); background: var(--zd-blue-soft, var(--accent-soft)); box-shadow: inset 3px 0 var(--zd-blue, var(--accent)); }
-.dns-adv p { margin: 0; }
-:root:root main .panel.dns-adv-panel { border-top-color: var(--zd-blue, var(--accent)); }   /* outranks the Z panel's orange line */
 .dns-adv a { color: var(--accent-ink); }
 /* status chips on this page carry a dot, as on «Мониторинг» */
 :is(.dns-card, .dns-site, .dns-more) .chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }

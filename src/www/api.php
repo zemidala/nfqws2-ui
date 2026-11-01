@@ -7912,12 +7912,15 @@ function dnsData(): array
   return is_array($d) ? $d : [];
 }
 
+// One «Проверить» on the page: the quick check (own DNS, five servers, sites), then the extended one in the same job
 function dnsStart(): void
 {
-  if (!empty(dnsData()['running'])) {
+  if (!empty(dnsData()['running']) || !empty(dnsxData()['running'])) {
     fail('Проверка DNS уже идёт');
   }
+  @unlink(DNSX_STOP);
   file_put_contents(DNS_FILE, json_encode(['running' => true, 'started' => time(), 'servers' => [], 'sites' => []]));
+  file_put_contents(DNSX_FILE, json_encode(['running' => true, 'queued' => true, 'started' => time(), 'total' => count(DNSX), 'done' => 0, 'step' => 'udp', 'servers' => []]));
   exec('(env -i PATH=' . JOB_PATH . ' NFQWS_UI_CLI=dns php-cgi -q -f ' . escapeshellarg(__FILE__) . ' >/dev/null 2>&1 &)');
 }
 
@@ -7939,6 +7942,9 @@ function dnsJob(): void
     $save();
   }
   foreach (DNS_SERVERS as [$name, $ip, $host, $expect]) {
+    if (is_file(DNSX_STOP)) {
+      break;
+    }
     $doh = dohResolve($host, $ip, 'ya.ru');
     $d['servers'][] = ['name' => $name, 'ip' => $ip, 'host' => $host, 'kind' => 'public', 'udp' => dnsPlain($ip, $expect, $my, $router['asn'] ?? null),
       'dot' => dotProbe($host, $ip), 'doh' => $doh['ok'] && $doh['ips'] ? ['ok' => true, 'ms' => $doh['ms']] : ['ok' => false, 'ms' => 0, 'error' => $doh['error'] ?? 'пустой ответ']];
@@ -7955,6 +7961,9 @@ function dnsJob(): void
     }
   }
   foreach ($sites as $host) {
+    if (is_file(DNSX_STOP)) {
+      break;
+    }
     $ref = [];
     foreach (DIAG_DOH_MORE as [, $server, $ip]) {   // Cloudflare and Quad9: answers not filtered for Russia
       $r = dohResolve($server, $ip, $host);
@@ -9915,6 +9924,12 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
   }
   if ($cli === 'dns') {
     dnsJob();
+    if (is_file(DNSX_STOP)) {   // stopped during the quick part: the extended one does not start
+      file_put_contents(DNSX_FILE, json_encode(['running' => false, 'stopped' => true, 'started' => time(), 'finished' => time(), 'servers' => []]));
+      @unlink(DNSX_STOP);
+    } else {
+      dnsxJob();
+    }
     exit(0);
   }
   if ($cli === 'dnsx') {
