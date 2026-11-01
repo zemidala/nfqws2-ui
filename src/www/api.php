@@ -8912,7 +8912,7 @@ function state(): array
       $sites = [];
       foreach ($cfg['sites'] as $h) {
         $hist = $d['sites'][$h] ?? [];
-        $sites[] = ['host' => $h, 'last' => $hist ? end($hist) : null, 'recent' => array_map(fn($x) => $x[1], array_slice($hist, -24))];
+        $sites[] = ['host' => $h, 'last' => $hist ? end($hist) : null, 'recent' => array_map(fn($x) => $x[1] ? max(1, (int)$x[2]) : 0, array_slice($hist, -24))];   // response time, 0 = failed (an older page reads it as true/false)
       }
       return ['enabled' => $cfg['enabled'], 'interval' => $cfg['interval'], 'last' => $d['last'] ?? 0, 'sites' => $sites];
     })(),

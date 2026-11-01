@@ -119,6 +119,9 @@ main { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap:
    descent, in the middle — the icon beside them is centred too. Without it the text rode 1.5px high and the icon
    looked 2px low next to it. Browsers without text-box keep the old look. */
 .btn > btn-l { display: block; text-box: trim-both cap alphabetic; }
+/* plain text standing in a row beside a button is centred the same way, or the two sit 1.5px apart; badges and
+   chips keep their own box */
+:is(.row, .panel-h, .blk-h):has(> .btn) > :is(span, p, small, b, strong, em, label):not(.btn, .chip, .mst, .tag, .pchip, .badge, .st, .dd-btn, .spin, .dot, .sw, .seg) { text-box: trim-both cap alphabetic; }
 .btn:hover { background: var(--soft); }
 .btn:disabled { opacity: .5; cursor: default; }
 .btn.icon { width: 34px; padding: 0; }
@@ -550,28 +553,31 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 }
 
 /* мониторинг */
-/* recent checks as one continuous band, like the history on «Мониторинг»: separate bars never come out even */
-.upbar { display: inline-flex; flex: none; width: 96px; height: 10px; border-radius: 3px; overflow: hidden; }
-.upbar i { display: block; flex: 1 1 0; }
-.upbar i.ok { background: var(--ok); } .upbar i.bad { background: var(--bad); }
+/* response-time line (msSpark): grey — how long the answer took, red stroke — failed, amber — over 5 s, gap — not checked */
+.spark { position: relative; height: 30px; min-width: 120px; }
+.spark > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
+.spark .ln { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
+.spark .ar { fill: var(--muted); opacity: .12; }
+.spark .x { stroke: var(--bad); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.spark .sl { stroke: var(--warn); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.spark-hits { position: absolute; inset: 0; display: flex; }
+.spark-hits i { flex: 1 1 0; }
+.spark.mini { width: 88px; min-width: 0; height: 18px; flex: none; }
 .mon-mini { display: grid; gap: 2px; margin-inline: -6px; }
 .mon-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 7px; background: none; border: 0; cursor: pointer; text-align: left; min-width: 0; }
 .mon-row:hover { background: var(--soft); }
 .mon-row .ellipsis { flex: 1; }
-.mon-row .upbar { width: 80px; height: 8px; }
-/* Monitoring: summary, table and timeline. Result colours: ok — opened, slow — over 5 s, bad — did not open, none — not checked */
-.mon-sum { display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: flex-end; padding: 4px 0 2px; }
-.mon-sum .k { display: grid; gap: 4px; min-width: 0; }
-.mon-sum .big { font-size: 26px; font-weight: 500; line-height: 1.1; font-variant-numeric: tabular-nums; }
-.mon-sum .lbl { font-size: 13px; color: var(--muted); }
-.mon-sum .okc { color: var(--ok); } .mon-sum .badc { color: var(--bad); }
-.mon-sum p { margin: 0; }
-.mon-stack { display: flex; flex: 1 1 200px; align-self: center; height: 8px; border-radius: 4px; overflow: hidden; background: var(--line); }
-.mon-stack i { display: block; }
-.mon-stack .ok, .mhist .ok, .mtl-cells .ok, .mtl-legend .ok::before { background: var(--ok); }
-.mon-stack .slow, .mhist .slow, .mtl-cells .slow, .mtl-legend .slow::before { background: var(--warn); }
-.mon-stack .bad, .mhist .bad, .mtl-cells .bad, .mtl-legend .bad::before { background: var(--bad); }
-.mon-stack .none, .mhist .none, .mtl-cells .none, .mtl-legend .none::before { background: var(--line); }
+/* Monitoring: three equal summary tiles, the switch row, the table and the timeline */
+.mon-ctrls { align-items: center; }
+.mon-sw { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
+.mon-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.mon-tile { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; background: var(--soft); min-width: 0; }
+.mon-tile b { display: block; font-size: 26px; font-weight: 600; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.mon-tile span { display: block; font-size: 13px; color: var(--muted); margin-top: 2px; }
+.mon-tile .okc { color: var(--ok); } .mon-tile .badc { color: var(--bad); }
+@media (max-width: 599px) { .mon-tiles { grid-template-columns: 1fr 1fr; } .mon-tile:last-child { grid-column: 1 / -1; } }
+.mtl-legend .slow::before { background: var(--warn); } .mtl-legend .bad::before { background: var(--bad); }
+.mtl-legend .none::before { background: var(--line); } .mtl-legend .ln::before { background: var(--muted); }
 .mon-viewrow { margin-top: 4px; }
 .mst { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 2px 9px; border-radius: var(--ctl-r); white-space: nowrap; background: var(--soft); color: var(--muted); }
 .mst::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
@@ -584,21 +590,15 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .mon-host .linkish { all: unset; cursor: pointer; font-weight: 600; overflow-wrap: break-word; }
 .mon-host .linkish:hover { color: var(--accent-ink); text-decoration: underline; }
 .mon-host .linkish:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
-.mon-hcell { width: 42%; min-width: 180px; }
-/* history as one continuous band: 96 separate cells never come out even (each rounds to screen pixels on its own,
-   worst at 125 % and 150 % scaling), a band without gaps has no rhythm to break — runs of one result merge, failures
-   stand out as coloured stretches. Every check stays its own element for the tooltip. Solid colours, no opacity:
-   semi-transparent neighbours show seams where their edges overlap. */
-.mhist { display: flex; height: 12px; border-radius: 4px; overflow: hidden; }
-.mhist i { flex: 1 1 0; min-width: 1px; }
-.mon-why { margin-top: 3px; max-width: 32ch; }
-.mon-acts { display: flex; gap: 2px; justify-content: flex-end; }
+.mon-hcell { width: 40%; min-width: 180px; }
+.tbl.mon-tbl tr.mon-down td { background: var(--bad-soft); }   /* a site that does not open now: first in the list, tinted */
+.mon-why { margin-top: 3px; max-width: 32ch; font-size: 12.5px; font-family: var(--sans); font-weight: 400; color: var(--bad); }
+.mon-acts { display: flex; gap: 6px; justify-content: flex-end; }
 .mon-narrow { display: none; }
 .mtl { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 6px 12px; align-items: center; }
 .mtl-host { display: flex; align-items: center; gap: 8px; font-weight: 600; white-space: nowrap; }
 .mtl-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--line); }
 .mtl-dot.ok { background: var(--ok); } .mtl-dot.slow { background: var(--warn); } .mtl-dot.bad { background: var(--bad); }
-.mtl-cells { display: grid; grid-template-columns: repeat(96, minmax(0, 1fr)); height: 14px; border-radius: 4px; overflow: hidden; }
 .mtl-axis { grid-column: 2; display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
 .mtl-note { grid-column: 1 / -1; font-size: 13px; padding: 8px 10px; border-radius: var(--radius); background: var(--bad-soft); color: var(--bad); }
 .mtl-legend { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 16px; }
@@ -606,12 +606,12 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 /* phone: table without history and «checked» columns, «%» instead of «Доступность», details through the site name */
 @media (max-width: 599px) {
   .mon-tbl .mon-wide { display: none; } .mon-tbl .mon-narrow { display: inline; }
-  .mon-tbl .mon-more { display: none; }
+  .mon-tbl .mon-acts > .btn:not(:first-child) { display: none; }   /* only «check now»; details and removal — through the site name */
   .tbl.mon-tbl th, .tbl.mon-tbl td { padding-left: 4px; padding-right: 4px; }
   .mon-tbl .mon-host { font-size: 13px; }
   .scroll > table.tbl.mon-tbl:has(th) { min-width: 0; }
   .mtl { grid-template-columns: minmax(0, 1fr) max-content; }
-  .mtl-cells, .mtl-axis { grid-column: 1 / -1; }
+  .mtl > .spark, .mtl-axis { grid-column: 1 / -1; }
   .mtl-host { white-space: normal; overflow-wrap: anywhere; }
 }
 @media (max-width: 759px) { .https-link span { display: none; } .top-in { gap: 8px; padding: 0 12px; } }

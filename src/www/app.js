@@ -1220,10 +1220,33 @@ function updateSide() {
   renderSideMonitor(SIDE.monitor);
 }
 
-// Полоска последних проверок: зелёные — открылся, красные — нет
-function uptimeBar(recent) {
-  return h('span', { class: 'upbar', 'aria-hidden': 'true' }, recent.map((ok) => h('i', { class: ok ? 'ok' : 'bad' })));
+// Response-time line for a run of checks, oldest first: a grey line of how long each answer took, a red stroke where
+// the check failed, an amber one where it took longer than 5 s, a gap where nothing was checked. items: {ok, ms, tip}
+// or null. The line is SVG, so it scales to any width without the uneven pixels of separate cells; transparent zones
+// on top carry the tooltips.
+const SLOW_MS = 5000;
+function msSpark(items, cls = '') {
+  const n = items.length, W = 1000, H = 30, CAP = 3000;
+  const max = Math.max(1, ...items.filter((x) => x?.ok).map((x) => Math.min(x.ms, CAP)));
+  const X = (i) => n < 2 ? W / 2 : i / (n - 1) * W;
+  const Y = (ms) => H - 2 - Math.min(ms, CAP) / max * (H - 6);
+  const f = (p) => p[0].toFixed(1) + ',' + p[1].toFixed(1);
+  let line = '', area = '', run = [];
+  const flush = () => {
+    if (run.length === 1) run = [[run[0][0] - 4, run[0][1]], [run[0][0] + 4, run[0][1]]];   // a lone check — a short dash
+    if (run.length) { line += 'M' + run.map(f).join('L'); area += `M${run[0][0].toFixed(1)},${H}L${run.map(f).join('L')}L${run.at(-1)[0].toFixed(1)},${H}Z`; }
+    run = [];
+  };
+  items.forEach((x, i) => (x?.ok ? run.push([X(i), Y(x.ms)]) : flush()));
+  flush();
+  const marks = items.map((x, i) => !x ? '' : !x.ok ? `<line class="x" x1="${X(i).toFixed(1)}" x2="${X(i).toFixed(1)}" y1="0" y2="${H}"/>`
+    : x.ms > SLOW_MS ? `<line class="sl" x1="${X(i).toFixed(1)}" x2="${X(i).toFixed(1)}" y1="0" y2="${H}"/>` : '').join('');
+  const el = h('div', { class: ('spark ' + cls).trim() }, h('div', { class: 'spark-hits' }, items.map((x) => h('i', { title: x?.tip || null }))));
+  el.insertAdjacentHTML('afterbegin', `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><path class="ar" d="${area}"/><path class="ln" d="${line}"/>${marks}</svg>`);
+  return el;
 }
+// the column's recent checks: response time in ms, 0 — failed (a server before 1.27 sends true/false)
+const uptimeBar = (recent) => msSpark(recent.map((v) => ({ ok: !!v, ms: v === true ? 1 : Number(v) || 0 })), 'mini');
 
 function renderSideMonitor(el) {
   const m = S.state.monitor;
@@ -4258,11 +4281,12 @@ async function viewMonitor(main) {
   let sites = [...cfg.sites];
   const add = h('input', { class: 'input mono grow', id: 'mon-add', placeholder: 'добавить сайт, например rutracker.org', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Добавить сайт' });
   const interval = h('select', { class: 'select', 'aria-label': 'Как часто' }, [10, 30, 60, 180, 720].map((n) => h('option', { value: n, text: n < 60 ? `каждые ${n} мин` : `каждые ${n / 60} ч`, selected: n === cfg.interval })));
-  const enabled = h('input', { type: 'checkbox', id: 'mon-on', checked: cfg.enabled });
+  let on = !!cfg.enabled;
+  const enabled = h('button', { class: 'sw', type: 'button', id: 'mon-on', role: 'switch', 'aria-checked': String(on), 'aria-label': 'Проверять по расписанию',
+    onclick: () => { on = !on; enabled.setAttribute('aria-checked', String(on)); save(); draw(); } });
   const listBox = h('div', { class: 'mon-box' });
-  const nextInfo = h('p', { class: 'sm muted' });
   const checking = new Set();
-  const save = async (extra = {}) => guarded(() => api('monitor_set', { sites, interval: Number(interval.value), enabled: enabled.checked, ...extra }));
+  const save = async (extra = {}) => guarded(() => api('monitor_set', { sites, interval: Number(interval.value), enabled: on, ...extra }));
   // Проверка отдельных сайтов сразу — результат попадает в историю мониторинга
   const checkNow = async (hosts) => {
     hosts.forEach((x) => checking.add(x));
@@ -4273,17 +4297,7 @@ async function viewMonitor(main) {
     draw();
     loadState().catch(() => {});
   };
-  const drawNext = () => {
-    const now = Math.floor(Date.now() / 1000);
-    if (!enabled.checked) { delete nextInfo.dataset.tip; nextInfo.textContent ='Автоматические проверки выключены — сайты проверяются только кнопками.'; return; }
-    const next = (m.data.last || 0) + Number(interval.value) * 60;
-    const mins = Math.max(0, Math.round((next - now) / 60));
-    nextInfo.textContent = (m.data.last ? `Последняя автоматическая проверка ${fmtAgo(now - m.data.last)}, следующая` : 'Следующая автоматическая проверка') +
-      (mins <= 1 ? ' — в ближайшие 10 минут.' : ` — примерно через ${mins} мин.`);
-    nextInfo.dataset.tip = 'Плюс-минус 10 минут: расписание проверяется раз в 10 минут.';
-  };
-  // a check result: [time, opened, ms, reason]; «slow» — opened, but longer than 5 s
-  const SLOW_MS = 5000;
+  // a check result: [time, opened, ms, reason]; «slow» — opened, but longer than SLOW_MS (5 s)
   const kindOf = (x) => !x ? 'none' : !x[1] ? 'bad' : x[2] > SLOW_MS ? 'slow' : 'ok';
   const resText = (x) => !x ? 'ещё не проверялся' : !x[1] ? 'не открывается' : x[2] > SLOW_MS ? `медленно, ${(x[2] / 1000).toFixed(1).replace('.', ',')} с` : `${x[2]} мс`;
   const statusChip = (host, x) => checking.has(host) ? h('span', { class: 'mst none' }, h('span', { class: 'spin' }), 'проверяю…')
@@ -4303,35 +4317,41 @@ async function viewMonitor(main) {
     pct: (a, b) => (pctOf(histOf(a)) ?? 101) - (pctOf(histOf(b)) ?? 101),
     when: (a, b) => (histOf(b).at(-1)?.[0] || 0) - (histOf(a).at(-1)?.[0] || 0),
   };
-  const sorted = () => [...sites].sort((a, b) => sort.dir * (CMP[sort.key] || CMP.host)(a, b) || CMP.host(a, b));   // an unknown saved key must not break the page
+  // in the default order by name a site that does not open now comes first; an unknown saved key must not break the page
+  const isDown = (host) => kindOf(histOf(host).at(-1)) === 'bad';
+  const sorted = () => [...sites].sort((a, b) => (sort.key === 'host' ? isDown(b) - isDown(a) : 0) || sort.dir * (CMP[sort.key] || CMP.host)(a, b) || CMP.host(a, b));
   const remove = async (host) => { sites.splice(sites.indexOf(host), 1); await save(); draw(); };
   const acts = (host) => h('div', { class: 'mon-acts' },
-    btn('', () => checkNow([host]), 'small icon ghost', 'refresh', { title: 'Проверить сейчас и записать результат в историю', 'aria-label': 'Проверить ' + host, disabled: checking.has(host) }),
-    btn('', () => checkHost(host), 'small icon ghost mon-more', 'search', { title: 'Подробно: какой профиль обрабатывает сайт', 'aria-label': 'Подробно о ' + host }),
-    btn('', () => remove(host), 'small icon ghost', 'x', { title: 'Убрать из мониторинга', 'aria-label': 'Убрать ' + host }));
-  // the last 96 checks, the oldest on the left; fewer — the rest of the bar stays empty, so bars line up between rows
-  const histBar = (hist) => h('div', { class: 'mhist', 'aria-hidden': 'true' },
-    Array.from({ length: Math.max(0, 96 - hist.length) }, () => h('i', { class: 'none' })),
-    hist.slice(-96).map((x) => h('i', { class: kindOf(x), title: cellTitle(x) })));
-  const sumBox = h('div', { class: 'mon-sum' });
+    btn('', () => checkNow([host]), 'small icon', 'refresh', { title: 'Проверить сейчас и записать результат в историю', 'aria-label': 'Проверить ' + host, disabled: checking.has(host) }),
+    btn('', () => checkHost(host), 'small icon mon-more', 'search', { title: 'Подробно: какой профиль обрабатывает сайт', 'aria-label': 'Подробно о ' + host }),
+    btn('', () => remove(host), 'small icon', 'x', { title: 'Убрать из мониторинга', 'aria-label': 'Убрать ' + host }));
+  // how long the 96 checks of the history cover at the current interval: «48 часов», «4 дня»
+  const spanText = () => { const hrs = Math.round(96 * Number(interval.value) / 60); return hrs <= 72 ? plural(hrs, 'час', 'часа', 'часов') : plural(Math.round(hrs / 24), 'день', 'дня', 'дней'); };
+  const item = (x) => x && { ok: !!x[1], ms: x[2], tip: cellTitle(x) };
+  // the last 96 checks, the oldest on the left; fewer — empty on the left, so the lines of all rows end at «now»
+  const histBar = (hist) => msSpark([...Array(Math.max(0, 96 - hist.length)).fill(null), ...hist.slice(-96).map(item)]);
+  const sumBox = h('div', { class: 'mon-tiles' });
+  const tile = (big, lbl, cls = '') => h('div', { class: 'mon-tile' }, h('b', { class: cls, text: big }), h('span', { text: lbl }));
   const drawSum = () => {
     const lasts = sites.map((s) => histOf(s).at(-1));
     const n = { ok: 0, slow: 0, bad: 0, none: 0 };
     lasts.forEach((x) => n[kindOf(x)]++);
     const pcts = sites.map((s) => pctOf(histOf(s))).filter((x) => x !== null);
     const avg = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : null;
-    const seg = (k) => n[k] ? h('i', { class: k, style: `flex:${n[k]}` }) : null;
+    const now = nowS(), mins = Math.max(0, Math.round(((m.data.last || 0) + Number(interval.value) * 60 - now) / 60));
+    const t3 = !on ? tile('выкл.', 'автоматические проверки выключены — сайты проверяются только кнопками')
+      : tile(mins <= 1 ? '≈ 10 мин' : mins + ' мин', 'до следующей проверки' + (m.data.last ? ' · последняя ' + fmtAgo(now - m.data.last) : ''));
+    t3.dataset.tip = on ? 'Плюс-минус 10 минут: расписание проверяется раз в 10 минут.' : '';
     sumBox.replaceChildren(
-      h('div', { class: 'k' }, h('b', { class: 'big okc', text: String(n.ok + n.slow) }), h('span', { class: 'lbl', text: `из ${sites.length} открываются` + (n.slow ? `, ${n.slow} медленно` : '') })),
-      n.bad ? h('div', { class: 'k' }, h('b', { class: 'big badc', text: String(n.bad) }), h('span', { class: 'lbl', text: n.bad === 1 ? 'не открывается' : 'не открываются' })) : null,
-      avg !== null ? h('div', { class: 'k' }, h('b', { class: 'big', text: avg + '%' }), h('span', { class: 'lbl', text: 'средняя доступность' })) : null,
-      sites.length ? h('div', { class: 'mon-stack' }, seg('ok'), seg('slow'), seg('bad'), seg('none')) : null);
+      tile(`${n.ok + n.slow} из ${sites.length}`, 'открываются сейчас' + (n.slow ? `, ${n.slow} медленно` : ''), n.bad ? 'badc' : 'okc'),
+      tile(avg === null ? '—' : avg + ' %', 'доступность за ' + spanText()),
+      t3);
   };
   const viewSeg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Вид' });
   const drawSeg = () => viewSeg.replaceChildren(...[['tbl', 'Таблица'], ['tl', 'Шкала времени']].map(([v, t]) =>
     h('button', { type: 'button', class: view === v ? 'on' : '', 'aria-pressed': String(view === v), text: t, onclick: () => { view = v; setLook({ monView: v }); drawSeg(); draw(); } })));
   const drawTable = () => {
-    const heads = [['host', 'Сайт', ''], ['now', 'Сейчас', ''], [null, 'История', 'mon-wide'], ['pct', 'Доступность', 'num'], ['when', 'Проверен', 'num mon-wide'], [null, '', '']];
+    const heads = [['host', 'Сайт', ''], ['now', 'Сейчас', ''], [null, spanText(), 'mon-wide'], ['pct', 'Доступность', 'num'], ['when', 'Проверен', 'num mon-wide'], [null, '', '']];
     const th = ([k, t, cls]) => h('th', { class: cls, 'aria-sort': k && sort.key === k ? (sort.dir > 0 ? 'ascending' : 'descending') : null },
       !k ? t : h('button', { class: 'th-sort', type: 'button', title: `Сортировать по столбцу «${t}»`, onclick: () => {
         sort = { key: k, dir: sort.key === k ? -sort.dir : 1 };
@@ -4341,11 +4361,12 @@ async function viewMonitor(main) {
     return h('div', { class: 'scroll' }, h('table', { class: 'tbl mon-tbl' }, h('thead', {}, h('tr', {}, heads.map(th))),
       h('tbody', {}, sorted().map((host) => {
         const hist = histOf(host), x = hist.at(-1), p = pctOf(hist);
-        return h('tr', { class: dupHosts.has(host) ? 'mon-dup' : '' },
-          // a long name may wrap only after a dot, never in the middle of a word
+        const down = x && !x[1] && !checking.has(host);
+        return h('tr', { class: dupHosts.has(host) ? 'mon-dup' : down ? 'mon-down' : '' },
+          // a long name may wrap only after a dot, never in the middle of a word; why it does not open — under the name
           h('td', { class: 'mono mon-host' }, h('button', { class: 'linkish', type: 'button', title: 'Подробно: какой профиль обрабатывает сайт', onclick: () => checkHost(host) },
-            host.split('.').flatMap((p, j) => j ? [h('wbr'), '.' + p] : [p]))),
-          h('td', {}, statusChip(host, x), x && !x[1] && !checking.has(host) ? h('div', { class: 'sm muted mon-why', text: x[3] }) : null),
+            host.split('.').flatMap((p, j) => j ? [h('wbr'), '.' + p] : [p])), down ? h('div', { class: 'mon-why', text: x[3] }) : null),
+          h('td', {}, statusChip(host, x)),
           h('td', { class: 'mon-wide mon-hcell' }, histBar(hist)),
           h('td', { class: 'num', text: p === null ? '—' : p + '%' }),
           h('td', { class: 'num sm muted mon-wide', text: x ? fmtAgo(nowS() - x[0]) : '—' }),
@@ -4378,17 +4399,23 @@ async function viewMonitor(main) {
     for (let i = N - 1; i >= 0; i--) { if (dead[i] && !run) run = [i, i]; else if (dead[i] && run && run[0] === i + 1) run[0] = i; else if (run) break; }
     const slotT = (i) => now - span + span * i / N;
     const ago = (s) => s < 5400 ? Math.round(s / 60) + ' мин' : s < 172800 ? Math.round(s / 3600) + ' ч' : Math.round(s / 86400) + ' дн';
+    // one point of the line per slot: failed if any check in it failed, otherwise the slowest answer when slow, else the mean
+    const slotItem = (c) => {
+      const okMs = c.xs.filter((x) => x[1]).map((x) => x[2]);
+      return { ok: c.k !== 'bad', ms: c.k === 'slow' ? Math.max(...okMs) : Math.round(okMs.reduce((a, b) => a + b, 0) / (okMs.length || 1)), tip: c.xs.map(cellTitle).join('\n') };
+    };
+    const line = (cells) => { let prev = null; return cells.map((c) => (prev = c.xs.length ? slotItem(c) : c.k !== 'none' ? prev : null)); };   // a drifted slot repeats the one before
     return h('div', { class: 'mtl' },
       grid.map(([host, cells]) => [
         h('div', { class: 'mono mtl-host' }, h('span', { class: 'mtl-dot ' + kindOf(histOf(host).at(-1)) }), host),
-        h('div', { class: 'mtl-cells', style: `grid-template-columns:repeat(${N}, minmax(0, 1fr))` }, cells.map((c) => h('i', { class: c.k, title: c.xs.length ? c.xs.map(cellTitle).join('\n') : null }))),
+        msSpark(line(cells)),
         h('div', { class: 'num sm', text: pctOf(histOf(host)) === null ? '—' : pctOf(histOf(host)) + '%' })]).flat(),
       h('div', { class: 'mtl-axis' }, [1, 0.75, 0.5, 0.25, 0].map((f) => h('span', { text: f ? ago(span * f) + ' назад' : 'сейчас' }))),
       run ? h('div', { class: 'mtl-note', text: `${fmtDate(Math.round(slotT(run[0])))} — ${fmtDate(Math.round(slotT(run[1] + 1)))}: не открывался ни один сайт. Похоже на сбой провайдера или роутера, а не на блокировку.` }) : null,
-      h('div', { class: 'mtl-legend sm muted' }, [['ok', 'открывался'], ['slow', 'медленно, больше 5 с'], ['bad', 'не открывался'], ['none', 'не проверялся']].map(([k, t]) => h('span', { class: k, text: t }))));
+      h('div', { class: 'mtl-legend sm muted' }, [['ln', 'время ответа'], ['slow', 'медленно, больше 5 с'], ['bad', 'не открывался'], ['none', 'разрыв — не проверялся']].map(([k, t]) => h('span', { class: k, text: t }))));
   };
   const draw = () => {
-    drawNext(); drawSum();
+    drawSum();
     listBox.replaceChildren(!sites.length ? h('p', { class: 'muted', text: 'Сайтов нет — добавьте хотя бы один.' }) : view === 'tl' ? drawTimeline() : drawTable());
   };
   const addNote = h('div', { class: 'mon-note' });
@@ -4422,15 +4449,15 @@ async function viewMonitor(main) {
   draw();
   main.append(
     policyNote(), policyProbeHint(),
-    panel('Сайты', h('div', { class: 'row' },
-      h('label', { class: 'row sm' }, enabled, 'включён'), interval,
-      btn('Проверить все сейчас', async () => { toast('Проверяю…'); const r = await guarded(() => api('monitor_run')); if (r) { m.data = r.data; draw(); await loadState(); } }, 'small', 'refresh')),
-      h('p', { class: 'sm muted', text: 'Сайты открываются с самого роутера через основной nfqws2. История — последние 96 проверок. При смене состояния «открывается ↔ нет» может прийти сообщение в Telegram — см. «Уведомления».' }),
-      sumBox, nextInfo,
+    panel('Сайты', h('div', { class: 'row mon-ctrls' },
+      h('label', { class: 'mon-sw', for: 'mon-on' }, enabled, h('span', { text: 'Проверять' })), interval,
+      btn('Проверить все', async () => { toast('Проверяю…'); const r = await guarded(() => api('monitor_run')); if (r) { m.data = r.data; draw(); await loadState(); } }, 'small', 'refresh')),
+      h('p', { class: 'sm muted', text: 'Сайты открываются с самого роутера через основной nfqws2. В таблице — время ответа при последних 96 проверках: серая линия — сколько шёл ответ, красная черта — сайт не открылся, жёлтая — ответ дольше 5 секунд. При смене «открывается ↔ нет» может прийти сообщение в Telegram — см. «Уведомления».' }),
+      sumBox,
       h('div', { class: 'row' }, add, btn('Добавить', addSite, 'primary', 'plus')), addNote,
       h('div', { class: 'row mon-viewrow' }, viewSeg, newTag('mon:view')), listBox));
   drawSeg();
-  [interval, enabled].forEach((x) => x.addEventListener('change', () => { save(); draw(); }));
+  interval.addEventListener('change', () => { save(); draw(); });
 }
 
 // Уведомления в Telegram о сайтах из мониторинга
