@@ -1229,6 +1229,14 @@ a.over-row:hover { background: var(--soft); }
   /* snapshots keep «select all» above the cards */
   .tbl.cardy.snaps thead { display: block; margin-bottom: 8px; } .tbl.cardy.snaps thead tr { display: block; }
   .tbl.cardy.snaps thead th { display: none; } .tbl.cardy.snaps thead th.chk { display: flex; align-items: center; gap: 8px; padding: 4px 0; border: 0; background: none; }
+  /* card: the checkbox in the top right corner on the «Когда» line, not a line of its own; the four actions in one row */
+  :root:root:root:root .tbl.cardy.snaps tbody tr { position: relative; }
+  :root:root:root:root .tbl.cardy.snaps tbody td.chk { position: absolute; top: 10px; right: 12px; padding: 0; width: auto; }
+  :root:root:root:root .tbl.cardy.snaps tbody td.chk + td { padding-right: 34px; }
+  :root:root:root:root .tbl.cardy.snaps .acts-row { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 6px; }
+  :root:root:root:root .tbl.cardy.snaps .acts-row > .btn:not(.icon) { padding: 0 8px; min-width: 0; }
+  :root:root:root:root .tbl.cardy.snaps .acts-row > :is(.btn.icon, a.btn) { width: 34px; min-width: 34px; padding: 0; }
+  :root:root:root:root .tbl.cardy.snaps thead th.chk { white-space: nowrap; }
   .tbl.cardy.snaps thead th.chk::after { content: "выбрать все"; color: var(--muted); font-weight: 400; font-size: var(--fs-sm); text-transform: none; letter-spacing: 0; font-family: var(--sans); }
   .tbl.cardy tr { display: block; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); margin-bottom: 10px; }
   :root:root:root .tbl.cardy td { display: block; padding: 3px 0; border: 0; text-align: right; overflow-wrap: anywhere; white-space: normal; width: auto; }
