@@ -77,10 +77,11 @@ svg { width: 17px; height: 17px; flex: none; }
 @keyframes pop-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
 @keyframes sheet-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
 :root:not([data-noanim]) .pg-in { animation: pg-in 140ms ease-out; }
-/* a still copy of the page over the spot while the same page is rebuilt with other data (route()) */
-:has(> .route-ghost) { position: relative; }
-.route-ghost { position: absolute !important; left: 0; top: 0; width: 100%; box-sizing: border-box; margin: 0 !important; z-index: 5; overflow: clip; background: var(--bg);   /* clip, not hidden: hidden makes a scroll box and sticky lists inside it slide down */ pointer-events: none; animation: none !important; }
-.route-ghost.out { opacity: 0; transition: opacity 140ms ease-out; }
+/* page switches (route() with View Transitions): the old page's picture stays until the new one is built, then a
+   140 ms cross-fade; .vt-cut — the same page with other data or animations off: a plain cut, no fade */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 140ms; animation-timing-function: ease-out; }
+html.vt-cut::view-transition-old(root), html.vt-cut::view-transition-new(root) { animation: none; }
+@media (prefers-reduced-motion: reduce) { ::view-transition-old(root), ::view-transition-new(root) { animation: none; } }
 :root:not([data-noanim]) :is(.more-pop, .menu-list, .dd-pop:not(.sheet)) { animation: pop-in 120ms ease-out; }
 :root:not([data-noanim]) .modal-bg { animation: pg-in 140ms ease-out; }
 :root:not([data-noanim]) :is(.modal, .dd-pop.sheet) { animation: sheet-in 160ms cubic-bezier(.2, .7, .3, 1); }
@@ -866,6 +867,11 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 .codewrap > code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .md blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--warn); background: var(--warn-soft); border-radius: 0 8px 8px 0; }
 .md table { margin: 8px 0; }
+/* phone: a two-column help table keeps its first column readable; long paths in the second one break instead */
+@media (max-width: 599px) {
+  .md table td, .md table th { overflow-wrap: anywhere; }
+  .md table tr > :first-child { width: 40%; }
+}
 .md hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
 .md-toc { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: var(--fs-sm); }
 .release-notes .md { font-size: var(--fs-sm); }
@@ -1732,7 +1738,7 @@ main { container: main / inline-size; }   /* at every width: the narrow-table ru
 /* in a wrapped heading row the note («0 Б в памяти», a date, a count) takes its own line under the heading and the
    buttons stay together in one row — not a staircase of note, button, button */
 :root:root:root :is(.panel-h, .blk-h, .vh).wrapped > :not(:first-child):not(.btn, a, button, .tag, .grow, .seg, .dd-btn, label, :has(.btn, button)) { flex: 1 1 100%; }
-:root:root:root .wrapped > .grow:empty { display: none; }
+:root:root:root .wrapped > span.grow:empty { display: none; }   /* the spacer only: a field with class grow is :empty too */
 /* read-only «label — value» rows: one line, close together */
 :root:root:root .frow.kv { grid-template-columns: 170px minmax(0, 1fr); align-items: baseline; }
 @media (max-width: 599px) {

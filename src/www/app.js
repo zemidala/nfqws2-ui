@@ -1232,49 +1232,50 @@ async function route(refresh = false) {
   // новое на этой странице: метки внутри видны весь этот заход, после отрисовки страница считается открытой
   S.newHere = new Set(pageFeatures(pageOf(r)));
   const page = pageOf(r);
-  // While the next page loads, a still copy of what was on screen covers main and the new page is built under it —
-  // no empty frame, no skeleton, nothing jumps. Then the copy goes: at once on the same page (profile → profile,
-  // a refresh), fading out on another page (Оформление → «Анимации»). A skeleton only when there is nothing to show yet.
-  // The copy keeps id="main" (its styles hang on it; getElementById still finds the real main, which comes first)
-  // and loses every other id, so the new content's ids stay unique.
-  document.querySelectorAll('.route-ghost').forEach((g) => g.remove());   // a click before the last page finished
-  let ghost = null;
-  if (main.firstElementChild && !main.querySelector(':scope > .skel, :scope .mcol > .skel')) {
-    ghost = main.cloneNode(true);
-    ghost.querySelectorAll('[id]').forEach((e) => e.removeAttribute('id'));
-    ghost.querySelectorAll('.pg-in').forEach((e) => e.classList.remove('pg-in'));
-    ghost.classList.remove('pg-in');
-    ghost.classList.add('route-ghost');
-    ghost.setAttribute('aria-hidden', 'true');
-    ghost.inert = true;
-    ghost.style.height = main.offsetHeight + 'px';
-  }
-  const target = railTarget(main, page);
-  const wait = ghost ? null : skel(2, 5);
-  target.replaceChildren(subTabs(page), wait || '');
-  if (ghost) main.append(ghost);
-  placeSide();
-  updatedNote();
   const other = S.shownPageId !== page;
-  try {
-    await (views[r.tab] || viewOverview)(target, r);
-    wait?.remove();
-    if (seq === routeSeq) seenPage(page);
-    if (seq === routeSeq) S.shownPageId = page;
-  } catch (e) {
-    console.error(e);
-    target.replaceChildren(notice('bad', 'Ошибка', e.message));
+  // While the next page loads, the browser keeps a still picture of what was on screen (View Transitions) and the
+  // new page is built under it — no empty frame, no skeleton, nothing jumps, and no second copy in the page (a cloned
+  // copy made every search of the page find things twice for a moment). Then: another page fades in over the old one
+  // (Оформление → «Анимации»); the same page with other data (profile → profile, a refresh) just replaces it.
+  // A skeleton only when there is nothing on screen yet or the browser cannot do view transitions.
+  const build = async () => {
+    const target = railTarget(main, page);
+    target.replaceChildren(subTabs(page));
+    placeSide();
+    updatedNote();
+    try {
+      await (views[r.tab] || viewOverview)(target, r);
+    } catch (e) {
+      console.error(e);
+      target.replaceChildren(notice('bad', 'Ошибка', e.message));
+    }
+  };
+  const fade = other && !getLook().noanim && !matchMedia('(prefers-reduced-motion: reduce)').matches;
+  if (document.startViewTransition && main.firstElementChild && !main.querySelector(':scope > .skel, :scope .mcol > .skel')) {
+    S.vt?.skipTransition();   // a click before the last page finished
+    document.documentElement.classList.toggle('vt-cut', !fade);
+    S.vt = document.startViewTransition(build);
+    await S.vt.updateCallbackDone.catch(() => {});
+  } else {
+    const target = railTarget(main, page);
+    const wait = skel(2, 5);
+    target.replaceChildren(subTabs(page), wait);
+    placeSide();
+    updatedNote();
+    try {
+      await (views[r.tab] || viewOverview)(target, r);
+      wait.remove();
+    } catch (e) {
+      console.error(e);
+      target.replaceChildren(notice('bad', 'Ошибка', e.message));
+    }
+    if (seq === routeSeq && fade) {
+      target.classList.remove('pg-in');
+      void target.offsetWidth;
+      target.classList.add('pg-in');
+    }
   }
-  if (ghost) {
-    if (other && !getLook().noanim && !matchMedia('(prefers-reduced-motion: reduce)').matches) {
-      ghost.classList.add('out');
-      setTimeout(() => ghost.remove(), 160);
-    } else ghost.remove();
-  } else if (seq === routeSeq && other) {
-    target.classList.remove('pg-in');
-    void target.offsetWidth;
-    target.classList.add('pg-in');
-  }
+  if (seq === routeSeq) { seenPage(page); S.shownPageId = page; }
   if (!r.q.get('var') && !r.q.get('hl')) window.scrollTo(0, 0);
 }
 
