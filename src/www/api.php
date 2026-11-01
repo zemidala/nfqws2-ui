@@ -4098,6 +4098,11 @@ function doRollback(array &$p, string $reason): void
 {
   $changed = restoreVersions($p['versions'], 'откат к рабочему состоянию: ' . $reason);
   serviceRun('restart');
+  // The restored files are the working state: mark it, so the next rollback does not count this rollback as a
+  // change and bring back the failed config. The process start time alone can read a second before the restore
+  // entries in the history, and then versionsAt() took the rolled-back version as «from».
+  @mkdir(UI_CONF_DIR, 0755, true);
+  putSafe(CONFIRM_FILE, json_encode(['ts' => time() + 1]));
   $p['state'] = 'rolled_back';
   $p['reason'] = $reason;
   $p['rolled_files'] = $changed;
