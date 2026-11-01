@@ -10,7 +10,7 @@
 <script>
   // Оформление и компоновка применяются до отрисовки, чтобы не мелькал другой вид
   // Z is the K layout with the brand palette (data-variant="k" + data-palette="zd"); a new install's default is cached
-  try { var l = JSON.parse(localStorage.getItem('nfqws-ui-look') || '{}'), d = document.documentElement.dataset, v = l.variant || (localStorage.getItem('nfqws-ui-look-default') === 'z' ? 'z' : ''); if (v === 'z') { d.variant = 'k'; d.palette = 'zd'; } else if (v) d.variant = v; if (l.mode) document.documentElement.dataset.mode = l.mode; if (l.layout) document.documentElement.dataset.layout = l.layout; var t = localStorage.getItem('nfqws-ui-tint-css'); if (t) { var s = document.createElement('style'); s.id = 'tint-style'; s.textContent = t; document.head.appendChild(s); } } catch (e) {}
+  try { var l = JSON.parse(localStorage.getItem('nfqws-ui-look') || '{}'), d = document.documentElement.dataset, v = l.variant || (localStorage.getItem('nfqws-ui-look-default') === 'z' ? 'z' : ''); if (v === 'z') { d.variant = 'k'; d.palette = 'zd'; } else if (v) d.variant = v; if (l.mode) document.documentElement.dataset.mode = l.mode; if (l.layout) document.documentElement.dataset.layout = l.layout; var t = localStorage.getItem('nfqws-ui-scheme-css'); if (t) { var s = document.createElement('style'); s.id = 'scheme-style'; s.textContent = t; document.head.appendChild(s); } } catch (e) {}
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
