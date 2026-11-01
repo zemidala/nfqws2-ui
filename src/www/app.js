@@ -149,7 +149,7 @@ new MutationObserver(() => ddScan()).observe(document.documentElement, { childLi
 
 // On a phone a table of four or more columns shows each row as a card: the column names become labels (data-th,
 // drawn by CSS), so nothing scrolls sideways. Tables with a phone layout of their own are left alone.
-const CARD_SKIP = '.mon-tbl, .conn-tbl, .devs, .cfg-tbl';
+const CARD_SKIP = '.mon-tbl, .conn-tbl, .devs, .cfg-tbl, .dnsx-tbl';
 function cardTable(t) {
   if (t.matches(CARD_SKIP)) return;
   const names = [...t.querySelectorAll(':scope > thead th')].map((th) => th.textContent.trim());
@@ -704,6 +704,7 @@ const FEATURES = [
   ['raw:full', '1.28.0', '«Конфиг целиком»: редактор во весь экран, выход по Esc'],
   ['raw:hide', '1.28.0', '«Конфиг целиком»: «Не показывать» у предупреждений и советов, список скрытых — «Скрыто»'],
   ['look:load', '1.28.0', '«Оформление»: нагрузка роутера в шапке — процессор и память'],
+  ['dns:full', '1.28.0', '«DNS-серверы»: расширенная проверка — около 50 серверов, вид отказа, перехват и подмена у каждого, три лучших для вашей сети'],
   ['look:anim', '1.28.0', '«Оформление»: анимации при переходе между страницами, их можно выключить'],
   ['conns', '1.27.0', '«Соединения устройства»: куда ходит программа на устройстве сети, приходят ли ответы и видит ли эти порты nfqws2'],
 ];
@@ -5821,6 +5822,94 @@ async function viewDns(main) {
   const s0 = await api('dns_get').catch(() => ({}));
   draw(s0);
   if (s0.running) poll();
+  main.append(await dnsExtended());
+}
+
+// Extended DNS check (approved mockup local/design/dns-full.html): about fifty public servers — DoH, DoT, UDP 53 with the
+// best time, how a closed one fails, who really answered on UDP 53, stubs for five blocked sites; on top the three best
+// servers for this network. A background job on the router (dnsx_start / dnsx_get / dnsx_stop)
+async function dnsExtended() {
+  const box = h('div', { class: 'stack', style: 'gap:14px' });
+  let sort = { key: 'best', dir: 1 };
+  const okMs = (r) => r && r.ok ? r.ms : null;
+  const udpMs = (x) => x.udp?.ok && !x.udp.intercept ? x.udp.ms : null;   // an intercepted UDP answer is not this server's
+  const bestMs = (x) => { const v = [okMs(x.doh), okMs(x.dot), udpMs(x)].filter((m) => m != null); return v.length ? Math.min(...v) : null; };
+  const bestHow = (x) => { const m = bestMs(x); return m == null ? '' : m === okMs(x.dot) ? 'DoT' : m === okMs(x.doh) ? 'DoH' : 'UDP 53'; };
+  const clean = (x) => !x.udp?.intercept && !(x.sub?.bad > 0) && bestMs(x) != null;
+  const FAIL = { syn: ['SYN DROP', 'TCP не соединился — адрес закрыт'], tls: ['TLS DROP', 'TCP соединился, TLS оборван — режут по имени'],
+    timeout: ['TIMEOUT', 'на UDP 53 нет ответа'], bad: ['ошибка', 'сервер ответил не DNS-ответом'], name: ['нет адреса', 'имя сервера не разрешилось'] };
+  const cell = (r) => !r ? h('span', { class: 'muted', text: '—' }) : r.ok ? h('span', { class: 'num ok-t', text: r.ms + ' мс' })
+    : h('span', { class: 'bad-t sm', text: (FAIL[r.why] || ['нет'])[0], title: (FAIL[r.why] || ['', ''])[1] });
+  const whoCell = (x) => {
+    const u = x.udp;
+    if (!u) return h('span', { class: 'muted', text: '' });
+    if (!u.ok) return h('span', { class: 'muted sm', text: 'нет ответа' });
+    const nm = (u.as_name || '').split(/\s+/)[0];
+    const why = { isp: 'ответил сервер провайдера', ripn: 'ответил национальный резолвер (RIPN), а не этот сервер', local: 'ответил DNS вашей сети' }[u.intercept];
+    return h('span', { class: 'mono sm ' + (u.intercept ? 'bad-t' : 'muted'), title: why || '', text: `${u.who || '?'}${nm ? ' — ' + nm : ''}` });
+  };
+  const subCell = (x) => !x.sub ? chip('—', '') : x.sub.bad === 0 ? chip('нет', 'ok') : chip(`${x.sub.bad} из ${x.sub.of}`, x.sub.bad >= 2 ? 'bad' : 'warn');
+  const KEYS = { name: (x) => x.name, doh: (x) => okMs(x.doh) ?? 1e9, dot: (x) => okMs(x.dot) ?? 1e9, udp: (x) => (x.udp?.ok ? x.udp.ms : 1e9), sub: (x) => x.sub ? x.sub.bad : 99,
+    // default order: servers without interception and stubs first, each group by its fastest way
+    best: (x) => (clean(x) ? 0 : 1e6) + (bestMs(x) ?? 9e5) };
+  const startBtn = btn('Расширенная проверка', async () => { const s = await guarded(() => api('dnsx_start')); if (s) { draw(s); poll(); } }, 'small', 'search');
+  function poll() {
+    pollTest(async () => {
+      if (!box.isConnected) return false;
+      const s = await api('dnsx_get').catch(() => null);
+      if (!s) return true;
+      draw(s);
+      return !!s.running;
+    }, 2000);
+  }
+  function table(s) {
+    const rows = [...s.servers].sort((a, b) => { const k = KEYS[sort.key]; const va = k(a), vb = k(b); return (typeof va === 'string' ? va.localeCompare(vb) : va - vb) * sort.dir || a.name.localeCompare(b.name); });
+    const top = rows.find(clean);
+    const th = (key, text, cls = '') => h('th', { class: cls, 'aria-sort': sort.key === key ? (sort.dir > 0 ? 'ascending' : 'descending') : null },
+      h('button', { type: 'button', class: 'th-sort', onclick: () => { sort = { key, dir: sort.key === key ? -sort.dir : 1 }; draw(s); } }, text, sort.key === key ? icon(sort.dir > 0 ? 'up' : 'down') : null));
+    return h('div', { class: 'scroll' }, h('table', { class: 'tbl dnsx-tbl' },
+      h('thead', {}, h('tr', {}, th('name', 'Провайдер'), h('th', { class: 'hide-narrow', text: 'Адрес' }), th('doh', 'DoH', 'num'), th('dot', 'DoT', 'num'), th('udp', 'UDP', 'num'),
+        h('th', { text: 'Кто ответил на UDP 53' }), th('sub', 'Подмена'))),
+      h('tbody', {}, rows.map((x) => h('tr', { class: x === top ? 'best' : null },
+        h('td', { class: 'nm', text: x.name }), h('td', { class: 'mono sm hide-narrow', text: x.ip || '—' }),
+        h('td', { class: 'num t-doh', 'data-h': 'DoH' }, cell(x.doh)), h('td', { class: 'num t-dot', 'data-h': 'DoT' }, cell(x.dot)), h('td', { class: 'num t-udp', 'data-h': 'UDP' }, cell(x.udp)),
+        h('td', { class: 'who' }, whoCell(x)), h('td', { class: 'sub' }, subCell(x)))))));
+  }
+  function draw(s) {
+    startBtn.disabled = !!s.running;
+    startBtn.querySelector('btn-l').textContent = s.started ? 'Повторить расширенную' : 'Расширенная проверка';   // the quick check above has its own «Проверить снова»
+    // nothing to show yet (never run, or stopped before the first server) — the intro with the start button
+    if (!s.started || (!s.running && !s.servers?.length)) {
+      box.replaceChildren(panel('Расширенная проверка', [h('span', { class: 'grow' }), startBtn, newTag('dns:full')],
+        s.stopped || s.died ? h('p', { class: 'sm muted', text: s.died ? 'Прошлая проверка прервалась.' : 'Прошлая проверка остановлена.' }) : null,
+        h('p', { class: 'sm muted', text: 'Около 50 публичных DNS-серверов: время DoH, DoT и обычного DNS (UDP 53), как закрыт недоступный — TLS DROP (режут по имени), SYN DROP (адрес закрыт), TIMEOUT, кто на самом деле ответил на UDP 53 и сколько из пяти закрытых сайтов сервер подменяет. Сверху — три лучших сервера для этой сети. Занимает 1–3 минуты, идёт в фоне. Настройки DNS роутера не меняет.' })));
+      return;
+    }
+    const parts = [];
+    if (s.running) {
+      parts.push(panel('Расширенная проверка', [h('span', { class: 'grow' }), btn('Остановить', () => guarded(() => api('dnsx_stop')), 'small')],
+        h('div', { class: 'sm muted', text: s.step === 'tls' ? `Обычный DNS проверен у всех ${s.total}; проверяю DoT и DoH…` : `Проверено ${s.done} из ${s.total} серверов` }),
+        h('div', { class: 'dnsx-prog' }, h('i', { style: `width:${Math.round(100 * (s.step === 'tls' ? 0.8 : 0.8 * s.done / s.total))}%` }))));
+    } else if (s.died) parts.push(notice('warn', 'Расширенная проверка прервалась', 'Запустите ещё раз.'));
+    if (!s.running && s.servers?.length) {
+      const best = s.servers.filter(clean).sort((a, b) => bestMs(a) - bestMs(b)).slice(0, 3);
+      parts.push(panel('Лучшие для этой сети', h('span', { class: 'sm muted', text: 'без перехвата и подмены · по самому быстрому способу' }),
+        best.length ? h('div', { class: 'dnsx-best' }, best.map((x, i) => h('div', { class: 'dnsx-tile' + (i ? '' : ' top') },
+          h('b', { text: x.name }), h('span', { class: 'big num', text: bestMs(x) + ' мс' }), h('span', { class: 'sm muted', text: `${bestHow(x)} · ${x.ip || (x.dot ? 'по имени' : '')}` }))))
+          : h('p', { class: 'muted', text: 'Ни один сервер не прошёл без перехвата и подмены.' }),
+        h('p', { class: 'sm muted', text: 'Сменить DNS роутера — в его настройках (OpenWrt: Сеть → DHCP и DNS; Keenetic: Интернет → DNS). Интерфейс DNS роутера не меняет.' })));
+      parts.push(panel(`${s.servers.length} серверов`, [h('span', { class: 'sm muted', text: `проверено ${fmtDate(s.finished)} · заняло ${Math.max(1, s.finished - s.started)} с` + (s.stopped ? ' · остановлено' : '') }), h('span', { class: 'grow' }), startBtn],
+        table(s),
+        h('div', { class: 'dnsx-legend sm muted' }, h('span', {}, h('b', { class: 'bad-t', text: 'TLS DROP' }), ' — соединился, TLS оборван (режут по имени)'),
+          h('span', {}, h('b', { class: 'bad-t', text: 'SYN DROP' }), ' — адрес закрыт'), h('span', {}, h('b', { class: 'bad-t', text: 'TIMEOUT' }), ' — на UDP 53 нет ответа'),
+          h('span', { text: 'красный резолвер — ответил не тот, кого спрашивали (перехват)' }), h('span', { text: 'время — с роутера, лучшее из нескольких запросов' }))));
+    }
+    box.replaceChildren(...parts);
+  }
+  const s0 = await api('dnsx_get').catch(() => ({}));
+  draw(s0);
+  if (s0.running) poll();
+  return box;
 }
 
 // ============ Device connections: what a program on a home device talks to, and whether answers come back ============

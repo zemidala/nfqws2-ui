@@ -7975,6 +7975,295 @@ function dnsJob(): void
   $save();
 }
 
+// ================= extended DNS check =================
+// About fifty public DNS servers at once: the best time of plain DNS (UDP 53), DoT and DoH, how a closed one fails
+// (SYN DROP — TCP did not connect, the address is closed; TLS DROP — TCP connected and the TLS handshake broke, cut by
+// name; TIMEOUT — no UDP answer), who really answered on UDP 53, and how many of five blocked sites a server hands a
+// stub or nothing for. A background job (NFQWS_UI_CLI=dnsx): UDP one server after another, DoT and DoH in parallel
+// batches through curl_multi (a small batch on a weak router). The router's DNS settings are never changed.
+const DNSX_FILE = '/tmp/nfqws-ui-dnsx.json';
+const DNSX_STOP = '/tmp/nfqws-ui-dnsx.stop';
+const DNSX_SITES = ['rutracker.org', 'nnmclub.to', 'linkedin.com', 'x.com', 'instagram.com'];
+// [name, IPv4 for UDP 53 or '', DoT host or '', DoH URL or '']. Addresses from the providers' public pages; a server
+// that went away just shows «no answer»
+const DNSX = [
+  ['Cloudflare', '1.1.1.1', 'cloudflare-dns.com', 'https://cloudflare-dns.com/dns-query'],
+  ['Cloudflare #2', '1.0.0.1', 'cloudflare-dns.com', 'https://cloudflare-dns.com/dns-query'],
+  ['Cloudflare (защита)', '1.1.1.2', 'security.cloudflare-dns.com', 'https://security.cloudflare-dns.com/dns-query'],
+  ['Cloudflare (семейный)', '1.1.1.3', 'family.cloudflare-dns.com', 'https://family.cloudflare-dns.com/dns-query'],
+  ['Google', '8.8.8.8', 'dns.google', 'https://dns.google/dns-query'],
+  ['Google #2', '8.8.4.4', 'dns.google', ''],
+  ['Quad9', '9.9.9.9', 'dns.quad9.net', 'https://dns.quad9.net/dns-query'],
+  ['Quad9 #2', '149.112.112.112', 'dns.quad9.net', ''],
+  ['Quad9 (без фильтра)', '9.9.9.10', 'dns10.quad9.net', 'https://dns10.quad9.net/dns-query'],
+  ['Quad9 (ECS)', '9.9.9.11', 'dns11.quad9.net', 'https://dns11.quad9.net/dns-query'],
+  ['AdGuard', '94.140.14.14', 'dns.adguard-dns.com', 'https://dns.adguard-dns.com/dns-query'],
+  ['AdGuard #2', '94.140.15.15', 'dns.adguard-dns.com', ''],
+  ['AdGuard (семейный)', '94.140.14.15', 'family.adguard-dns.com', 'https://family.adguard-dns.com/dns-query'],
+  ['AdGuard (без фильтра)', '94.140.14.140', 'unfiltered.adguard-dns.com', 'https://unfiltered.adguard-dns.com/dns-query'],
+  ['Яндекс', '77.88.8.8', 'common.dot.dns.yandex.net', 'https://common.dot.dns.yandex.net/dns-query'],
+  ['Яндекс #2', '77.88.8.1', 'common.dot.dns.yandex.net', ''],
+  ['Яндекс (безопасный)', '77.88.8.88', 'safe.dot.dns.yandex.net', 'https://safe.dot.dns.yandex.net/dns-query'],
+  ['Яндекс (семейный)', '77.88.8.7', 'family.dot.dns.yandex.net', 'https://family.dot.dns.yandex.net/dns-query'],
+  ['OpenDNS', '208.67.222.222', '', 'https://doh.opendns.com/dns-query'],
+  ['OpenDNS #2', '208.67.220.220', '', ''],
+  ['CleanBrowsing', '185.228.168.9', 'security-filter-dns.cleanbrowsing.org', 'https://doh.cleanbrowsing.org/doh/security-filter/'],
+  ['CleanBrowsing (семейный)', '185.228.168.168', 'family-filter-dns.cleanbrowsing.org', 'https://doh.cleanbrowsing.org/doh/family-filter/'],
+  ['Comodo', '8.26.56.26', '', ''],
+  ['Comodo #2', '8.20.247.20', '', ''],
+  ['Control D', '76.76.2.0', 'p0.freedns.controld.com', 'https://freedns.controld.com/p0'],
+  ['Control D #2', '76.76.10.0', 'p0.freedns.controld.com', ''],
+  ['Alternate DNS', '76.76.19.19', '', ''],
+  ['DNS.SB', '185.222.222.222', 'dot.sb', 'https://doh.dns.sb/dns-query'],
+  ['DNS.SB #2', '45.11.45.11', 'dot.sb', ''],
+  ['DNS.Watch', '84.200.69.80', '', ''],
+  ['DNS.Watch #2', '84.200.70.40', '', ''],
+  ['Level 3', '4.2.2.1', '', ''],
+  ['Level 3 #2', '4.2.2.2', '', ''],
+  ['NextDNS', '45.90.28.0', 'dns.nextdns.io', 'https://dns.nextdns.io/'],
+  ['NextDNS #2', '45.90.30.0', 'dns.nextdns.io', ''],
+  ['Mullvad', '', 'dns.mullvad.net', 'https://dns.mullvad.net/dns-query'],
+  ['UncensoredDNS', '91.239.100.100', 'anycast.uncensoreddns.org', 'https://anycast.uncensoreddns.org/dns-query'],
+  ['DNS4EU', '86.54.11.100', 'unfiltered.joindns4.eu', 'https://unfiltered.joindns4.eu/dns-query'],
+  ['Wikimedia DNS', '', 'wikimedia-dns.org', 'https://wikimedia-dns.org/dns-query'],
+  ['LibreDNS', '', 'dot.libredns.gr', 'https://doh.libredns.gr/dns-query'],
+  ['Digitale Gesellschaft', '185.95.218.42', 'dns.digitale-gesellschaft.ch', 'https://dns.digitale-gesellschaft.ch/dns-query'],
+  ['dnsforge', '176.9.93.198', 'dnsforge.de', 'https://dnsforge.de/dns-query'],
+  ['DNS4all', '194.0.5.3', 'dot.dns4all.eu', 'https://doh.dns4all.eu/dns-query'],
+  ['Hurricane Electric', '74.82.42.42', 'ordns.he.net', 'https://ordns.he.net/dns-query'],
+  ['Alibaba', '223.5.5.5', 'dns.alidns.com', 'https://dns.alidns.com/dns-query'],
+  ['Alibaba #2', '223.6.6.6', 'dns.alidns.com', ''],
+  ['DNSPod', '119.29.29.29', 'dot.pub', 'https://doh.pub/dns-query'],
+  ['Comss.one', '83.220.169.155', 'dns.comss.one', 'https://dns.comss.one/dns-query'],
+  ['Comss.one #2', '212.109.195.93', 'dns.comss.one', ''],
+  ['XboxDNS', '111.88.96.50', 'xbox-dns.ru', 'https://xbox-dns.ru/dns-query'],
+  ['XboxDNS #2', '111.88.96.51', 'xbox-dns.ru', ''],
+  ['MSK-IX', '62.76.76.62', '', ''],
+  ['MSK-IX #2', '62.76.62.76', '', ''],
+  ['НСДИ', '195.208.4.1', '', ''],
+  ['НСДИ #2', '195.208.5.1', '', ''],
+];
+
+function dnsxData(): array
+{
+  $d = json_decode((string)@file_get_contents(DNSX_FILE), true);
+  if (is_array($d) && !empty($d['running']) && time() - (int)@filemtime(DNSX_FILE) > DNS_JOB_MAX) {
+    $d['running'] = false;
+    $d['died'] = true;
+  }
+  return is_array($d) ? $d : [];
+}
+
+function dnsxStart(): void
+{
+  if (!empty(dnsxData()['running'])) {
+    fail('Расширенная проверка DNS уже идёт');
+  }
+  @unlink(DNSX_STOP);
+  file_put_contents(DNSX_FILE, json_encode(['running' => true, 'started' => time(), 'total' => count(DNSX), 'done' => 0, 'step' => 'udp', 'servers' => []]));
+  exec('(env -i PATH=' . JOB_PATH . ' NFQWS_UI_CLI=dnsx php-cgi -q -f ' . escapeshellarg(__FILE__) . ' >/dev/null 2>&1 &)');
+}
+
+// One TLS probe for curl_multi: DoT — connect and handshake on 853; DoH — a real query for ya.ru
+function dnsxHandle(string $kind, string $target, string $ip)
+{
+  if ($kind === 'dot') {
+    $ch = curl_init("https://$target:853/");
+    curl_setopt_array($ch, [CURLOPT_CONNECT_ONLY => true, CURLOPT_RESOLVE => ["$target:853:$ip"]]);
+  } else {
+    $host = (string)parse_url($target, PHP_URL_HOST);
+    $sep = str_contains($target, '?') ? '&' : '?';
+    $ch = curl_init($target . $sep . 'dns=' . rtrim(strtr(base64_encode(dnsWireQuery('ya.ru')), '+/', '-_'), '='));
+    curl_setopt_array($ch, [CURLOPT_RETURNTRANSFER => true, CURLOPT_RESOLVE => ["$host:443:$ip"], CURLOPT_HTTPHEADER => ['accept: application/dns-message']]);
+  }
+  curl_setopt_array($ch, [CURLOPT_CONNECTTIMEOUT => 4, CURLOPT_TIMEOUT => 5, CURLOPT_NOSIGNAL => 1]);
+  return $ch;
+}
+
+// The outcome of a finished probe: time, or how it failed (syn — no TCP connection; tls — TCP connected, TLS or the
+// answer broke; bad — the server answered with something that is not a DNS answer)
+function dnsxResult(string $kind, $ch, int $errno): array
+{
+  $connect = curl_getinfo($ch, CURLINFO_CONNECT_TIME);
+  if ($errno === 0) {
+    if ($kind === 'dot') {
+      return ['ok' => true, 'ms' => (int)round(curl_getinfo($ch, CURLINFO_APPCONNECT_TIME) * 1000)];
+    }
+    $body = curl_multi_getcontent($ch);
+    if (curl_getinfo($ch, CURLINFO_HTTP_CODE) === 200 && is_string($body) && dnsWireParse($body)) {
+      return ['ok' => true, 'ms' => (int)round(curl_getinfo($ch, CURLINFO_TOTAL_TIME) * 1000)];
+    }
+    return ['ok' => false, 'why' => 'bad'];
+  }
+  return ['ok' => false, 'why' => $connect > 0 ? 'tls' : 'syn'];
+}
+
+// Run [key => [kind, target, ip]] probes, at most $par at a time; returns key => result
+function dnsxMulti(array $jobs, int $par): array
+{
+  $out = [];
+  $mh = curl_multi_init();
+  $queue = $jobs;
+  $live = [];
+  $add = function () use (&$queue, &$live, $mh, $par) {
+    while (count($live) < $par && $queue) {
+      $key = array_key_first($queue);
+      [$kind, $target, $ip] = $queue[$key];
+      unset($queue[$key]);
+      $ch = dnsxHandle($kind, $target, $ip);
+      curl_multi_add_handle($mh, $ch);
+      $live[(int)$ch] = [$key, $kind, $ch];
+    }
+  };
+  $add();
+  do {
+    curl_multi_exec($mh, $running);
+    while ($info = curl_multi_info_read($mh)) {
+      [$key, $kind, $ch] = $live[(int)$info['handle']];
+      $out[$key] = dnsxResult($kind, $ch, (int)$info['result']);
+      curl_multi_remove_handle($mh, $ch);
+      curl_close($ch);
+      unset($live[(int)$info['handle']]);
+      $add();
+    }
+    if ($live) {
+      curl_multi_select($mh, 0.2);
+    }
+  } while ($live || $queue);
+  curl_multi_close($mh);
+  return $out;
+}
+
+// Who answered UDP 53 in a server's place: the provider's own resolver, the national one (RIPN — MSK-IX/НСДИ, which
+// providers put behind port 53), or the home network's resolver answering fast
+function dnsxIntercept(array $udp, string $name, int $my, ?int $routerAsn): ?string
+{
+  $asn = $udp['asn'] ?? null;
+  if (!$asn) {
+    return null;
+  }
+  if ($my && $asn === $my) {
+    return 'isp';
+  }
+  if (preg_match('/^RIPN/i', (string)($udp['as_name'] ?? '')) && !preg_match('/^(MSK-IX|НСДИ)/u', $name)) {
+    return 'ripn';
+  }
+  if ($routerAsn && $asn === $routerAsn && ($udp['ms'] ?? 99) < DNS_FAST_MS) {
+    return 'local';
+  }
+  return null;
+}
+
+function dnsxJob(): void
+{
+  set_time_limit(0);
+  $d = ['running' => true, 'started' => time(), 'total' => count(DNSX), 'done' => 0, 'step' => 'udp', 'servers' => []];
+  $save = function () use (&$d) { file_put_contents(DNSX_FILE, json_encode($d, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)); };
+  $stopped = fn() => is_file(DNSX_STOP);
+  $save();
+  $my = myAsn(true);
+  $loc = dnsLocalServers();
+  $routerAsn = dnsPlain($loc['router'])['asn'] ?? null;
+  // the real addresses of the blocked sites, from Cloudflare and Quad9 over DoH (not filtered for Russia)
+  $ref = [];
+  foreach (DNSX_SITES as $host) {
+    $r = [];
+    foreach (DIAG_DOH_MORE as [, $server, $ip]) {
+      $x = dohResolve($server, $ip, $host);
+      $r = array_merge($r, $x['ok'] ? $x['ips'] : []);
+    }
+    $ref[$host] = array_values(array_unique(array_filter($r, fn($ip) => isIp4($ip) && !ipReserved($ip))));
+  }
+  // UDP 53: best of three, who answered, and the five sites
+  foreach (DNSX as $i => [$name, $ip, $dot, $doh]) {
+    if ($stopped()) {
+      break;
+    }
+    $row = ['name' => $name, 'ip' => $ip, 'dot' => null, 'doh' => null, 'udp' => null, 'sub' => null];
+    if ($ip !== '') {
+      $best = null;
+      for ($k = 0; $k < 3; $k++) {
+        $r = dnsUdp($ip, 'ya.ru', 1.5);
+        if (!$r['ok']) {
+          break;   // one silence is enough: two more would only add three seconds per dead server
+        }
+        $best = $best === null ? $r['ms'] : min($best, $r['ms']);
+      }
+      if ($best === null) {
+        $row['udp'] = ['ok' => false, 'why' => 'timeout'];
+      } else {
+        $who = dnsUdp($ip, 'whoami.akamai.net', 1.5)['ips'][0] ?? null;
+        $asn = $who ? ipAsn($who) : null;
+        $row['udp'] = ['ok' => true, 'ms' => $best, 'who' => $who, 'asn' => $asn, 'as_name' => $asn ? asName($asn) : ''];
+        $row['udp']['intercept'] = dnsxIntercept($row['udp'], $name, (int)$my, $routerAsn);
+        $bad = 0;
+        $asked = 0;
+        foreach (DNSX_SITES as $host) {
+          if (!$ref[$host]) {
+            continue;
+          }
+          $asked++;
+          $v = dnsVerdict(dnsUdp($ip, $host, 1.5)['ips'], $ref[$host]);
+          $bad += in_array($v, ['fake', 'none'], true) ? 1 : 0;
+        }
+        $row['sub'] = $asked ? ['bad' => $bad, 'of' => $asked] : null;
+      }
+    }
+    $d['servers'][$i] = $row;
+    $d['done'] = $i + 1;
+    $save();
+  }
+  // DoT and DoH: two rounds in parallel batches, the best time of the two
+  if (!$stopped()) {
+    $d['step'] = 'tls';
+    $save();
+    $ips = [];   // host → address, found over DoH (the router's own DNS may hand out stubs)
+    $jobs = [];
+    foreach (DNSX as $i => [, , $dot, $doh]) {
+      foreach (['dot' => $dot, 'doh' => $doh] as $kind => $t) {
+        if ($t === '') {
+          continue;
+        }
+        $host = $kind === 'dot' ? $t : (string)parse_url($t, PHP_URL_HOST);
+        if (!array_key_exists($host, $ips)) {
+          $x = dohResolve('cloudflare-dns.com', '1.1.1.1', $host);
+          $ips[$host] = array_values(array_filter($x['ips'] ?? [], 'isIp4'))[0] ?? (gethostbyname($host) !== $host ? gethostbyname($host) : null);
+        }
+        // first the server's own address (routers set DoT/DoH by address + name, and the name's address may be another
+        // one the provider treats differently); if that fails, the name's address in the second round
+        $own = DNSX[$i][1];
+        if ($own === '' && $ips[$host] === null) {
+          $d['servers'][$i][$kind] = ['ok' => false, 'why' => 'name'];
+          continue;
+        }
+        $jobs["$i:$kind"] = [$kind, $t, $own !== '' ? $own : $ips[$host], $ips[$host]];
+      }
+    }
+    // a few at a time: many TLS handshakes at once load the router's CPU and inflate every time
+    $par = lowMem() ? 3 : 6;
+    for ($round = 0; $round < 2 && !$stopped(); $round++) {
+      $batch = [];
+      foreach ($jobs as $key => [$kind, $t, $ip, $alt]) {
+        [$i] = explode(':', $key);
+        $prev = $d['servers'][$i][$kind] ?? null;
+        $batch[$key] = [$kind, $t, $round && $prev && !$prev['ok'] && $alt ? $alt : $ip];
+      }
+      foreach (dnsxMulti($batch, $par) as $key => $r) {
+        [$i, $kind] = explode(':', $key);
+        $prev = $d['servers'][$i][$kind] ?? null;
+        $d['servers'][$i][$kind] = !$prev || !$prev['ok'] ? ($r['ok'] || !$prev ? $r : $prev) : ($r['ok'] ? ['ok' => true, 'ms' => min($prev['ms'], $r['ms'])] : $prev);
+      }
+      $save();
+    }
+  }
+  $d['servers'] = array_values($d['servers']);
+  $d['running'] = false;
+  $d['stopped'] = $stopped();
+  $d['finished'] = time();
+  @unlink(DNSX_STOP);
+  $save();
+}
+
 // ================= device connections =================
 // What a program on a home device really talks to: for N seconds the job reads the connection table
 // (/proc/net/nf_conntrack, packet and byte counters in both directions) and keeps the device's connections to the
@@ -9535,6 +9824,10 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
     dnsJob();
     exit(0);
   }
+  if ($cli === 'dnsx') {
+    dnsxJob();
+    exit(0);
+  }
   if ($cli === 'conns') {
     connJob();
     exit(0);
@@ -10787,6 +11080,17 @@ switch ($cmd) {
 
   case 'dns_get':
     respond(dnsData());
+
+  case 'dnsx_start':
+    dnsxStart();
+    respond(dnsxData());
+
+  case 'dnsx_get':
+    respond(dnsxData());
+
+  case 'dnsx_stop':
+    @touch(DNSX_STOP);
+    respond(dnsxData());
 
   case 'devices_get':
     $d = devicesConf();

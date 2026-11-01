@@ -1108,6 +1108,37 @@ a.over-row:hover { background: var(--soft); }
 .dns-site { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .dns-site > .sm { grid-column: 1 / -1; overflow-wrap: anywhere; }
 .dns-card.best { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+/* extended DNS check */
+.ok-t { color: var(--ok); } .bad-t { color: var(--bad); }
+.dnsx-prog { height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; } .dnsx-prog i { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+.dnsx-best { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.dnsx-tile { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--soft); }
+.dnsx-tile.top { border-color: var(--accent); }
+.dnsx-tile .big { font-size: var(--fs-xl); font-weight: 600; }
+.dnsx-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.tbl.dnsx-tbl td { vertical-align: middle; }
+:root:root:root .tbl.dnsx-tbl td, :root:root:root .tbl.dnsx-tbl th { padding-top: 7px; padding-bottom: 7px; }
+.tbl.dnsx-tbl td.mono, .tbl.dnsx-tbl td.who, .tbl.dnsx-tbl td.num { white-space: nowrap; }
+.tbl.dnsx-tbl tr.best td { background: var(--accent-soft); }
+.tbl.dnsx-tbl td.num, .tbl.dnsx-tbl th.num { text-align: right; }
+@container main (max-width: 760px) { .dnsx-best { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .dnsx-tile { grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; row-gap: 0; padding: 8px 12px; }
+  .dnsx-tile b { grid-column: 1; } .dnsx-tile .big { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-size: var(--fs-lg); } .dnsx-tile .sm { grid-column: 1; } }
+/* phone: a server is a two-line card — name and stubs on top; DoH · DoT · UDP; who answered */
+@media (max-width: 599px) {
+  :root:root:root:root .dnsx-tbl thead { display: none; }
+  :root:root:root:root .scroll > .dnsx-tbl, :root:root:root:root .dnsx-tbl tbody { display: block; width: 100%; min-width: 0; }
+  :root:root:root:root .dnsx-tbl tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 2px 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  :root:root:root:root .dnsx-tbl tr.best { padding: 8px; border-radius: var(--radius); background: var(--accent-soft); }
+  :root:root:root:root .dnsx-tbl td { display: block; padding: 0; border: 0; background: none; text-align: left; }
+  :root:root:root:root .dnsx-tbl td.nm { grid-column: 1 / 4; font-weight: 600; } :root:root:root:root .dnsx-tbl td.sub { grid-column: 4; grid-row: 1; justify-self: end; }
+  :root:root:root:root .dnsx-tbl td.hide-narrow { display: none; }
+  :root:root:root:root .dnsx-tbl td[data-h] { font-size: var(--fs-xs); grid-row: 2; }
+  :root:root:root:root .dnsx-tbl td[data-h]::before { content: attr(data-h) " "; color: var(--muted); }
+  :root:root:root:root .dnsx-tbl td[data-h] > *, :root:root:root:root .dnsx-tbl td.who > * { font-size: var(--fs-xs); white-space: nowrap; }
+  :root:root:root:root .dnsx-tbl td.who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root:root .dnsx-tbl td.who { grid-column: 1 / -1; }
+}
 .dns-best { margin-left: auto; font-size: var(--fs-xs); font-weight: 600; padding: 0 6px; border-radius: 4px; background: var(--accent); color: var(--accent-fg); }
 .dns-adv { display: grid; gap: 6px; padding: 12px 16px; border-radius: var(--radius); background: var(--zd-blue-soft, var(--accent-soft)); box-shadow: inset 3px 0 var(--zd-blue, var(--accent)); }
 .dns-adv p { margin: 0; }
