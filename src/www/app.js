@@ -1237,7 +1237,9 @@ function msSpark(items, cls = '') {
     if (run.length) { line += 'M' + run.map(f).join('L'); area += `M${run[0][0].toFixed(1)},${H}L${run.map(f).join('L')}L${run.at(-1)[0].toFixed(1)},${H}Z`; }
     run = [];
   };
-  items.forEach((x, i) => (x?.ok ? run.push([X(i), Y(x.ms)]) : flush()));
+  // a failed check is an answer never received — the line goes to the top there instead of breaking, so failed and
+  // slow stretches read the same way: the line runs on, the shading under it says what happened
+  items.forEach((x, i) => (x ? run.push([X(i), x.ok ? Y(x.ms) : 1]) : flush()));
   flush();
   // a run of failed (or slow) checks is one shaded stretch over the whole time it lasted, half a step either side —
   // two failures in a row are one event, not two separate strokes
@@ -1254,7 +1256,7 @@ function msSpark(items, cls = '') {
     i = j;
   }
   const el = h('div', { class: ('spark ' + cls).trim() }, h('div', { class: 'spark-hits' }, items.map((x) => h('i', { title: x?.tip || null }))));
-  el.insertAdjacentHTML('afterbegin', `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><path class="ar" d="${area}"/><path class="ln" d="${line}"/>${marks}</svg>`);
+  el.insertAdjacentHTML('afterbegin', `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><path class="ar" d="${area}"/>${marks}<path class="ln" d="${line}"/></svg>`);
   return el;
 }
 // the column's recent checks: response time in ms, 0 — failed (a server before 1.27 sends true/false)

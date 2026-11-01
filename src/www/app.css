@@ -558,8 +558,10 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .spark > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .spark .ln { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .spark .ar { fill: var(--muted); opacity: .12; }
-.spark .x { fill: var(--bad); opacity: .55; }    /* the stretch the site did not open */
-.spark .sl { fill: var(--warn); opacity: .5; }   /* the stretch answers took over 5 s */
+/* shaded stretches under the line, one rule for both: did not open — red, answers over 5 s — amber */
+/* solid and saturated: a see-through tint mixed with a dark background into dusty pink and brown */
+.spark .x { fill: color-mix(in srgb, var(--bad) 35%, #e0202a); }
+.spark .sl { fill: color-mix(in srgb, var(--warn) 45%, #e89400); }
 .spark-hits { position: absolute; inset: 0; display: flex; }
 .spark-hits i { flex: 1 1 0; }
 .spark.mini { width: 88px; min-width: 0; height: 18px; flex: none; }
