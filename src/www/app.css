@@ -130,8 +130,8 @@ main { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap:
 .btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
 .btn.ghost:hover { background: var(--soft); color: var(--fg); }
 /* a button with a label is always drawn as a button: bare text beside framed buttons read as stray words */
-:root main .btn.ghost:not(.icon) { border-color: var(--ctl-line); color: var(--fg); }
-:root[data-variant="k"] main .btn.ghost:not(.icon) { border-color: var(--accent); color: var(--accent-ink); }
+:root :is(main, #side) .btn.ghost:not(.icon) { border-color: var(--ctl-line); color: var(--fg); }
+:root[data-variant="k"] :is(main, #side) .btn.ghost:not(.icon) { border-color: var(--accent); color: var(--accent-ink); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 .btn.primary:hover { filter: brightness(1.07); }
 .btn.danger { color: var(--bad); }
@@ -558,8 +558,8 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .spark > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
 .spark .ln { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
 .spark .ar { fill: var(--muted); opacity: .12; }
-.spark .x { stroke: var(--bad); stroke-width: 2; vector-effect: non-scaling-stroke; }
-.spark .sl { stroke: var(--warn); stroke-width: 2; vector-effect: non-scaling-stroke; }
+.spark .x { fill: var(--bad); opacity: .55; }    /* the stretch the site did not open */
+.spark .sl { fill: var(--warn); opacity: .5; }   /* the stretch answers took over 5 s */
 .spark-hits { position: absolute; inset: 0; display: flex; }
 .spark-hits i { flex: 1 1 0; }
 .spark.mini { width: 88px; min-width: 0; height: 18px; flex: none; }
@@ -1150,9 +1150,9 @@ label.chk > input[type="checkbox"], label.chk > input[type="radio"] { flex: none
 :root[data-variant="k"] .btn.warn:not(.ghost) { border-color: var(--warn); color: var(--warn); }
 :root[data-variant="k"] .btn.icon:not(.ghost) { padding: 0; }
 /* a quiet button with a label on the page: the same size and frame as the others in its row */
-:root[data-variant="k"] main .btn.ghost:not(.icon) { font-weight: 400; min-height: 38px; padding: 6px 18px; background: var(--surface); }
-:root[data-variant="k"] main .btn.small.ghost:not(.icon) { min-height: 32px; padding: 4px 12px; }
-:root[data-variant="k"] main .btn.ghost:not(.icon):hover { background: var(--accent-soft); }
+:root[data-variant="k"] :is(main, #side) .btn.ghost:not(.icon) { font-weight: 400; min-height: 38px; padding: 6px 18px; background: var(--surface); }
+:root[data-variant="k"] :is(main, #side) .btn.small.ghost:not(.icon) { min-height: 32px; padding: 4px 12px; }
+:root[data-variant="k"] :is(main, #side) .btn.ghost:not(.icon):hover { background: var(--accent-soft); }
 /* поля — белые, с серой рамкой */
 :root[data-variant="k"] .input, :root[data-variant="k"] .select, :root[data-variant="k"] .textarea { background: var(--surface); border-color: var(--k-field); min-height: 40px; }
 :root[data-variant="k"] .quick .input { min-height: 36px; border-color: var(--line); }
@@ -1180,11 +1180,11 @@ label.chk > input[type="checkbox"], label.chk > input[type="radio"] { flex: none
 :root[data-variant="k"] .input.mono { font-size: 14.5px; }
 :root[data-variant="k"] .btn:not(.ghost) { min-height: 40px; font-size: 16px; padding: 6px 20px; }
 :root[data-variant="k"] .btn.small:not(.ghost) { min-height: 34px; font-size: 14.5px; padding: 4px 14px; }
-:root[data-variant="k"] main .btn.ghost:not(.icon) { min-height: 40px; font-size: 16px; padding: 6px 20px; }
-:root[data-variant="k"] main .btn.small.ghost:not(.icon) { min-height: 34px; font-size: 14.5px; padding: 4px 14px; }
+:root[data-variant="k"] :is(main, #side) .btn.ghost:not(.icon) { min-height: 40px; font-size: 16px; padding: 6px 20px; }
+:root[data-variant="k"] :is(main, #side) .btn.small.ghost:not(.icon) { min-height: 34px; font-size: 14.5px; padding: 4px 14px; }
 /* «Проблемы»: кнопка исправления не крупнее текста замечания, иначе список из кнопок, а не из замечаний */
 :root[data-variant="k"] .problem .item-main b { font-size: 14.5px; }
-@media (min-width: 760px) { :root[data-variant="k"] .problem .btn.small:not(.ghost), :root[data-variant="k"] main .problem .btn.small.ghost:not(.icon) { min-height: 26px; font-size: 13px; padding: 1px 10px; } }
+@media (min-width: 760px) { :root[data-variant="k"] .problem .btn.small:not(.ghost), :root[data-variant="k"] :is(main, #side) .problem .btn.small.ghost:not(.icon) { min-height: 26px; font-size: 13px; padding: 1px 10px; } }
 :root[data-variant="k"] .tbl { font-size: 15px; }
 :root[data-variant="k"] .tbl th { font-size: 15px; padding: 12px 14px; }
 :root[data-variant="k"] .tbl td { padding: 12px 14px; }

@@ -1239,8 +1239,20 @@ function msSpark(items, cls = '') {
   };
   items.forEach((x, i) => (x?.ok ? run.push([X(i), Y(x.ms)]) : flush()));
   flush();
-  const marks = items.map((x, i) => !x ? '' : !x.ok ? `<line class="x" x1="${X(i).toFixed(1)}" x2="${X(i).toFixed(1)}" y1="0" y2="${H}"/>`
-    : x.ms > SLOW_MS ? `<line class="sl" x1="${X(i).toFixed(1)}" x2="${X(i).toFixed(1)}" y1="0" y2="${H}"/>` : '').join('');
+  // a run of failed (or slow) checks is one shaded stretch over the whole time it lasted, half a step either side —
+  // two failures in a row are one event, not two separate strokes
+  const kind = (x) => !x ? '' : !x.ok ? 'x' : x.ms > SLOW_MS ? 'sl' : '';
+  const step = n < 2 ? W : W / (n - 1);
+  let marks = '';
+  for (let i = 0; i < n; i++) {
+    const k = kind(items[i]);
+    if (!k) continue;
+    let j = i;
+    while (j + 1 < n && kind(items[j + 1]) === k) j++;
+    const x0 = Math.max(0, X(i) - step / 2), x1 = Math.min(W, X(j) + step / 2);
+    marks += `<rect class="${k}" x="${x0.toFixed(1)}" y="0" width="${Math.max(x1 - x0, 6).toFixed(1)}" height="${H}"/>`;
+    i = j;
+  }
   const el = h('div', { class: ('spark ' + cls).trim() }, h('div', { class: 'spark-hits' }, items.map((x) => h('i', { title: x?.tip || null }))));
   el.insertAdjacentHTML('afterbegin', `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><path class="ar" d="${area}"/><path class="ln" d="${line}"/>${marks}</svg>`);
   return el;
@@ -1268,7 +1280,8 @@ function renderSideService(el) {
     h('div', { class: 'blk-h' }, h('h2', { text: 'Сервис' })),
     h('div', { class: 'svc' },
       h('div', { class: 'svc-state ' + (st.running ? 'ok' : 'bad') }, h('span', { class: 'dot' }), st.running ? 'Работает' : 'Остановлен')),
-    h('div', { class: 'svc-buttons' },
+    // restart / stop live in the top bar; here only where the bar has none of them — «Вкладки» on a wide screen
+    layout() !== 'tabs' || !isWide() ? null : h('div', { class: 'svc-buttons' },
       st.running
         ? [btn('Перезапустить', safeRestart, 'small', 'power', { title: 'Перезапуск с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, изменения откатятся сами', disabled: pendingActive() }),
           btn('Остановить', () => service('stop'), 'small danger', 'stop', { title: 'Остановить nfqws2 — обход блокировок перестанет работать', disabled: pendingActive() })]
