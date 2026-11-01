@@ -14,12 +14,30 @@
 </script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@400;500&family=Fira+Code:wght@400;500&family=Roboto+Mono:wght@400;500&display=swap">
+<!-- Fonts load in the background: a slow or blocked Google must not hold the interface on «Загрузка…»
+     (a render-blocking stylesheet also holds every script after it). Until they come, the system font is used. -->
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&family=JetBrains+Mono:wght@400;500&family=Fira+Code:wght@400;500&family=Roboto+Mono:wght@400;500&display=swap" media="print" onload="this.media='all'">
 <link rel="stylesheet" href="app.css?v=1.28.0">
 </head>
 <body>
 <div id="app"><div class="boot">Загрузка…</div></div>
 <div id="toasts" aria-live="polite"></div>
+<script>
+  // If the interface has not started in 10 s, say so instead of an endless «Загрузка…»: the error (if any) and a reload
+  (function () {
+    var err = '';
+    window.addEventListener('error', function (e) { if (!err) err = (e.message || 'ошибка') + (e.filename ? ' (' + e.filename.split('/').pop() + ':' + e.lineno + ')' : ''); });
+    setTimeout(function () {
+      var b = document.querySelector('#app > .boot');
+      if (!b) return;
+      b.innerHTML = '';
+      var p = document.createElement('p'); p.textContent = 'Интерфейс не запустился за 10 секунд.' + (err ? ' Ошибка: ' + err : ' Возможно, файлы не догрузились.');
+      var a = document.createElement('button'); a.type = 'button'; a.className = 'btn primary'; a.textContent = 'Перезагрузить';
+      a.onclick = function () { location.reload(); };
+      b.appendChild(p); b.appendChild(a);
+    }, 10000);
+  })();
+</script>
 <script src="app.js?v=1.28.0"></script>
 </body>
 </html>

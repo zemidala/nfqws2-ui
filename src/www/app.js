@@ -159,12 +159,30 @@ function cardTable(t) {
     [...tr.children].forEach((td, i) => { if (td.colSpan === 1 && names[i]) td.dataset.th = names[i]; });
   }
 }
+// A heading row (heading + date, count or buttons) that does not fit in one line gets .wrapped: the heading takes the
+// whole first line and the rest starts from the left edge under it, not pushed to the right on a line of its own.
+// Measured without the class each time, so a wider window brings the row back to one line.
+const WRAP_ROWS = '.panel-h, .blk-h, .vh, main .row';
+function markWraps() {
+  for (const row of document.querySelectorAll(WRAP_ROWS)) {
+    if (!row.firstElementChild || row.children.length < 2 || !row.offsetParent) continue;
+    row.classList.remove('wrapped');
+    const first = row.firstElementChild;
+    const fr = first.getBoundingClientRect();
+    // something starts below the first item (not just sits lower in the same line), or the heading broke in two
+    const lh = parseFloat(getComputedStyle(first).lineHeight) || 0;
+    const wrapped = [...row.children].some((k) => k.offsetParent && k.getBoundingClientRect().top >= fr.bottom - 2)
+      || (lh > 0 && /^H[1-3]$/.test(first.tagName) && first.getBoundingClientRect().height > lh * 1.5);
+    row.classList.toggle('wrapped', wrapped);
+  }
+}
 let cardQueued = false;
 new MutationObserver(() => {
   if (cardQueued) return;
   cardQueued = true;
-  requestAnimationFrame(() => { cardQueued = false; document.querySelectorAll('table.tbl').forEach(cardTable); });
+  requestAnimationFrame(() => { cardQueued = false; document.querySelectorAll('table.tbl').forEach(cardTable); markWraps(); });
 }).observe(document.documentElement, { childList: true, subtree: true });
+addEventListener('resize', () => requestAnimationFrame(markWraps));
 
 function ddShow(sel) {
   ddClose();
@@ -3527,7 +3545,7 @@ async function viewProfile(content, index, r) {
   function groupName(oi) {
     if (s.with) return null;
     const NAME_RE = /^[\p{L}\p{N}_.-]{0,32}$/u;
-    const hint = h('div', { class: 'hint', style: 'grid-column:2' });
+    const hint = h('div', { class: 'hint' });   // inside the field row: its CSS puts the hint beside the field or under it
     const showHint = (val) => {
       const ok = NAME_RE.test(val);
       hint.className = 'hint' + (ok ? '' : ' error');
@@ -3538,8 +3556,8 @@ async function viewProfile(content, index, r) {
       'data-fk': 'name', 'aria-label': 'Имя профиля', autocapitalize: 'off', spellcheck: 'false',
       oninput: (e) => { const val = e.target.value.trim(); showHint(val); if (NAME_RE.test(val)) { model.name = val; touch(); } } });
     showHint(model.name);
-    return h('div', { class: 'group' }, h('div', { class: 'frow' }, h('span', { class: 'lbl' }, 'Имя ', newTag('prof:name')), inp), hint,
-      (oi.get('name') || []).map((x) => h('div', { class: 'hint ' + x.level, style: 'grid-column:2' }, levelIcon(x.level), ' ', x.msg)));
+    return h('div', { class: 'group' }, h('div', { class: 'frow' }, h('span', { class: 'lbl' }, 'Имя ', newTag('prof:name')), inp, hint,
+      (oi.get('name') || []).map((x) => h('div', { class: 'hint ' + x.level }, levelIcon(x.level), ' ', x.msg))));
   }
 
   // --- «Когда срабатывает» ---
@@ -3557,8 +3575,9 @@ async function viewProfile(content, index, r) {
       inp.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addPort(); } });
       const lvl = worst(oi.get(key));
       return [h('div', { class: 'frow' }, h('span', { class: 'lbl', text: label }),
-        h('div', { class: 'chips' }, arr.map((x, i) => h('span', { class: 'chip mono' + (lvl ? ' ' + (lvl === 'error' ? 'bad' : 'warn') : '') }, x, h('button', { class: 'x', type: 'button', 'aria-label': 'Убрать ' + x, text: '×', onclick: () => { arr.splice(i, 1); if (!arr.length) model[key] = null; touch(); draw(); } }))), inp, btn('', addPort, 'small icon', 'plus', { 'aria-label': 'Добавить' }))),
-      (oi.get(key) || []).map((x) => h('div', { class: 'hint ' + x.level, style: 'grid-column:2' }, levelIcon(x.level), ' ', x.msg))];
+        h('div', { class: 'chips' }, arr.map((x, i) => h('span', { class: 'chip mono' + (lvl ? ' ' + (lvl === 'error' ? 'bad' : 'warn') : '') }, x, h('button', { class: 'x', type: 'button', 'aria-label': 'Убрать ' + x, text: '×', onclick: () => { arr.splice(i, 1); if (!arr.length) model[key] = null; touch(); draw(); } }))), inp, btn('', addPort, 'small icon', 'plus', { 'aria-label': 'Добавить' })),
+        // notes inside the field row: its CSS puts them under the field on a phone, beside the label column otherwise
+        (oi.get(key) || []).map((x) => h('div', { class: 'hint ' + x.level }, levelIcon(x.level), ' ', x.msg)))];
     };
     const l7 = model.l7 || [];
     const l7add = h('select', { class: 'mini-sel', 'aria-label': 'Добавить протокол', onchange: (e) => { if (e.target.value) { model.l7 = [...l7, e.target.value]; touch(); draw(); } } },
@@ -3575,7 +3594,8 @@ async function viewProfile(content, index, r) {
     return [m.lists.map((l, i) => {
       const lvl = worst(oi?.get(l));
       const isFile = !/-domains$|-ip$/.test(l.opt);
-      const label = `${LIST_ROLE[l.opt]}: ${isFile ? listName(base(l.val)) : l.val}`;
+      // a list of names breaks after a comma, not in the middle of a name (zero-width space after each comma)
+      const label = `${LIST_ROLE[l.opt]}: ${isFile ? listName(base(l.val)) : l.val.replace(/,/g, ',​')}`;
       return h('span', { class: 'chip ' + (lvl === 'error' ? 'bad' : /exclude/.test(l.opt) ? 'warn' : 'ok'), title: (oi?.get(l) || []).map((x) => x.msg).join('\n') || l.val },
         isFile ? h('a', { href: '#/sites/' + encodeURIComponent(base(l.val)), text: label, style: 'color:inherit' }) : label,
         h('button', { class: 'x', type: 'button', text: '×', 'aria-label': 'Убрать ' + label, onclick: () => { m.lists.splice(i, 1); touch(); draw(); } }));
@@ -4374,7 +4394,7 @@ async function paneAbout(content) {
   const st = S.state;
   const u = st.ui?.update || {};
   const link = (href, text) => h('a', { href, target: '_blank', rel: 'noopener', text });
-  const row = (label, ...v) => h('div', { class: 'frow' }, h('span', { class: 'lbl', text: label }), h('span', {}, ...v));
+  const row = (label, ...v) => h('div', { class: 'frow kv' }, h('span', { class: 'lbl', text: label }), h('span', {}, ...v));   // read-only «label — value»
   const check = async () => {
     const r = await guarded(() => api('update_check', { force: true }));
     if (!r) return;
@@ -4572,7 +4592,7 @@ async function viewMonitor(main) {
   const tblLegend = () => monChart() === 'hours' ? [['cell', 'всё хорошо'], ['slow', 'медленно'], ['bad', 'не открывался']]
     : monChart() === 'cols' ? [['ln', 'время ответа'], ['slow', 'медленно'], ['bad', 'не открывался']] : null;
   // the chart look — a switch of buttons like «Таблица / Шкала времени», right after it
-  const chartSeg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Вид графика' });
+  const chartSeg = h('div', { class: 'seg mon-chartseg', role: 'group', 'aria-label': 'Вид графика' });
   const drawChartSeg = () => chartSeg.replaceChildren(...MON_CHARTS.map(([k, t]) => h('button', { type: 'button', class: monChart() === k ? 'on' : '', 'aria-pressed': String(monChart() === k), text: t,
     onclick: () => { setLook({ monChart: k }); drawChartSeg(); draw(); updateSide(); } })));
   drawChartSeg();
@@ -5815,7 +5835,7 @@ async function viewConns(main) {
     h('p', { class: 'muted dns-lead', text: 'Куда ходит программа на устройстве вашей сети и приходят ли ответы. Нужно, когда сайт открывается, а приложение работает плохо: голос в Discord обрывается, игра не входит в мир. Запись только читает таблицу соединений роутера и ничего не меняет.' }),
     panel(null, null,
       h('div', { class: 'conn-form' }, devSel, secSel, startBtn),
-      h('p', { class: 'sm muted', style: 'margin:8px 0 0', text: 'Пока идёт запись, пользуйтесь программой на этом устройстве: позвоните в Discord, зайдите в игру — и дождитесь обрыва, если он есть.' })),
+      h('p', { class: 'sm muted', text: 'Пока идёт запись, пользуйтесь программой на этом устройстве: позвоните в Discord, зайдите в игру — и дождитесь обрыва, если он есть.' })),
     out);
 
   async function loadDevices(keep) {
@@ -6384,7 +6404,7 @@ async function viewDevices(main) {
     tbody.replaceChildren(...sorted().map((x) => {
       const tr = h('tr', { class: x.on ? '' : 'off' },
         h('td', {}, h('div', { class: 'dev-name' }, h('span', { class: 'dev-dot' + (x.online ? '' : ' gone'), title: x.online ? 'в сети' : 'сейчас не в сети' }),
-          h('span', { text: x.name || x.mac }), x.manual ? h('span', { class: 'dev-tag', text: 'вписан вручную' }) : null)),
+          h('span', { class: 'dev-n', text: x.name || x.mac, title: x.name || x.mac }), x.manual ? h('span', { class: 'dev-tag', text: 'вписан вручную' }) : null)),
         h('td', { class: 'mono sm hide-narrow', text: x.mac }),
         h('td', { class: 'mono sm hide-narrow ' + (x.ip ? '' : 'muted'), text: x.ip || '—' }),
         h('td', { class: 'sm muted hide-narrow', text: x.online ? 'в сети' : 'нет' }),
@@ -6423,10 +6443,10 @@ async function viewDevices(main) {
     panel(null, null, h('div', { class: 'row' },
       h('label', { class: 'swl' }, toggle(newOn, 'Новые устройства — с обходом', (v) => { newOn = v; sync(); }), 'Новые устройства — с обходом'),
       h('span', { class: 'grow' }), cnt),
-      h('p', { class: 'sm muted', style: 'margin:6px 0 0', text: 'Касается только устройств, которых ещё нет в списке ниже: у каждого из списка свой переключатель.' })),
+      h('p', { class: 'sm muted', text: 'Касается только устройств, которых ещё нет в списке ниже: у каждого из списка свой переключатель.' })),
     panel(null, null,
       items.length ? h('div', { class: 'scroll' }, h('table', { class: 'tbl devs' }, thead, tbody)) : h('p', { class: 'muted', text: 'Роутер пока не видит устройств: нет аренд DHCP и соседей в сети. Устройство можно вписать по MAC.' }),
-      h('form', { class: 'row', style: 'margin-top:12px', onsubmit: (e) => { e.preventDefault(); add(); } }, mac, h('button', { class: 'btn small', type: 'submit' }, 'Добавить вручную'))),
+      h('form', { class: 'row', onsubmit: (e) => { e.preventDefault(); add(); } }, mac, h('button', { class: 'btn small', type: 'submit' }, 'Добавить вручную'))),
     bar);
 }
 

@@ -245,6 +245,9 @@ button.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
 .dev-name { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 0; min-width: 0; overflow-wrap: anywhere; }
 .dev-dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 8px; }
 .dev-dot.gone { background: var(--faint); }
+/* the name stays on the dot's line: one line, a long name ends with «…» (the whole name in the tooltip) */
+.dev-name > .dev-n { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dev-name > .dev-tag { flex-basis: 100%; padding-left: 16px; }
 .dev-tag { margin-left: 8px; font-size: var(--fs-xs); padding: 1px 7px; border-radius: var(--ctl-r); background: var(--soft); color: var(--muted); white-space: nowrap; }
 .dev-cnt { font-size: var(--fs-md); color: var(--muted); } .dev-cnt b { color: var(--fg); font-weight: 500; }
 .dev-act { display: flex; align-items: center; gap: 4px; }
@@ -441,6 +444,7 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 .hid-row:first-child { border-top: 0; }
 @media (max-width: 479px) { .hid-row { flex-wrap: wrap; } }
 .suggest { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-height: 26px; font-size: var(--fs-xs); }
+.suggest:empty { display: none; }   /* no suggestions — no 26 px hole under the editor */
 .suggest button { font-family: var(--mono); font-size: var(--fs-xs); border: 1px solid var(--line); background: var(--surface); color: var(--fg); border-radius: 6px; padding: 1px 8px; cursor: pointer; }
 .suggest button:first-of-type { border-color: var(--accent); color: var(--accent-ink); }
 .suggest kbd { font-family: var(--mono); font-size: var(--fs-xs); border: 1px solid var(--line); border-radius: 4px; padding: 0 4px; color: var(--muted); }
@@ -626,7 +630,13 @@ html.cfg-fs, html.cfg-fs body { overflow: hidden; }
 select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .nav { grid-template-columns: minmax(0, 1fr); }
 .step-main > *, .params > *, .chips > * { min-width: 0; }
-.chip { white-space: normal; overflow-wrap: anywhere; text-align: left; }
+.chip { white-space: normal; overflow-wrap: break-word; text-align: left; }   /* long chips wrap between words; a word breaks only if it alone is wider */
+/* a status chip alone in a table cell never wraps: its column takes the chip's width */
+.tbl td:has(> .chip:only-child) { white-space: nowrap; }
+/* …and takes only the chip's width — in a real table; a table shown as cards on a phone has block cells (1% there
+   squeezed the cell and pushed the chip past the screen edge) */
+@media (min-width: 600px) { .tbl:not(.cardy) td:has(> .chip:only-child) { width: 1%; } }
+.tbl td > .chip:only-child { white-space: nowrap; }
 @media (max-width: 1599px) { .two { grid-template-columns: 1fr; } .two > .help { position: static; } }
 @media (min-width: 1600px) { .two { grid-template-columns: minmax(0, 1fr) 300px; } }
 @media (max-width: 759px) {
@@ -1218,7 +1228,7 @@ a.over-row:hover { background: var(--soft); }
   .tbl.cardy td:first-child { text-align: left; font-weight: 600; padding-bottom: 6px; }
   .tbl.cardy td:empty { display: none; }
   .tbl.cardy td:not([data-th]) { padding-top: 8px; }
-  .tbl.cardy td > .row { justify-content: flex-end; }
+  .tbl.cardy td > .row { justify-content: flex-start; }   /* card actions from the left: a button that wraps starts a new line there, not alone on the right */
   .tbl.cardy tr.sel, .tbl.cardy tr.mon-down { border-color: var(--accent); }
 }
 /* колонка с длинным текстом: без минимума браузер сжимает её до слова в строке */
@@ -1694,3 +1704,41 @@ main { container: main / inline-size; }   /* at every width: the narrow-table ru
 /* a one-line field and a dropdown are exactly --ctl-h tall in every style: vertical padding on top of the line height
    made them 3 px taller than the buttons beside them (style A: 33 against 30) */
 :root:root input.input, :root:root .select { height: var(--ctl-h); min-height: var(--ctl-h); padding-top: 0; padding-bottom: 0; }
+
+/* ---------- one spacing rhythm, compact on a phone ----------
+   related lines (caption and value, command and its note) 2–4 px; items in a block 8–14 px; blocks 14 px.
+   :root ×3 — above every style's own paddings and margins */
+/* a heading row that did not fit (markWraps in app.js): heading on the first line, the rest from the left under it */
+:root:root:root .wrapped { row-gap: 6px; }
+:root:root:root .wrapped > :first-child:is(h1, h2, h3, input.input) { flex: 1 1 100%; }
+:root:root:root .wrapped > :not(:first-child) { margin-left: 0; }
+:root:root:root .wrapped > .grow:empty { display: none; }
+/* read-only «label — value» rows: one line, close together */
+:root:root:root .frow.kv { grid-template-columns: 170px minmax(0, 1fr); align-items: baseline; }
+@media (max-width: 599px) {
+  :root:root:root :is(.blk, .panel) { padding: 14px; }
+  /* blocks space their parts with gap: a margin on a part only adds a hole (8–12 px on top of the gap) */
+  :root:root:root :is(.blk, .panel) > :is(p, form, details, .row, .scroll, .notice, .conn-form, .dns-sites) { margin-block: 0; }
+  :root:root:root .frow + .frow { margin-top: 0; }             /* the block's gap is the step between fields */
+  /* caption above its field: 4 px, no field-high caption box (beside the field it was centred on the field) */
+  :root:root:root .frow:not(.kv) { row-gap: 4px; }
+  :root:root:root .frow:not(.kv) > .lbl { min-height: 0; display: block; padding: 0; }
+  :root:root:root .mon-tile { padding: 12px 14px; }
+  /* the phone table has no history column: the chart switch would change nothing (the timeline keeps it) */
+  :root:root:root .mon-viewrow:has(+ * .mon-tbl) > .mon-chartseg,
+  :root:root:root .mon-viewrow:has(+ * .mon-tbl) > .mon-chartseg + .tag { display: none; }
+  :root:root:root .tbl.mon-tbl td { padding-top: 6px; padding-bottom: 6px; }
+  /* table rows as cards: lines 2 px apart, cards 8 px apart */
+  :root:root:root:root .tbl.cardy tr { padding: 10px 12px; margin-bottom: 8px; }
+  :root:root:root:root .tbl.cardy td { padding: 2px 0; }
+  :root:root:root:root .tbl.cardy td:first-child { padding-bottom: 4px; }
+  :root:root:root:root .tbl.cardy td:not([data-th]) { padding-top: 6px; }
+  /* the empty «put the cursor on an argument» frame: on a phone it only takes room */
+  :root:root:root .help:has(> span.muted:only-child) { display: none; }
+  :root:root:root .frow.kv { grid-template-columns: max-content minmax(0, 1fr); column-gap: 14px; }
+  :root:root:root .frow.kv > .lbl { white-space: nowrap; }   /* «Описание и помощь» in one line, the value wraps instead */
+  :root:root:root .frow.kv + .frow.kv { margin-top: -6px; }     /* 8 px between «label — value» lines */
+  /* a switch spans the width in equal parts and never breaks into two lines */
+  :root:root:root .seg { display: flex; flex-wrap: nowrap; width: 100%; }
+  :root:root:root .seg > button { flex: 1 1 0; min-width: 0; padding: 0 6px; white-space: normal; line-height: 1.15; }
+}
