@@ -1201,6 +1201,7 @@ async function route(refresh = false) {
   updateChrome();
   // a full-screen config editor sits in <body>: it goes away with the page; leaving the page ends full screen
   document.querySelectorAll('body > .cfg').forEach((e) => e.remove());
+  document.documentElement.classList.remove('cfg-fs');
   if (r.tab !== 'settings' || r.arg !== 'raw') S.cfgFull = false;
   const main = document.getElementById('main');
   if (!S.state || refresh) {
@@ -2530,7 +2531,7 @@ function issuesListEl(issues, onPick, lineOf, fixFor = fixButton) {
           h('span', {}, lineOf ? h('span', { class: 'muted', text: lineOf(x) + ': ' }) : null, x.msg)),
         h('div', { class: 'iss-acts' }, fixFor(x),
           // config warnings and tips only (they carry a key); errors stay — nfqws2 will not start with them
-          x.key ? btn('Не показывать', async () => { if (await lintHide(x, true)) li.remove(); }, 'small ghost', null,
+          x.key ? btn('Не показывать', async () => { if (await lintHide(x, true)) li.remove(); }, 'small', null,
             { title: 'Скрыть это замечание на всех страницах и в «Проблемах». Вернуть — «Скрыто» в «Конфиге целиком»' }) : null, tag)));
     return li;
   }));
@@ -2555,7 +2556,7 @@ function hiddenNotesDialog() {
   const draw = () => {
     const hid = Object.entries(S.state.lint?.hidden || {});
     list.replaceChildren(hid.length ? hid.map(([key, msg]) => h('div', { class: 'row hid-row' }, h('span', { class: 'grow', text: msg }),
-      btn('Показать снова', async () => { if (await lintHide({ key, msg }, false)) draw(); }, 'small ghost'))) : h('p', { class: 'muted', text: 'Скрытых замечаний нет.' }));
+      btn('Показать снова', async () => { if (await lintHide({ key, msg }, false)) draw(); }, 'small'))): h('p', { class: 'muted', text: 'Скрытых замечаний нет.' }));
   };
   draw();
   modal('Скрытые замечания', h('div', {}, h('p', { class: 'sm muted', style: 'margin-top:0', text: 'Ошибки не скрываются. Если в конфиге изменится то, о чём говорит замечание, и его текст станет другим, оно снова появится.' }), list));
@@ -4045,6 +4046,7 @@ async function paneRaw(content) {
     if (on && cfgEl.parentNode !== document.body) { cfgEl.replaceWith(spot); document.body.append(cfgEl); }
     if (!on && spot.parentNode) spot.replaceWith(cfgEl);
     cfgEl.classList.toggle('full', on);
+    document.documentElement.classList.toggle('cfg-fs', on);   // the page behind does not scroll (no second scrollbar)
     fsBtn.replaceChildren(icon(on ? 'shrink' : 'expand'));
     fsBtn.setAttribute('aria-label', on ? 'Обычный размер' : 'Во весь экран');
     fsBtn.dataset.tip = on ? 'Обычный размер (Esc)' : 'Во весь экран — редактор на всё окно браузера, выход по Esc';

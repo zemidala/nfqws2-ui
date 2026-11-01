@@ -469,6 +469,7 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 .cfg.full > .outline, .cfg.full > .cfg-body { grid-row: 3; min-height: 0; }
 .cfg.full > .cfg-status { grid-row: 4; } .cfg.full > .cfg-extra { grid-row: 5; max-height: 30vh; overflow: auto; }
 .cfg.full .cfg-body { display: flex; }
+html.cfg-fs, html.cfg-fs body { overflow: hidden; }
 .cfg.full .cfg-body .ed { flex: 1 1 auto; }
 .cfg.full .cfg-body .ed-ta { height: 100%; min-height: 0; }
 @media (max-width: 899px) { .cfg-fs { display: none; } .cfg.full { position: static; } }
