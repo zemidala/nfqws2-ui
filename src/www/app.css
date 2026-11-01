@@ -1594,6 +1594,7 @@ main { container: main / inline-size; }   /* at every width: the narrow-table ru
 :root[data-variant="b"] .mnav .mlinks > a { min-height: 38px; padding: 6px 14px; border-radius: 999px; }
 :root[data-variant="b"] .mnav .mlinks > a.on { background: var(--accent); color: var(--accent-fg); }
 :root[data-variant="b"] .mnav .mlinks > a.on > svg { color: var(--accent-fg); }
+:root[data-variant="b"] .mnav .mlinks > a.on :is(.tail, .tag) { color: var(--accent-fg); border-color: currentColor; }   /* the count on the filled pill: faint grey on the accent read at Lc 0–9 */
 :root[data-variant="b"] .mon-tiles { gap: 16px; }
 :root[data-variant="b"] .mon-tile { border: 0; border-radius: 14px; padding: 18px 20px; background: var(--accent-soft); }
 :root[data-variant="b"] .mon-tile b { font-size: var(--fs-2xl); font-weight: 700; }
