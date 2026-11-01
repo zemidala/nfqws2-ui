@@ -145,6 +145,25 @@ for (const p of ['value', 'selectedIndex']) {
 const ddScan = (root = document) => root.querySelectorAll('select:not(.dd-native)').forEach(ddEnhance);
 new MutationObserver(() => ddScan()).observe(document.documentElement, { childList: true, subtree: true });
 
+// On a phone a table of four or more columns shows each row as a card: the column names become labels (data-th,
+// drawn by CSS), so nothing scrolls sideways. Tables with a phone layout of their own are left alone.
+const CARD_SKIP = '.mon-tbl, .conn-tbl, .devs, .cfg-tbl';
+function cardTable(t) {
+  if (t.matches(CARD_SKIP)) return;
+  const names = [...t.querySelectorAll(':scope > thead th')].map((th) => th.textContent.trim());
+  if (names.length < 4) return;
+  t.classList.add('cardy');
+  for (const tr of t.querySelectorAll(':scope > tbody > tr')) {
+    [...tr.children].forEach((td, i) => { if (td.colSpan === 1 && names[i]) td.dataset.th = names[i]; });
+  }
+}
+let cardQueued = false;
+new MutationObserver(() => {
+  if (cardQueued) return;
+  cardQueued = true;
+  requestAnimationFrame(() => { cardQueued = false; document.querySelectorAll('table.tbl').forEach(cardTable); });
+}).observe(document.documentElement, { childList: true, subtree: true });
+
 function ddShow(sel) {
   ddClose();
   const b = sel._dd;
@@ -517,6 +536,8 @@ function applyLook(look = getLook()) {
   try { if (css) localStorage.setItem('nfqws-ui-scheme-css', css); else localStorage.removeItem('nfqws-ui-scheme-css'); } catch { /* no storage */ }
   document.documentElement.dataset.variant = look.variant === 'z' ? 'k' : look.variant;
   if (look.variant === 'z') document.documentElement.dataset.palette = 'zd'; else delete document.documentElement.dataset.palette;
+  // a colour scheme gives K's panels a background of their own — CSS then gives them inner padding too
+  if (look.variant !== 'z' && SCHEMES.some(([id]) => id === look.scheme)) document.documentElement.dataset.scheme = look.scheme; else delete document.documentElement.dataset.scheme;
   document.documentElement.dataset.mode = look.mode;
   document.documentElement.dataset.layout = ['menu', 'tabs', 'site'].includes(look.layout) ? look.layout : 'menu';
   document.documentElement.toggleAttribute('data-simple', !!look.simple);
@@ -4010,12 +4031,14 @@ async function paneBackup(content) {
     // a snapshot kept only on the NAS has nothing to delete on the router — no box at all rather than a faded one
     h('td', { class: 'chk' }, e.local ? box : null),
     h('td', { class: 'num nowrap', text: fmtDate(e.ts) }),
-    h('td', {}, reasonText[e.reason] || e.reason, e.note ? h('div', { class: 'sm muted ellipsis', style: 'max-width:40ch', text: e.note }) : null),
+    // the note wraps (two lines at most): a one-line ellipsis kept the column 40 characters wide and the table scrolled sideways
+    h('td', {}, reasonText[e.reason] || e.reason, e.note ? h('div', { class: 'sm muted clamp2', style: 'max-width:40ch', text: e.note }) : null),
     h('td', { class: 'sm' }, e.partial ? h('span', { class: 'status-bad', text: 'без конфига и списков (сделан до 1.15.4) — восстановить нечего' }) : e.differs === null ? h('span', { class: 'faint', text: 'неизвестно — снимок на NAS' }) : e.differs.length ? h('span', { class: 'muted', text: 'отличается: ' + e.differs.map(base).slice(0, 4).join(', ') + (e.differs.length > 4 ? ` и ещё ${e.differs.length - 4}` : '') }) : h('span', { class: 'status-ok', text: 'как сейчас' })),
-    h('td', { class: 'sm nowrap ' + (e.local ? '' : 'muted'), text: where(e) }),
+    h('td', { class: 'sm where ' + (e.local ? '' : 'muted'), text: where(e) }),
     h('td', { class: 'num', text: fmtBytes(e.size) }),
     // кнопки — во вложенном блоке: ячейка с display:flex перестаёт быть ячейкой таблицы (строки разъезжаются)
-    h('td', {}, h('div', { class: 'row', style: 'flex-wrap:nowrap;gap:2px' },
+    // the buttons wrap to a second line when the table is narrow, instead of pushing it wider than the window
+    h('td', {}, h('div', { class: 'row acts-row' },
       btn('Сравнить', () => compareSnapshot(e), 'small ghost', null, { disabled: e.partial || e.differs !== null && !e.differs.length }),
       btn('Восстановить', async () => {
         const gone = e.extra?.length ? `\n\nУдалятся (их не было в снимке): ${e.extra.map(base).join(', ')}.` : e.extra ? '' : '\n\nСписки и блобы, которых не было в снимке, удалятся.';
@@ -4125,7 +4148,7 @@ function remotePanel(data) {
         h('code', { class: 'sm mono', style: 'overflow-wrap:anywhere', text: R.pub }),
         // когда всё работает, команда для NAS больше не нужна — свёрнута
         R.setup ? h('details', { open: !(R.on && st.ok && !st.error) }, h('summary', { class: 'sm', text: 'Команда для NAS — выполнить один раз под этим пользователем (по ssh): кладёт скрипт приёма снимков и разрешает ключ роутера только для него' }),
-          h('textarea', { class: 'input mono', rows: 6, readonly: true, style: 'width:100%;resize:vertical;font-size:12px;margin-top:6px', text: R.setup }),
+          h('textarea', { class: 'input mono', rows: 6, readonly: true, style: 'width:100%;resize:vertical;font-size:var(--fs-xs);margin-top:6px', text: R.setup }),
           h('div', { class: 'row' }, btn('Копировать команду', () => copyText(R.setup), 'small', 'copy')))
           : h('p', { class: 'sm muted', text: 'Укажите папку на NAS и сохраните — здесь появится команда для NAS.' }))
         : btn('Создать ключ роутера', async () => { if (await guarded(() => api('remote_key'), 'Ключ создан')) route(); }, '', 'plus', { disabled: !R.tool })));
@@ -4472,11 +4495,12 @@ async function viewMonitor(main) {
       grid.map(([host, cells]) => [
         h('div', { class: 'mono mtl-host' }, h('span', { class: 'mtl-dot ' + kindOf(histOf(host).at(-1)) }), host),
         (() => { const its = line(cells), k = monChart(), b = its.length > 48 ? chBuckets(its, 2) : its;
-          return k === 'cols' ? chCols(b) : chTicks(b); })(),   // hours and words do not fit a shared time axis — ticks there
+          // each look keeps its own face on the shared time axis: hours — grey squares, words — 12 big blocks
+          return k === 'cols' ? chCols(b) : k === 'hours' ? chTicks(b, 'hsq') : k === 'words' ? h('div', { class: 'ch-blocks tl' }, chBuckets(its, Math.ceil(its.length / 12)).map((x) => h('i', { class: chKind(x), title: x?.tip || null }))) : chTicks(b); })(),
         h('div', { class: 'num sm', text: pctOf(histOf(host)) === null ? '—' : pctOf(histOf(host)) + '%' })]).flat(),
       h('div', { class: 'mtl-axis' }, [1, 0.75, 0.5, 0.25, 0].map((f) => h('span', { text: f ? ago(span * f) + ' назад' : 'сейчас' }))),
       run ? h('div', { class: 'mtl-note', text: `${fmtDate(Math.round(slotT(run[0])))} — ${fmtDate(Math.round(slotT(run[1] + 1)))}: не открывался ни один сайт. Похоже на сбой провайдера или роутера, а не на блокировку.` }) : null,
-      h('div', { class: 'mtl-legend sm muted' }, [monChart() === 'cols' ? ['ln', 'время ответа'] : ['ok', 'открывался'],
+      h('div', { class: 'mtl-legend sm muted' }, [monChart() === 'cols' ? ['ln', 'время ответа'] : monChart() === 'ticks' ? ['ok', 'открывался'] : ['cell', 'всё хорошо'],
         ['slow', 'медленно, больше 5 с'], ['bad', 'не открывался'], ['none', 'не проверялся']].map(([k, t]) => h('span', { class: k, text: t }))));
   };
   const draw = () => {
@@ -4821,7 +4845,7 @@ async function viewTests(main, r, bare = false) {
         h('td', { class: 'sm muted src' }, x.from, x.hist ? h('div', { class: 'nowrap' }, chip('работала ' + fmtDate(x.hist), 'ok')) : null, x.confirmed ? h('div', { class: 'nowrap' }, full ? chip('перепроверена', 'ok') : chip('в пачке открывала, по одной — нет')) : null),
         h('td', { class: 'sm', text: full ? `открылся ${x.ok} из ${x.ok}` : x.ok ? `${x.ok} из ${x.tries}` : x.reason || 'не открылся' }),
         h('td', { class: 'num', text: x.ms ? x.ms + ' мс' : '—' }),
-        h('td', {}, x.ok || x.community ? h('div', { class: 'row', style: 'flex-wrap:nowrap;justify-content:flex-end' }, x.ok ? applyMenu(x, s) : null, full ? wideBtn(x, s) : null, full || x.community ? shareBtn(x, s) : null) : null));
+        h('td', {}, x.ok || x.community ? h('div', { class: 'row acts-row' }, x.ok ? applyMenu(x, s) : null, full ? wideBtn(x, s) : null, full || x.community ? shareBtn(x, s) : null) : null));
     });
     return h('div', { class: 'stack', style: 'gap:14px' },
       flow(s, running, res, best),
@@ -4963,7 +4987,7 @@ async function viewTests(main, r, bare = false) {
     const best = conf[0];
     const missed = (x) => hosts.filter((hh) => !(x.per[hh]?.ok > 0 && x.per[hh].ok === x.per[hh].tries));
     const target = s.list ? `весь ${s.list.name}` : 'эти сайты';
-    const actions = (x, primary) => h('div', primary ? { class: 'notice-actions' } : { class: 'row', style: 'flex-wrap:nowrap;justify-content:flex-end' },
+    const actions = (x, primary) => h('div', primary ? { class: 'notice-actions' } : { class: 'row acts-row' },
       btn(primary ? `Профилем на ${target}` : 'Применить…', () => addListProfile(x.steps, s), 'small' + (primary ? ' primary' : ''), primary ? 'ok' : null,
         { title: `Новый профиль первым: эта стратегия для ${s.list ? 'всех сайтов из ' + s.list.name : 'этих сайтов'}; с проверкой и откатом` }),
       btn(primary ? 'Скопировать' : '', () => copyText(x.steps.join('\n')), 'small' + (primary ? '' : ' ghost'), 'copy', { title: 'Скопировать', 'aria-label': 'Скопировать' }));
@@ -5322,15 +5346,15 @@ async function viewCommunity(main) {
     const http = d.items.filter((x) => x.proto === 'http');
     const tls = d.items.filter((x) => x.proto === 'tls');
     const table = (items) => h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
-      h('thead', {}, h('tr', {}, h('th', { text: 'Стратегия' }), h('th', { class: 'wide', text: 'Где работала' }), h('th', { class: 'num', text: 'Подтвердили' }), h('th', { class: 'num nowrap', text: 'Не сработала' }), h('th', { class: 'nowrap', text: 'Последний раз' }), h('th'))),
+      h('thead', {}, h('tr', {}, h('th', { text: 'Стратегия' }), h('th', { class: 'wide', text: 'Где работала' }), h('th', { class: 'num', text: 'Подтвердили' }), h('th', { class: 'num', text: 'Не сработала' }), h('th', { text: 'Последний раз' }), h('th'))),
       h('tbody', {}, items.map((x) => h('tr', { class: x.skipped ? 'dim' : null },
-        h('td', { style: 'min-width:220px' }, h('div', {}, x.name, x.skipped ? [' ', chip('подбор не пробует', 'bad')] : !x.fresh ? [' ', chip('давно не подтверждалась', 'warn')] : null), h('code', { class: 'sm muted', style: 'word-break:break-all', text: x.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') })),
+        h('td', { style: 'min-width:150px' }, h('div', {}, x.name, x.skipped ? [' ', chip('подбор не пробует', 'bad')] : !x.fresh ? [' ', chip('давно не подтверждалась', 'warn')] : null), h('code', { class: 'sm muted', style: 'word-break:break-all', text: x.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') })),
         h('td', { class: 'sm' }, x.targets.length ? x.targets.slice(0, 6).map((t) => h('div', { class: 'mono', text: [t.host, t.asn ? 'AS' + t.asn : null].filter(Boolean).join(' · ') })) : h('span', { class: 'muted', text: 'сайт не указан' }),
           x.targets.length > 6 ? h('div', { class: 'muted', text: `и ещё ${x.targets.length - 6}` }) : null),
         h('td', { class: 'num', text: x.reports }),
         h('td', { class: 'num', text: x.fails || '—', title: x.fails ? 'последний раз ' + x.last_fail : null }),
         h('td', { class: 'date', text: x.last || '—' }),
-        h('td', {}, h('div', { class: 'row', style: 'flex-wrap:nowrap;justify-content:flex-end' },
+        h('td', {}, h('div', { class: 'row acts-row' },
           btn('Проверить', () => test(x.steps, x.targets.find((t) => t.host)?.host), 'small', 'play', { title: 'Прогнать эту стратегию на сайте из поля выше (или на сайте, где она работала)' }),
           btn('', () => copyText(x.steps.join('\n')), 'small ghost', 'copy', { title: 'Скопировать', 'aria-label': 'Скопировать' }))))))));
     const head = !d.asn
@@ -5935,7 +5959,7 @@ async function viewPickHist(main, r, bare = false) {
       h('td', { class: 'date' }, fmtDate(g.last.ts), g.last.auto ? [' ', chip('авто')] : null),
       h('td', { class: 'sm' }, pickOutcome(g.last), g.applied ? h('div', { class: 'sm muted', text: `применена ${fmtDate(g.applied.ts)}: ${g.applied.name}` }) : null),
       h('td', { class: 'num', text: g.runs }),
-      h('td', {}, h('div', { class: 'row', style: 'justify-content:flex-end;flex-wrap:nowrap' },
+      h('td', {}, h('div', { class: 'row acts-row' },
         g.works ? btn('Проверить снова', () => pickAgain(g.host, g.last.proto), 'small', 'play', { title: 'Быстрый подбор только по тому, что для этого сайта уже работало' }) : null,
         btn('', async () => { if (confirm(`Удалить историю подборов для ${g.host}?`) && await guarded(() => api('picks_delete', { host: g.host }), 'Удалено')) route(true); }, 'small ghost', 'trash', { 'aria-label': 'Удалить историю сайта', title: 'Удалить историю сайта' }))))));
     if (!rows.length) body.append(h('tr', {}, h('td', { colspan: 6, class: 'muted', text: 'Ничего не найдено.' })));
@@ -5988,7 +6012,7 @@ async function viewPickHistSite(main, host, bare) {
             h('td', { class: 'sm nowrap', text: g.full ? `в ${g.full} из ${plural(g.seen, 'запуска', 'запусков', 'запусков')}` : 'открывала не каждый раз' }),
             h('td', { class: 'date', text: g.last ? fmtDate(g.last) : '—' }),
             h('td', { class: 'num nowrap', text: g.ms ? g.ms + ' мс' : '—' }),
-            h('td', {}, h('div', { class: 'row', style: 'flex-wrap:nowrap;justify-content:flex-end' }, g.full ? shareBtn({ steps: g.steps, ok: g.rep, name: g.name }, { host, proto }) : null, btn('Скопировать', () => copyText(g.steps.join('\n')), 'small', 'copy')))))))) : h('p', { class: 'muted', text: 'Ни одна стратегия этот сайт пока не открыла.' })),
+            h('td', {}, h('div', { class: 'row acts-row' }, g.full ? shareBtn({ steps: g.steps, ok: g.rep, name: g.name }, { host, proto }) : null, btn('Скопировать', () => copyText(g.steps.join('\n')), 'small', 'copy')))))))) : h('p', { class: 'muted', text: 'Ни одна стратегия этот сайт пока не открыла.' })),
       panel('Запуски', h('span', { class: 'sm muted num', text: String(runs.length) }),
         h('div', { class: 'stack', style: 'gap:6px' }, runs.map((e) => h('details', { class: 'prun' },
           h('summary', {}, levelIcon(e.baseline?.ok ? 'info' : e.best ? 'ok' : 'error'), h('span', { class: 'date', text: fmtDate(e.ts) }), e.auto ? chip('авто') : null,
@@ -6070,7 +6094,7 @@ async function viewAuto(main) {
 async function paneReport(content) {
   const sites = h('input', { class: 'input mono grow', placeholder: 'до трёх сайтов через пробел — необязательно', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Сайты для проверки' });
   const hide = h('input', { type: 'checkbox', id: 'rep-hide' });
-  const ta = h('textarea', { class: 'input mono', rows: 22, readonly: true, style: 'width:100%;resize:vertical;font-size:12px', hidden: true });
+  const ta = h('textarea', { class: 'input mono', rows: 22, readonly: true, style: 'width:100%;resize:vertical;font-size:var(--fs-xs)', hidden: true });
   const acts = h('div', { class: 'row', hidden: true },
     btn('Скопировать', () => copyText(ta.value), 'primary', 'copy'),
     btn('Скачать .txt', () => { const a = h('a', { href: URL.createObjectURL(new Blob([ta.value], { type: 'text/plain' })), download: 'nfqws2-report.txt' }); document.body.append(a); a.click(); a.remove(); }, '', 'download'),
