@@ -1256,6 +1256,9 @@ async function route(refresh = false) {
     S.vt?.skipTransition();   // a click before the last page finished
     document.documentElement.classList.toggle('vt-cut', !fade);
     S.vt = document.startViewTransition(build);
+    // a newer switch skips this one: its promises reject with «Transition was skipped» — expected, not an error
+    S.vt.ready.catch(() => {});
+    S.vt.finished.catch(() => {});
     await S.vt.updateCallbackDone.catch(() => {});
   } else {
     const target = railTarget(main, page);
@@ -5833,11 +5836,16 @@ async function dnsExtended() {
   let sort = { key: 'best', dir: 1 };
   const okMs = (r) => r && r.ok ? r.ms : null;
   const udpMs = (x) => x.udp?.ok && !x.udp.intercept ? x.udp.ms : null;   // an intercepted UDP answer is not this server's
-  const bestMs = (x) => { const v = [okMs(x.doh), okMs(x.dot), udpMs(x)].filter((m) => m != null); return v.length ? Math.min(...v) : null; };
-  const bestHow = (x) => { const m = bestMs(x); return m == null ? '' : m === okMs(x.dot) ? 'DoT' : m === okMs(x.doh) ? 'DoH' : 'UDP 53'; };
-  const clean = (x) => !x.udp?.intercept && !(x.sub?.bad > 0) && bestMs(x) != null;
+  // DoT is timed as the handshake only (PHP on the router cannot send a DNS query over TLS), so it does not compete
+  // with full DoH and UDP answers for «the best»; it counts only for a server that has nothing else
+  // DoT counts when it was a real query (x.dot.q — the router has openssl); otherwise only the connection was timed
+  const bestMs = (x) => { const v = [okMs(x.doh), udpMs(x), x.dot?.q ? okMs(x.dot) : null].filter((m) => m != null); return v.length ? Math.min(...v) : okMs(x.dot); };
+  const bestHow = (x) => { const m = bestMs(x); return m == null ? '' : m === okMs(x.doh) ? 'DoH' : m === udpMs(x) ? 'UDP 53' : 'DoT'; };
+  // clean: answers itself (not intercepted) and the stub check ran and found none
+  const clean = (x) => !x.udp?.intercept && x.sub && x.sub.bad === 0 && bestMs(x) != null;
   const FAIL = { syn: ['SYN DROP', 'TCP не соединился — адрес закрыт'], tls: ['TLS DROP', 'TCP соединился, TLS оборван — режут по имени'],
-    timeout: ['TIMEOUT', 'на UDP 53 нет ответа'], bad: ['ошибка', 'сервер ответил не DNS-ответом'], name: ['нет адреса', 'имя сервера не разрешилось'] };
+    timeout: ['TIMEOUT', 'на UDP 53 нет ответа'], bad: ['ошибка', 'сервер ответил не DNS-ответом или с ошибкой'], name: ['нет адреса', 'имя сервера не разрешилось'],
+    cert: ['сертификат', 'сертификат не подходит к имени сервера'], slow: ['медленно', 'соединение есть, но ответа не было 5 секунд'] };
   const cell = (r) => !r ? h('span', { class: 'muted', text: '—' }) : r.ok ? h('span', { class: 'num ok-t', text: r.ms + ' мс' })
     : h('span', { class: 'bad-t sm', text: (FAIL[r.why] || ['нет'])[0], title: (FAIL[r.why] || ['', ''])[1] });
   const whoCell = (x) => {
@@ -5849,7 +5857,7 @@ async function dnsExtended() {
     return h('span', { class: 'mono sm ' + (u.intercept ? 'bad-t' : 'muted'), title: why || '', text: `${u.who || '?'}${nm ? ' — ' + nm : ''}` });
   };
   const subCell = (x) => !x.sub ? chip('—', '') : x.sub.bad === 0 ? chip('нет', 'ok') : chip(`${x.sub.bad} из ${x.sub.of}`, x.sub.bad >= 2 ? 'bad' : 'warn');
-  const KEYS = { name: (x) => x.name, doh: (x) => okMs(x.doh) ?? 1e9, dot: (x) => okMs(x.dot) ?? 1e9, udp: (x) => (x.udp?.ok ? x.udp.ms : 1e9), sub: (x) => x.sub ? x.sub.bad : 99,
+  const KEYS = { name: (x) => x.name, doh: (x) => okMs(x.doh) ?? 1e9, dot: (x) => okMs(x.dot) ?? 1e9, udp: (x) => udpMs(x) ?? (x.udp?.ok ? 5e5 + x.udp.ms : 1e9),   // an intercepted answer is not this server's time sub: (x) => x.sub ? x.sub.bad : 99,
     // default order: servers without interception and stubs first, each group by its fastest way
     best: (x) => (clean(x) ? 0 : 1e6) + (bestMs(x) ?? 9e5) };
   const startBtn = btn('Расширенная проверка', async () => { const s = await guarded(() => api('dnsx_start')); if (s) { draw(s); poll(); } }, 'small', 'search');
@@ -5872,7 +5880,8 @@ async function dnsExtended() {
         h('th', { text: 'Кто ответил на UDP 53' }), th('sub', 'Подмена'))),
       h('tbody', {}, rows.map((x) => h('tr', { class: x === top ? 'best' : null },
         h('td', { class: 'nm', text: x.name }), h('td', { class: 'mono sm hide-narrow', text: x.ip || '—' }),
-        h('td', { class: 'num t-doh', 'data-h': 'DoH' }, cell(x.doh)), h('td', { class: 'num t-dot', 'data-h': 'DoT' }, cell(x.dot)), h('td', { class: 'num t-udp', 'data-h': 'UDP' }, cell(x.udp)),
+        h('td', { class: 'num t-doh', 'data-h': 'DoH' }, cell(x.doh)),
+        h('td', { class: 'num t-dot', 'data-h': 'DoT', title: x.dot?.ok && !x.dot.q ? 'время соединения: запрос по DoT без программы openssl на роутере не отправить' : null }, cell(x.dot)), h('td', { class: 'num t-udp', 'data-h': 'UDP' }, cell(x.udp)),
         h('td', { class: 'who' }, whoCell(x)), h('td', { class: 'sub' }, subCell(x)))))));
   }
   function draw(s) {
@@ -5902,7 +5911,10 @@ async function dnsExtended() {
         table(s),
         h('div', { class: 'dnsx-legend sm muted' }, h('span', {}, h('b', { class: 'bad-t', text: 'TLS DROP' }), ' — соединился, TLS оборван (режут по имени)'),
           h('span', {}, h('b', { class: 'bad-t', text: 'SYN DROP' }), ' — адрес закрыт'), h('span', {}, h('b', { class: 'bad-t', text: 'TIMEOUT' }), ' — на UDP 53 нет ответа'),
-          h('span', { text: 'красный резолвер — ответил не тот, кого спрашивали (перехват)' }), h('span', { text: 'время — с роутера, лучшее из нескольких запросов' }))));
+          h('span', { text: 'красный в «Кто ответил» — ответил не тот, кого спрашивали (перехват)' }),
+          h('span', { text: s.servers.some((x) => x.dot?.q) ? 'время — с роутера: запрос по уже открытому соединению, лучшее из нескольких'
+            : 'время — с роутера; у DoT — время соединения (на роутере нет openssl, чтобы отправить запрос)' }),
+          h('span', { text: 'подмена «—» — не проверялась: у сервера нет обычного DNS или он не ответил' }))));
     }
     box.replaceChildren(...parts);
   }

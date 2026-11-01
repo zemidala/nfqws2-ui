@@ -8095,14 +8095,26 @@ function dnsxResult(string $kind, $ch, int $errno): array
     }
     return ['ok' => false, 'why' => 'bad'];
   }
-  return ['ok' => false, 'why' => $connect > 0 ? 'tls' : 'syn'];
+  if ($connect <= 0) {
+    return ['ok' => false, 'why' => 'syn'];   // TCP did not connect: the address is closed
+  }
+  if ($errno === 60 || $errno === 51) {
+    return ['ok' => false, 'why' => 'cert'];   // the handshake went through but the certificate does not fit the name
+  }
+  if (curl_getinfo($ch, CURLINFO_APPCONNECT_TIME) > 0) {
+    // TLS was set up and the answer then failed: slow (timeout) or broken, but not cut at the handshake
+    return ['ok' => false, 'why' => $errno === 28 ? 'slow' : 'bad'];
+  }
+  return ['ok' => false, 'why' => 'tls'];   // TCP connected, the TLS handshake broke: cut by name
 }
 
-// Run [key => [kind, target, ip]] probes, at most $par at a time; returns key => result
-function dnsxMulti(array $jobs, int $par): array
+// Run [key => [kind, target, ip]] probes, at most $par at a time; returns key => result. $tick(key, result) is called
+// as each one finishes (to save progress); when it returns false the rest are dropped (the user pressed «Остановить»)
+function dnsxMulti(array $jobs, int $par, ?callable $tick = null, $mh = null): array
 {
   $out = [];
-  $mh = curl_multi_init();
+  $own = $mh === null;
+  $mh = $mh ?? curl_multi_init();
   $queue = $jobs;
   $live = [];
   $add = function () use (&$queue, &$live, $mh, $par) {
@@ -8124,14 +8136,71 @@ function dnsxMulti(array $jobs, int $par): array
       curl_multi_remove_handle($mh, $ch);
       curl_close($ch);
       unset($live[(int)$info['handle']]);
+      if ($tick && $tick($key, $out[$key]) === false) {
+        $queue = [];   // stop: let the ones in flight finish, start no more
+      }
       $add();
     }
     if ($live) {
       curl_multi_select($mh, 0.2);
     }
   } while ($live || $queue);
-  curl_multi_close($mh);
+  if ($own) {
+    curl_multi_close($mh);
+  }
   return $out;
+}
+
+// DoT with a real DNS query, the way DNS scanners time it: one TLS connection, two length-prefixed queries, the second
+// one timed (no handshake in it). PHP on the routers has no TLS of its own, so it goes through the openssl program;
+// without it (Keenetic) — null, and the page keeps the connection time
+function dotQuery(string $name, string $ip): ?array
+{
+  static $bin = false;
+  if ($bin === false) {
+    $bin = trim((string)shell_exec('command -v openssl 2>/dev/null')) ?: null;
+  }
+  if (!$bin) {
+    return null;
+  }
+  $p = proc_open([$bin, 's_client', '-connect', "$ip:853", '-servername', $name, '-quiet', '-verify_return_error', '-verify_hostname', $name],
+    [0 => ['pipe', 'r'], 1 => ['pipe', 'w'], 2 => ['file', '/dev/null', 'w']], $io);
+  if (!is_resource($p)) {
+    return null;
+  }
+  stream_set_blocking($io[1], false);
+  $ask = function () use ($io) {
+    $q = random_bytes(2) . substr(dnsWireQuery('ya.ru'), 2);
+    fwrite($io[0], pack('n', strlen($q)) . $q);
+    fflush($io[0]);
+    $t = microtime(true);
+    $buf = '';
+    while (microtime(true) - $t < 4) {
+      $r = [$io[1]];
+      $w = $e = null;
+      if (@stream_select($r, $w, $e, 0, 200000)) {
+        $chunk = fread($io[1], 4096);
+        if ($chunk === '' || $chunk === false) {
+          if (feof($io[1])) {
+            return null;
+          }
+          continue;
+        }
+        $buf .= $chunk;
+        if (strlen($buf) >= 2 && strlen($buf) >= 2 + unpack('n', $buf)[1]) {
+          return dnsWireParse(substr($buf, 2, unpack('n', $buf)[1])) ? (int)round((microtime(true) - $t) * 1000) : null;
+        }
+      }
+    }
+    return null;
+  };
+  $first = $ask();   // with the handshake in it
+  $second = $first !== null ? $ask() : null;
+  fclose($io[0]);
+  fclose($io[1]);
+  proc_terminate($p);
+  proc_close($p);
+  return $first === null ? ['ok' => false] : ['ok' => true, 'ms' => $second ?? $first];
 }
 
 // Who answered UDP 53 in a server's place: the provider's own resolver, the national one (RIPN — MSK-IX/НСДИ, which
@@ -8239,8 +8308,12 @@ function dnsxJob(): void
         $jobs["$i:$kind"] = [$kind, $t, $own !== '' ? $own : $ips[$host], $ips[$host]];
       }
     }
-    // a few at a time: many TLS handshakes at once load the router's CPU and inflate every time
+    // a few at a time: many TLS handshakes at once load the router's CPU and inflate every time.
+    // One multi handle for both rounds keeps the connections: the second DoH query goes over the open one, so its time
+    // is the query itself, without the handshake — the way DNS scanners measure
     $par = lowMem() ? 3 : 6;
+    $mh = curl_multi_init();
+    curl_multi_setopt($mh, CURLMOPT_MAXCONNECTS, 120);
     for ($round = 0; $round < 2 && !$stopped(); $round++) {
       $batch = [];
       foreach ($jobs as $key => [$kind, $t, $ip, $alt]) {
@@ -8248,11 +8321,31 @@ function dnsxJob(): void
         $prev = $d['servers'][$i][$kind] ?? null;
         $batch[$key] = [$kind, $t, $round && $prev && !$prev['ok'] && $alt ? $alt : $ip];
       }
-      foreach (dnsxMulti($batch, $par) as $key => $r) {
+      // each result goes into the file as it comes (at most every 2 s): a slow round on a weak router must not look dead
+      $saved = 0;
+      dnsxMulti($batch, $par, function ($key, $r) use (&$d, &$saved, $save, $stopped) {
         [$i, $kind] = explode(':', $key);
         $prev = $d['servers'][$i][$kind] ?? null;
         $d['servers'][$i][$kind] = !$prev || !$prev['ok'] ? ($r['ok'] || !$prev ? $r : $prev) : ($r['ok'] ? ['ok' => true, 'ms' => min($prev['ms'], $r['ms'])] : $prev);
+        if (microtime(true) - $saved > 2) {
+          $save();
+          $saved = microtime(true);
+        }
+        return !$stopped();
+      }, $mh);
+      $save();
+    }
+    curl_multi_close($mh);
+    // DoT as a real query (openssl); where the handshake failed there is nothing to ask
+    foreach ($d['servers'] as $i => $row) {
+      if ($stopped() || empty($row['dot']['ok'])) {
+        continue;
       }
+      $q = dotQuery(DNSX[$i][2], DNSX[$i][1] !== '' ? DNSX[$i][1] : ($ips[DNSX[$i][2]] ?? ''));
+      if ($q === null) {
+        break;   // no openssl here: the handshake time stays for all
+      }
+      $d['servers'][$i]['dot'] = $q['ok'] ? ['ok' => true, 'ms' => $q['ms'], 'q' => true] : ['ok' => false, 'why' => 'bad'];
       $save();
     }
   }
