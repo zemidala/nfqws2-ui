@@ -181,7 +181,7 @@ new MutationObserver(() => {
   if (cardQueued) return;
   cardQueued = true;
   requestAnimationFrame(() => { cardQueued = false; document.querySelectorAll('table.tbl').forEach(cardTable); markWraps(); });
-}).observe(document.documentElement, { childList: true, subtree: true });
+}).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'open'] });   // a block shown later is measured too
 addEventListener('resize', () => requestAnimationFrame(markWraps));
 
 function ddShow(sel) {
@@ -6275,16 +6275,19 @@ async function paneReport(content) {
   const sites = h('input', { class: 'input mono grow', placeholder: 'до трёх сайтов через пробел — необязательно', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Сайты для проверки' });
   const hide = h('input', { type: 'checkbox', id: 'rep-hide' });
   const ta = h('textarea', { class: 'input mono', rows: 22, readonly: true, style: 'width:100%;resize:vertical;font-size:var(--fs-xs)', hidden: true });
-  const acts = h('div', { class: 'row', hidden: true },
-    btn('Скопировать', () => copyText(ta.value), 'primary', 'copy'),
-    btn('Скачать .txt', () => { const a = h('a', { href: URL.createObjectURL(new Blob([ta.value], { type: 'text/plain' })), download: 'nfqws2-report.txt' }); document.body.append(a); a.click(); a.remove(); }, '', 'download'),
-    h('span', { class: 'sm muted', text: 'Перечитайте перед отправкой: отчёт никуда не уходит сам, его отправляете вы.' }));
+  // the finished report is a block of its own: heading with two equal small buttons, a note, the text
+  const acts = h('section', { class: 'panel', hidden: true },
+    h('div', { class: 'panel-h' }, h('h2', { text: 'Отчёт' }), h('span', { class: 'grow' }),
+      copyBtn(() => ta.value, 'Копировать', 'small'),
+      btn('Скачать .txt', () => { const a = h('a', { href: URL.createObjectURL(new Blob([ta.value], { type: 'text/plain' })), download: 'nfqws2-report.txt' }); document.body.append(a); a.click(); a.remove(); }, 'small', 'download')),
+    h('p', { class: 'sm muted', text: 'Перечитайте перед отправкой: отчёт никуда не уходит сам, его отправляете вы.' }));
   const make = btn('Собрать отчёт', async () => {
     make.disabled = true;
     const r = await guarded(() => api('report', { sites: sites.value.split(/[\s,]+/).filter(Boolean).slice(0, 3), hide: hide.checked, build: BUILD.split('-').pop() }));
     make.disabled = false;
     if (!r) return;
     ta.value = r.text; ta.hidden = false; acts.hidden = false;
+    acts.scrollIntoView({ block: 'start', behavior: 'smooth' });
   }, 'primary', 'play');
   content.append(
     h('div', { class: 'vh' }, h('h1', { text: 'Отчёт для помощи' })),
@@ -6293,7 +6296,8 @@ async function paneReport(content) {
       h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Проверить сайты' }), sites),
       h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Имена сайтов' }), h('label', { class: 'chk' }, hide, 'заменить на «сайт-1», «сайт-2»…')),
       h('div', { class: 'row' }, make)),
-    acts, ta);
+    acts);
+  acts.append(ta);
 }
 
 // ============ Список по ASN ============
@@ -6486,10 +6490,12 @@ async function viewLog(main) {
     data.syslog
       ? panel('Системный журнал nfqws2', copyBtn(() => preText(pre)), h('p', { class: 'sm muted', text: 'Последние 300 строк logread, новые сверху.' }), search, pre)
       : panel('Системный журнал nfqws2', null, h('p', { class: 'sm muted', text: 'На Keenetic системный журнал ведёт прошивка: откройте его в веб-интерфейсе роутера (раздел «Диагностика») и найдите строки nfqws2. Файлы журналов nfqws2 показаны ниже.' })),
-    (data.files || []).map((f) => panel(f.name, h('span', { class: 'row', style: 'gap:8px' },
+    // note and buttons straight in the heading row: when it wraps, the note goes under the heading, the buttons stay together
+    (data.files || []).map((f) => panel(f.name, [
       h('span', { class: 'sm muted', text: fmtBytes((data.logs?.files || []).find((x) => x.name === f.name)?.used ?? f.size) + ' в памяти' }),
+      h('span', { class: 'grow' }),
       copyBtn(() => f.tail || ''),
-      btn('Очистить', async () => { if (await clearLog(f.name)) route(); }, 'small ghost', 'trash')), (() => { const p = h('pre', { class: 'box' }); drawLog(p, (f.tail || '').split('\n').filter(Boolean), 'пусто'); return p; })())),
+      btn('Очистить', async () => { if (await clearLog(f.name)) route(); }, 'small ghost', 'trash')], (() => { const p = h('pre', { class: 'box' }); drawLog(p, (f.tail || '').split('\n').filter(Boolean), 'пусто'); return p; })())),
     panel('Трафик в очередь nfqws2', null, h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
       h('thead', {}, h('tr', {}, h('th', { text: 'Направление' }), h('th', { text: 'Что' }), h('th', { class: 'num', text: 'Пакетов' }), h('th', { class: 'num', text: 'Объём' }))),
       h('tbody', {}, st.iptables.length ? st.iptables.map((x) => h('tr', {}, h('td', { text: x.dir === 'out' ? 'исходящие' : 'входящие' }), h('td', { text: x.proto + (x.what === 'data' ? ', первые пакеты' : ', ' + x.what) }),

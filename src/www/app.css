@@ -1729,6 +1729,9 @@ main { container: main / inline-size; }   /* at every width: the narrow-table ru
 :root:root:root .wrapped { row-gap: 6px; }
 :root:root:root .wrapped > :first-child:is(h1, h2, h3, input.input) { flex: 1 1 100%; }
 :root:root:root .wrapped > :not(:first-child) { margin-left: 0; }
+/* in a wrapped heading row the note («0 Б в памяти», a date, a count) takes its own line under the heading and the
+   buttons stay together in one row — not a staircase of note, button, button */
+:root:root:root :is(.panel-h, .blk-h, .vh).wrapped > :not(:first-child):not(.btn, a, button, .tag, .grow, .seg, .dd-btn, label, :has(.btn, button)) { flex: 1 1 100%; }
 :root:root:root .wrapped > .grow:empty { display: none; }
 /* read-only «label — value» rows: one line, close together */
 :root:root:root .frow.kv { grid-template-columns: 170px minmax(0, 1fr); align-items: baseline; }
