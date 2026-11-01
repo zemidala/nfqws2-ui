@@ -4451,7 +4451,7 @@ async function viewMonitor(main) {
         return h('tr', { class: dupHosts.has(host) ? 'mon-dup' : down ? 'mon-down' : '' },
           // a long name may wrap only after a dot, never in the middle of a word; why it does not open — under the name
           h('td', { class: 'mono mon-host' }, h('button', { class: 'linkish', type: 'button', title: 'Подробно: какой профиль обрабатывает сайт', onclick: () => checkHost(host) },
-            host.split('.').flatMap((p, j) => j ? [h('wbr'), '.' + p] : [p])), down ? h('div', { class: 'mon-why', text: x[3] }) : null),
+            host.split('.').flatMap((p, j) => j ? [h('wbr'), '.' + p] : [p])), down ? h('div', { class: 'mon-why', text: x[3], title: x[3] }) : null),
           h('td', {}, statusChip(host, x)),
           h('td', { class: 'mon-wide mon-hcell' }, histBar(hist)),
           h('td', { class: 'num', text: p === null ? '—' : p + '%' }),
