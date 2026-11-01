@@ -281,23 +281,6 @@ function h(tag, attrs, ...kids) {
   return e;
 }
 
-// A bar of n equal cells: fractional widths round differently cell to cell, so some look wider and some 1px gaps
-// vanish. Cell width and gap are kept to whole pixels for the bar's current width (sets --cw and --cg).
-const CELL_RO = typeof ResizeObserver === 'function' ? new ResizeObserver((es) => es.forEach(({ target: el }) => {
-  const n = Number(el.dataset.cells), w = el.clientWidth;
-  if (!n || !w) return;
-  const gap = w >= n * 5 ? 2 : 1;
-  const cw = Math.max(1, Math.floor((w + gap) / n) - gap);
-  el.style.setProperty('--cg', gap + 'px');
-  el.style.setProperty('--cw', cw + 'px');
-  el.parentElement?.style.setProperty('--bw', n * (cw + gap) - gap + 'px');   // drawn width, for a time axis under the bar
-})) : null;
-function pixelCells(el, n) {
-  el.dataset.cells = n;
-  CELL_RO?.observe(el);
-  return el;
-}
-
 function icon(name) {
   const s = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
   s.setAttribute('viewBox', '0 0 24 24');
@@ -328,8 +311,11 @@ function logo(size) {
   return s;
 }
 
+// a text label goes into its own element: only an element can have its line box trimmed to the capitals (.btn > btn-l)
+// a link to another page that sits in a block header — drawn as a small button like the other actions
+const linkBtn = (href, label = 'Открыть', attrs = {}) => h('a', { class: 'btn small', href, ...attrs }, h('btn-l', {}, label));
 const btn = (label, onclick, cls = '', ic = null, attrs = {}) =>
-  h('button', { class: 'btn ' + cls, type: 'button', onclick, ...attrs }, ic && icon(ic), label);
+  h('button', { class: 'btn ' + cls, type: 'button', onclick, ...attrs }, ic && icon(ic), typeof label === 'string' && label ? h('btn-l', {}, label) : label);
 // Copy button: copies get() and shows a tick on itself for 1.5 s (label stays — the button keeps its width).
 // No label — icon only, for short texts (commands, code blocks)
 function copyBtn(get, label = 'Копировать', cls = 'small ghost') {
@@ -903,8 +889,8 @@ function updateChrome() {
   const busy = pendingActive();
   document.getElementById('svc-ctl').replaceChildren(
     st.running
-      ? [btn(h('span', { class: 'ctl-label', text: 'Перезапустить' }), safeRestart, 'small ghost', 'power', { title: 'Перезапустить nfqws2 с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, изменения откатятся сами', 'aria-label': 'Перезапустить', disabled: busy }),
-        btn(h('span', { class: 'ctl-label', text: 'Остановить' }), () => service('stop'), 'small ghost danger', 'stop', { title: 'Остановить nfqws2 — обход блокировок перестанет работать', 'aria-label': 'Остановить', disabled: busy })]
+      ? [btn(h('span', { class: 'ctl-label', text: 'Перезапустить' }), safeRestart, 'small', 'power', { title: 'Перезапустить nfqws2 с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, изменения откатятся сами', 'aria-label': 'Перезапустить', disabled: busy }),
+        btn(h('span', { class: 'ctl-label', text: 'Остановить' }), () => service('stop'), 'small danger', 'stop', { title: 'Остановить nfqws2 — обход блокировок перестанет работать', 'aria-label': 'Остановить', disabled: busy })]
       : btn(h('span', { class: 'ctl-label', text: 'Запустить' }), () => service('start'), 'small primary', 'play', { title: 'Запустить nfqws2', 'aria-label': 'Запустить' }));
   document.getElementById('ver').textContent = st.version ? 'v' + st.version : '';
   // вышла новая версия nfqws2 — метка за номером версии (на узком экране — значок с точкой)
@@ -1153,15 +1139,16 @@ async function route(refresh = false) {
   const views = { '': viewOverview, sites: viewSites, tests: viewTests, settings: viewSettings, log: viewLog, site: viewSite, diag: viewDiag, asn: viewAsn, devices: viewDevices };
   // новое на этой странице: метки внутри видны весь этот заход, после отрисовки страница считается открытой
   S.newHere = new Set(pageFeatures(pageOf(r)));
-  main.replaceChildren(subTabs(pageOf(r)));
+  const target = railTarget(main, pageOf(r));
+  target.replaceChildren(subTabs(pageOf(r)));
   placeSide();
   updatedNote();
   try {
-    await (views[r.tab] || viewOverview)(main, r);
-    if (seq === routeSeq) { placeRail(main, pageOf(r)); seenPage(pageOf(r)); }
+    await (views[r.tab] || viewOverview)(target, r);
+    if (seq === routeSeq) seenPage(pageOf(r));
   } catch (e) {
     console.error(e);
-    main.replaceChildren(notice('bad', 'Ошибка', e.message));
+    target.replaceChildren(notice('bad', 'Ошибка', e.message));
   }
   if (!r.q.get('var') && !r.q.get('hl')) window.scrollTo(0, 0);
 }
@@ -1211,13 +1198,18 @@ function placeSide() {
 // (показывает CSS по ширине области содержимого). Во «Вкладках» не нужна: обзор и так слева.
 // Списки, профили, конфиг, журнал и мониторинг отдают всю ширину своему содержимому, «Обзор» — карточкам.
 const RAIL_PAGES = ['diag', 'frz', 'dns', 'conns', 'cfg', 'pick', 'trace', 'phist', 'comm', 'auto', 'tg', 'asn', 'basic', 'base', 'backup', 'hist', 'report', 'look', 'about', 'site'];
-function placeRail(main, page) {
+// Where the page is drawn. With the status column the page goes into .mcol and the column stays put: moving between
+// two such pages redraws only the middle, the column is not torn down and built again after the page has loaded.
+function railTarget(main, page) {
   main.classList.toggle('formy', RAIL_PAGES.includes(page));   // строки форм на широком экране — подсказки справа от поля
-  if (!isWide() || overviewCol() || !RAIL_PAGES.includes(page)) return;
+  const wrap = main.querySelector(':scope > .mwrap');
+  if (!isWide() || overviewCol() || !RAIL_PAGES.includes(page)) return main;
+  if (wrap) return wrap.firstElementChild;
   sideBlocks(false);
-  const rail = h('aside', { class: 'rail', 'aria-label': 'Состояние' }, SIDE.service, SIDE.problems, SIDE.monitor, SIDE.backup);
-  main.replaceChildren(h('div', { class: 'mwrap' }, h('div', { class: 'mcol' }, ...main.childNodes), rail));
+  const col = h('div', { class: 'mcol' });
+  main.replaceChildren(h('div', { class: 'mwrap' }, col, h('aside', { class: 'rail', 'aria-label': 'Состояние' }, SIDE.service, SIDE.problems, SIDE.monitor, SIDE.backup)));
   updateSide();
+  return col;
 }
 function updateSide() {
   if (!SIDE.root || !S.state) return;   // блоки могут стоять в колонке или на странице «Обзор», причём не все сразу
@@ -1239,7 +1231,7 @@ function renderSideMonitor(el) {
   el.hidden = false;
   const okN = m.sites.filter((x) => x.last && x.last[1]).length;
   el.replaceChildren(
-    h('div', { class: 'blk-h' }, h('h2', { text: 'Мониторинг' }), h('a', { class: 'sm', href: '#/tests/monitor', text: 'открыть' })),
+    h('div', { class: 'blk-h' }, h('h2', { text: 'Мониторинг' }), linkBtn('#/tests/monitor')),
     h('p', { class: 'sm' }, h('span', { class: okN === m.sites.length ? 'status-ok' : 'status-bad', text: `${okN} из ${m.sites.length} открываются` }),
       m.last ? h('span', { class: 'muted', text: ' · ' + fmtAgo(S.state.now - m.last) }) : null, m.enabled ? null : h('span', { class: 'muted', text: ' · выключен' })),
     h('div', { class: 'mon-mini' }, m.sites.map((s) => h('button', { type: 'button', class: 'mon-row', onclick: () => checkHost(s.host), title: 'Проверить сейчас (повторный клик — свернуть)' },
@@ -1257,8 +1249,7 @@ function renderSideService(el) {
       st.running
         ? [btn('Перезапустить', safeRestart, 'small', 'power', { title: 'Перезапуск с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, изменения откатятся сами', disabled: pendingActive() }),
           btn('Остановить', () => service('stop'), 'small danger', 'stop', { title: 'Остановить nfqws2 — обход блокировок перестанет работать', disabled: pendingActive() })]
-        : btn('Запустить', () => service('start'), 'small primary', 'play'),
-      btn('Обновить', () => route(true), 'small ghost', 'refresh', { title: 'Обновить данные на странице' })),
+        : btn('Запустить', () => service('start'), 'small primary', 'play')),
     h('p', { class: 'muted sm num', text: [st.version && 'nfqws2 v' + st.version, st.running && st.process.started && 'запущен ' + fmtAgo(st.now - st.process.started), st.running && st.process.rss_kb && (st.process.rss_kb / 1024).toFixed(1).replace('.', ',') + ' МБ'].filter(Boolean).join(' · ') }),
     !st.running && st.stop ? stopNote(st.stop) : null,
     need && !pendingActive() ? notice('warn', 'Нужен перезапуск', 'Конфиг изменён после запуска nfqws2. После перезапуска интерфейс проверит сайты и откатит изменения, если вы их не подтвердите.'
@@ -1473,7 +1464,7 @@ function renderSideProblems(el) {
 function renderSideBackup(el) {
   const s = S.state.snap || {};
   el.replaceChildren(
-    h('div', { class: 'blk-h' }, h('h2', { text: 'Резервные копии' }), h('a', { class: 'sm', href: '#/settings/backup', text: 'открыть' })),
+    h('div', { class: 'blk-h' }, h('h2', { text: 'Резервные копии' }), linkBtn('#/settings/backup')),
     s.count ? h('p', { class: 'sm' }, h('span', { class: 'status-ok', text: '✓ На роутере: ' }), `${plural(s.local ?? s.count, 'снимок', 'снимка', 'снимков')}` + (s.remote != null ? `, на NAS: ${s.remote}` : '') + `, последний ${fmtAgo(S.state.now - s.last)}`) : h('p', { class: 'sm muted', text: 'Снимков пока нет' }),
     h('p', { class: 'sm' }, h('a', { class: 'icon-link', href: 'api.php?download=current' }, icon('download'), 'Скачать архив сейчас')));
 }
@@ -1732,7 +1723,7 @@ function overviewBrief(B) {
   const HREF = { svc: null, prob: null, mon: PAGES.mon[0], profs: PAGES.prof[0], lists: PAGES.lists[0], picks: PAGES.phist[0], changes: PAGES.hist[0], backup: PAGES.backup[0], more: PAGES.about[0] };
   const fold = (id, label, summary, block, force) => {
     const d = h('details', { class: 'ofold', open: force || open.includes(id) }, h('summary', {}, h('b', { text: label }), h('span', { class: 'sm faint ellipsis' }, summary),
-      HREF[id] ? h('a', { class: 'sm', href: HREF[id], text: 'открыть', onclick: (e) => e.stopPropagation() }) : null), block);
+      HREF[id] ? linkBtn(HREF[id], 'Открыть', { onclick: (e) => e.stopPropagation() }) : null), block);
     d.addEventListener('toggle', () => {
       // раскрытое самим интерфейсом (остановка, замечания, упавший сайт) не запоминаем — иначе останется раскрытым навсегда
       if (force && d.open) return;
@@ -1784,7 +1775,7 @@ function overviewTiles() {
 function overviewExtra() {
   const st = S.state;
   const blk = (title, href, ...body) => h('section', { class: 'blk' },
-    h('div', { class: 'blk-h' }, h('h2', { text: title }), href ? h('a', { class: 'sm', href, text: 'открыть' }) : null), ...body);
+    h('div', { class: 'blk-h' }, h('h2', { text: title }), href ? linkBtn(href) : null), ...body);
   const kv = (k, ...v) => h('div', { class: 'kv' }, h('span', { class: 'muted', text: k }), h('span', {}, ...v));
   const profs = st.conf_profiles;
   const bad = profs.filter((p) => worst(profIssues(p)) === 'error' || ['dead', 'excludes-only'].includes(p.state)).length;
@@ -3949,7 +3940,8 @@ async function paneBackup(content) {
     return box;
   };
   const rows = data.items.map((e) => { const box = pick(e); const tr = h('tr', {},
-    h('td', { class: 'chk' }, box),
+    // a snapshot kept only on the NAS has nothing to delete on the router — no box at all rather than a faded one
+    h('td', { class: 'chk' }, e.local ? box : null),
     h('td', { class: 'num nowrap', text: fmtDate(e.ts) }),
     h('td', {}, reasonText[e.reason] || e.reason, e.note ? h('div', { class: 'sm muted ellipsis', style: 'max-width:40ch', text: e.note }) : null),
     h('td', { class: 'sm' }, e.partial ? h('span', { class: 'status-bad', text: 'без конфига и списков (сделан до 1.15.4) — восстановить нечего' }) : e.differs === null ? h('span', { class: 'faint', text: 'неизвестно — снимок на NAS' }) : e.differs.length ? h('span', { class: 'muted', text: 'отличается: ' + e.differs.map(base).slice(0, 4).join(', ') + (e.differs.length > 4 ? ` и ещё ${e.differs.length - 4}` : '') }) : h('span', { class: 'status-ok', text: 'как сейчас' })),
@@ -4318,9 +4310,9 @@ async function viewMonitor(main) {
     btn('', () => checkHost(host), 'small icon ghost mon-more', 'search', { title: 'Подробно: какой профиль обрабатывает сайт', 'aria-label': 'Подробно о ' + host }),
     btn('', () => remove(host), 'small icon ghost', 'x', { title: 'Убрать из мониторинга', 'aria-label': 'Убрать ' + host }));
   // the last 96 checks, the oldest on the left; fewer — the rest of the bar stays empty, so bars line up between rows
-  const histBar = (hist) => pixelCells(h('div', { class: 'mhist', 'aria-hidden': 'true' },
+  const histBar = (hist) => h('div', { class: 'mhist', 'aria-hidden': 'true' },
     Array.from({ length: Math.max(0, 96 - hist.length) }, () => h('i', { class: 'none' })),
-    hist.slice(-96).map((x) => h('i', { class: kindOf(x), title: cellTitle(x) }))), 96);
+    hist.slice(-96).map((x) => h('i', { class: kindOf(x), title: cellTitle(x) })));
   const sumBox = h('div', { class: 'mon-sum' });
   const drawSum = () => {
     const lasts = sites.map((s) => histOf(s).at(-1));
@@ -4389,7 +4381,7 @@ async function viewMonitor(main) {
     return h('div', { class: 'mtl' },
       grid.map(([host, cells]) => [
         h('div', { class: 'mono mtl-host' }, h('span', { class: 'mtl-dot ' + kindOf(histOf(host).at(-1)) }), host),
-        pixelCells(h('div', { class: 'mtl-cells', style: `grid-template-columns:repeat(${N}, var(--cw, minmax(0, 1fr)))` }, cells.map((c) => h('i', { class: c.k, title: c.xs.length ? c.xs.map(cellTitle).join('\n') : null }))), N),
+        h('div', { class: 'mtl-cells', style: `grid-template-columns:repeat(${N}, minmax(0, 1fr))` }, cells.map((c) => h('i', { class: c.k, title: c.xs.length ? c.xs.map(cellTitle).join('\n') : null }))),
         h('div', { class: 'num sm', text: pctOf(histOf(host)) === null ? '—' : pctOf(histOf(host)) + '%' })]).flat(),
       h('div', { class: 'mtl-axis' }, [1, 0.75, 0.5, 0.25, 0].map((f) => h('span', { text: f ? ago(span * f) + ' назад' : 'сейчас' }))),
       run ? h('div', { class: 'mtl-note', text: `${fmtDate(Math.round(slotT(run[0])))} — ${fmtDate(Math.round(slotT(run[1] + 1)))}: не открывался ни один сайт. Похоже на сбой провайдера или роутера, а не на блокировку.` }) : null,
@@ -5128,7 +5120,7 @@ async function viewTests(main, r, bare = false) {
         h('p', { class: 'sm muted', text: 'Трассировка открывает сайт через копию текущей конфигурации с подробным журналом nfqws2 — видно, какой профиль сработал и что сделали стратегии.' }),
       h('div', { class: 'row' }, startBtn, h('span', { class: 'sm muted grow note-wide', text: 'Работает отдельный процесс nfqws2 на очереди 301 только для проверочных соединений роутера. Ваш трафик и основной nfqws2 не затрагиваются.' }))),
     out,
-    tab === 'pick' && !bare && hist.items.length ? panel('Последние подборы', h('a', { class: 'sm', href: PAGES.phist[0], text: 'вся история' }), h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
+    tab === 'pick' && !bare && hist.items.length ? panel('Последние подборы', linkBtn(PAGES.phist[0], 'Вся история'), h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
       h('thead', {}, h('tr', {}, h('th', { text: 'Когда' }), h('th', { text: 'Сайт' }), h('th', { text: 'Без обхода' }), h('th', { class: 'num', text: 'Сработало' }), h('th', { text: 'Лучшая' }))),
       h('tbody', {}, hist.items.slice(0, 5).map((x) => h('tr', {}, h('td', { class: 'date', text: fmtDate(x.ts) }), h('td', { class: 'mono' }, h('a', { href: pickHistHref(x.host), text: x.host })),
         h('td', { text: x.baseline?.ok ? 'открывается' : x.baseline?.reason || '—' }), h('td', { class: 'num', text: `${x.ok} из ${x.total}` }), h('td', { class: 'mono sm', text: x.best || '—' }))))))) : null);

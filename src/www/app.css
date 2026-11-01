@@ -115,6 +115,10 @@ main { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap:
 .panel-h h2 { flex: 1; }
 .vh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
 .btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 5px 12px; border-radius: var(--ctl-r); border: 1px solid var(--ctl-line); background: var(--surface); color: var(--fg); font-weight: 500; font-size: 13.5px; cursor: pointer; white-space: nowrap; text-decoration: none; }
+/* the label's line box is trimmed to cap height and baseline, so centring puts the capitals, not the font's ascent and
+   descent, in the middle — the icon beside them is centred too. Without it the text rode 1.5px high and the icon
+   looked 2px low next to it. Browsers without text-box keep the old look. */
+.btn > btn-l { display: block; text-box: trim-both cap alphabetic; }
 .btn:hover { background: var(--soft); }
 .btn:disabled { opacity: .5; cursor: default; }
 .btn.icon { width: 34px; padding: 0; }
@@ -122,6 +126,9 @@ main { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap:
 .btn.small.icon { width: 28px; }
 .btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
 .btn.ghost:hover { background: var(--soft); color: var(--fg); }
+/* a button with a label is always drawn as a button: bare text beside framed buttons read as stray words */
+:root main .btn.ghost:not(.icon) { border-color: var(--ctl-line); color: var(--fg); }
+:root[data-variant="k"] main .btn.ghost:not(.icon) { border-color: var(--accent); color: var(--accent-ink); }
 .btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 .btn.primary:hover { filter: brightness(1.07); }
 .btn.danger { color: var(--bad); }
@@ -225,7 +232,10 @@ button.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
 .notice svg { margin-top: 1px; }
 .seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--line); border-radius: calc(var(--radius) * .7 + 2px); padding: 2px; background: var(--bg); justify-self: start; }
 .seg button { border: 0; background: none; color: var(--muted); padding: 4px 11px; border-radius: calc(var(--radius) * .5 + 2px); cursor: pointer; min-height: 28px; font-size: 13px; font-weight: 500; }
-.seg button.on { background: var(--surface); color: var(--fg); box-shadow: 0 1px 2px rgba(0, 0, 0, .1); }
+/* the chosen half must read at a glance: accent tint, accent text and an accent outline, not a shade lighter */
+.seg button.on { background: var(--accent-soft); color: var(--accent-ink); box-shadow: inset 0 0 0 1px var(--accent); }
+/* labels and numbers centred by their capitals, not by the font's ascent and descent (they rode 1–1.5px high) */
+.seg button { text-box: trim-both cap alphabetic; }
 .frow { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 8px 14px; align-items: start; }
 .frow > .lbl { font-size: 13px; color: var(--muted); padding-top: 5px; }
 .frow > .hint { grid-column: 2; font-size: 12px; color: var(--faint); margin-top: -4px; }
@@ -290,7 +300,7 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
   .nav.scrollable .nav-h { display: none; }
   .nav.scrollable a { width: auto; white-space: nowrap; flex: none; }
 }
-.pn { width: 20px; height: 20px; border-radius: 50%; display: grid; place-items: center; font-size: 11px; font-weight: 700; border: 2px solid var(--ok); flex: none; font-variant-numeric: tabular-nums; }
+.pn { width: 20px; height: 20px; border-radius: 50%; display: block; text-align: center; align-content: center; text-box: trim-both cap alphabetic; font-size: 11px; font-weight: 700; border: 2px solid var(--ok); flex: none; font-variant-numeric: tabular-nums lining-nums; }
 .pn.partial { border-color: var(--warn); } .pn.dead, .pn.excludes-only { border-color: var(--bad); } .pn.err { border-color: var(--bad); color: var(--bad); }
 .errdot { width: 7px; height: 7px; border-radius: 50%; background: var(--bad); flex: none; }
 .warndot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); flex: none; }
@@ -489,7 +499,7 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 .stage-row { display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: center; position: relative; padding: 6px 0; color: inherit; }
 .stage-row::before { content: ""; position: absolute; left: 13px; top: 0; bottom: 0; width: 2px; background: var(--line); }
 .stage-row:first-child::before { top: 50%; } .stage-row:last-child::before { bottom: 50%; }
-.node { width: 28px; height: 28px; border-radius: 50%; background: var(--surface); border: 2px solid var(--ok); display: grid; place-items: center; font-weight: 700; font-size: 12.5px; position: relative; z-index: 1; font-variant-numeric: tabular-nums; }
+.node { width: 28px; height: 28px; border-radius: 50%; background: var(--surface); border: 2px solid var(--ok); display: block; text-align: center; align-content: center; text-box: trim-both cap alphabetic; font-weight: 700; font-size: 12.5px; position: relative; z-index: 1; font-variant-numeric: tabular-nums; }
 .stage-row.partial .node { border-color: var(--warn); } .stage-row.dead .node, .stage-row.excludes-only .node { border-color: var(--bad); }
 .stage-row.hit .node { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 .stage-row.hit b { color: var(--accent-ink); }
@@ -540,14 +550,15 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 }
 
 /* мониторинг */
-.upbar { display: inline-flex; gap: 2px; align-items: flex-end; flex: none; }
-.upbar i { display: block; width: 4px; height: 14px; border-radius: 1px; }
-.upbar i.ok { background: var(--ok); opacity: .75; } .upbar i.bad { background: var(--bad); }
+/* recent checks as one continuous band, like the history on «Мониторинг»: separate bars never come out even */
+.upbar { display: inline-flex; flex: none; width: 96px; height: 10px; border-radius: 3px; overflow: hidden; }
+.upbar i { display: block; flex: 1 1 0; }
+.upbar i.ok { background: var(--ok); } .upbar i.bad { background: var(--bad); }
 .mon-mini { display: grid; gap: 2px; margin-inline: -6px; }
 .mon-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 7px; background: none; border: 0; cursor: pointer; text-align: left; min-width: 0; }
 .mon-row:hover { background: var(--soft); }
 .mon-row .ellipsis { flex: 1; }
-.mon-row .upbar i { width: 3px; height: 11px; }
+.mon-row .upbar { width: 80px; height: 8px; }
 /* Monitoring: summary, table and timeline. Result colours: ok — opened, slow — over 5 s, bad — did not open, none — not checked */
 .mon-sum { display: flex; flex-wrap: wrap; gap: 10px 28px; align-items: flex-end; padding: 4px 0 2px; }
 .mon-sum .k { display: grid; gap: 4px; min-width: 0; }
@@ -574,10 +585,12 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .mon-host .linkish:hover { color: var(--accent-ink); text-decoration: underline; }
 .mon-host .linkish:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
 .mon-hcell { width: 42%; min-width: 180px; }
-.mhist { display: flex; gap: var(--cg, 1px); height: 18px; }
-.mhist i { flex: 1 1 0; min-width: 1px; border-radius: 1px; }
-.mhist[style*="--cw"] i { flex: none; width: var(--cw); }   /* whole-pixel cells once pixelCells() has measured the bar */
-.mhist .ok { opacity: .8; }
+/* history as one continuous band: 96 separate cells never come out even (each rounds to screen pixels on its own,
+   worst at 125 % and 150 % scaling), a band without gaps has no rhythm to break — runs of one result merge, failures
+   stand out as coloured stretches. Every check stays its own element for the tooltip. Solid colours, no opacity:
+   semi-transparent neighbours show seams where their edges overlap. */
+.mhist { display: flex; height: 12px; border-radius: 4px; overflow: hidden; }
+.mhist i { flex: 1 1 0; min-width: 1px; }
 .mon-why { margin-top: 3px; max-width: 32ch; }
 .mon-acts { display: flex; gap: 2px; justify-content: flex-end; }
 .mon-narrow { display: none; }
@@ -585,10 +598,8 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .mtl-host { display: flex; align-items: center; gap: 8px; font-weight: 600; white-space: nowrap; }
 .mtl-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--line); }
 .mtl-dot.ok { background: var(--ok); } .mtl-dot.slow { background: var(--warn); } .mtl-dot.bad { background: var(--bad); }
-.mtl-cells { display: grid; grid-template-columns: repeat(96, minmax(0, 1fr)); gap: var(--cg, 1px); height: 22px; }
-.mtl-cells i { border-radius: 1px; }
-.mtl-cells i.ok { opacity: .8; }
-.mtl-axis { grid-column: 2; width: var(--bw, auto); max-width: 100%; display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
+.mtl-cells { display: grid; grid-template-columns: repeat(96, minmax(0, 1fr)); height: 14px; border-radius: 4px; overflow: hidden; }
+.mtl-axis { grid-column: 2; display: flex; justify-content: space-between; font-size: 12px; color: var(--muted); }
 .mtl-note { grid-column: 1 / -1; font-size: 13px; padding: 8px 10px; border-radius: var(--radius); background: var(--bad-soft); color: var(--bad); }
 .mtl-legend { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 16px; }
 .mtl-legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
@@ -629,7 +640,8 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 @media (max-width: 759px) { .notice-actions { width: 100%; } }
 
 /* управление сервисом: на широком экране — в блоке «Сервис», на узком — значки в верхней панели */
-.svc-buttons { display: flex; gap: 6px; flex-wrap: wrap; }
+.svc-buttons { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; }   /* one row of equal buttons */
+:root:root[data-variant] .svc-buttons > .btn.small { padding-inline: 8px; }   /* above the style's own button padding, so two fit in a narrow column */
 .svc-ctl { display: inline-flex; gap: 2px; }
 .svc-ctl .ctl-label { display: none; }
 @media (min-width: 1100px) { .svc-ctl { display: none; } #refresh-top { display: none; } }
@@ -693,8 +705,10 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 
 /* ---------- выравнивание иконок с текстом ----------
    Иконки центрируются по рамке строки, а середина строчных букв на ~1px ниже —
-   поэтому рядом с текстом иконку опускаем на 1px (в квадратных кнопках-иконках не трогаем). */
-.btn:not(.icon) > svg, .tabs a > svg, .bottom a > svg, .icon-link > svg, .chip > svg { position: relative; top: 1px; }
+   поэтому рядом с текстом иконку опускаем на 1px (в квадратных кнопках-иконках не трогаем).
+   Buttons are not nudged: measured by ink, a centred icon already sits on the middle of the button and of its label,
+   and the 1px drop put it 1.5px low. */
+.tabs a > svg, .bottom a > svg, .icon-link > svg, .chip > svg { position: relative; top: 1px; }
 .icon-link { display: inline-flex; align-items: center; gap: 5px; }
 .check-go { padding-left: 12px; padding-right: 10px; }
 .check-go svg { width: 15px; height: 15px; }
@@ -753,9 +767,9 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
   :root:not([data-layout="tabs"]) .svc-ctl { display: inline-flex; }
   :root:not([data-layout="tabs"]) #refresh-top { display: inline-flex; }
 }
-@media (min-width: 1280px) { :root[data-layout="menu"] .svc-ctl .ctl-label { display: inline; } }
+@media (min-width: 1280px) { :root[data-layout="menu"] .svc-ctl .ctl-label { display: block; text-box: trim-both cap alphabetic; } }
 /* «Вокруг сайта»: в шапке ещё и вкладки, и поле проверки — подписи второстепенных кнопок появляются только на очень широком экране */
-@media (min-width: 1760px) { :root[data-layout="site"] .svc-ctl .ctl-label { display: inline; } }
+@media (min-width: 1760px) { :root[data-layout="site"] .svc-ctl .ctl-label { display: block; text-box: trim-both cap alphabetic; } }
 @media (max-width: 1759px) { :root[data-layout="site"] .repo-link span, :root[data-layout="site"] .https-link span, :root[data-layout="site"] .undo-label { display: none; } }
 /* шапка не должна быть шире экрана: на промежуточных ширинах подписи остаются только у открытой вкладки */
 @media (min-width: 1100px) and (max-width: 1279px) { :root[data-layout="tabs"] .tabs a:not(.on) span { display: none; } }
@@ -1135,6 +1149,10 @@ label.chk > input[type="checkbox"], label.chk > input[type="radio"] { flex: none
 :root[data-variant="k"] .btn.danger:not(.ghost) { border-color: var(--bad); color: var(--bad); }
 :root[data-variant="k"] .btn.warn:not(.ghost) { border-color: var(--warn); color: var(--warn); }
 :root[data-variant="k"] .btn.icon:not(.ghost) { padding: 0; }
+/* a quiet button with a label on the page: the same size and frame as the others in its row */
+:root[data-variant="k"] main .btn.ghost:not(.icon) { font-weight: 400; min-height: 38px; padding: 6px 18px; background: var(--surface); }
+:root[data-variant="k"] main .btn.small.ghost:not(.icon) { min-height: 32px; padding: 4px 12px; }
+:root[data-variant="k"] main .btn.ghost:not(.icon):hover { background: var(--accent-soft); }
 /* поля — белые, с серой рамкой */
 :root[data-variant="k"] .input, :root[data-variant="k"] .select, :root[data-variant="k"] .textarea { background: var(--surface); border-color: var(--k-field); min-height: 40px; }
 :root[data-variant="k"] .quick .input { min-height: 36px; border-color: var(--line); }
@@ -1162,9 +1180,11 @@ label.chk > input[type="checkbox"], label.chk > input[type="radio"] { flex: none
 :root[data-variant="k"] .input.mono { font-size: 14.5px; }
 :root[data-variant="k"] .btn:not(.ghost) { min-height: 40px; font-size: 16px; padding: 6px 20px; }
 :root[data-variant="k"] .btn.small:not(.ghost) { min-height: 34px; font-size: 14.5px; padding: 4px 14px; }
+:root[data-variant="k"] main .btn.ghost:not(.icon) { min-height: 40px; font-size: 16px; padding: 6px 20px; }
+:root[data-variant="k"] main .btn.small.ghost:not(.icon) { min-height: 34px; font-size: 14.5px; padding: 4px 14px; }
 /* «Проблемы»: кнопка исправления не крупнее текста замечания, иначе список из кнопок, а не из замечаний */
 :root[data-variant="k"] .problem .item-main b { font-size: 14.5px; }
-@media (min-width: 760px) { :root[data-variant="k"] .problem .btn.small:not(.ghost) { min-height: 26px; font-size: 13px; padding: 1px 10px; } }
+@media (min-width: 760px) { :root[data-variant="k"] .problem .btn.small:not(.ghost), :root[data-variant="k"] main .problem .btn.small.ghost:not(.icon) { min-height: 26px; font-size: 13px; padding: 1px 10px; } }
 :root[data-variant="k"] .tbl { font-size: 15px; }
 :root[data-variant="k"] .tbl th { font-size: 15px; padding: 12px 14px; }
 :root[data-variant="k"] .tbl td { padding: 12px 14px; }
@@ -1276,7 +1296,8 @@ label.chk > input[type="checkbox"], label.chk > input[type="radio"] { flex: none
 /* формы, проверки и таблицы: справа колонка состояния (сервис, замечания, мониторинг, копии) */
 @container main (min-width: 1480px) {
   .mwrap { grid-template-columns: minmax(0, 1fr) 340px; }
-  .rail { display: grid; gap: 14px; align-content: start; position: sticky; top: calc(var(--top-h) + 16px); max-height: calc(100vh - var(--top-h) - 32px); overflow-y: auto; }
+  /* part of the page, not a scroller of its own: two scrollbars side by side read as a fault */
+  .rail { display: grid; gap: 14px; align-content: start; }
   /* строки форм: подсказки и замечания — справа от поля, а не под ним */
   .formy .frow { grid-template-columns: 170px minmax(0, 560px) minmax(0, 1fr); grid-auto-flow: dense; column-gap: 24px; }
   .formy .frow > :not(.lbl):not(.hint) { grid-column: 2; }
@@ -1341,6 +1362,12 @@ label.chk > input[type="checkbox"], label.chk > input[type="radio"] { flex: none
 ::-webkit-scrollbar-thumb:hover, ::-webkit-scrollbar-thumb:active { background: var(--accent); }
 ::-webkit-scrollbar-button { display: none; }
 .subtabs::-webkit-scrollbar { display: none; }
+/* the menu scrolls on its own (it stays in place while the page scrolls), but its bar shows only under the pointer —
+   otherwise two bars stand on screen at once */
+#side::-webkit-scrollbar-track, #side::-webkit-scrollbar-thumb { background: transparent; border-color: transparent; }
+#side:hover::-webkit-scrollbar-track { background: var(--sb-track); border-color: var(--sb-track); }
+#side:hover::-webkit-scrollbar-thumb { background: var(--sb-thumb); border-color: var(--sb-track); }
+#side:hover::-webkit-scrollbar-thumb:hover { background: var(--accent); }
 
 /* ---------- Z · zemidala: the K layout with the brand palette (data-variant="k" data-palette="zd") ----------
    Orange #ff6a14 fills (buttons, switches, markers) carry black text (7:1); orange as text is darker on light
