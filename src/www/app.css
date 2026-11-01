@@ -58,7 +58,9 @@ svg { width: 17px; height: 17px; flex: none; }
 .muted { color: var(--muted); } .faint { color: var(--faint); } .sm { font-size: 12.5px; } .num { font-variant-numeric: tabular-nums; }
 .grow { flex: 1; } .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .between { justify-content: space-between; }
 .stack { display: grid; gap: 10px; align-content: start; min-width: 0; }
-.ellipsis { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+/* clip, not hidden, with room around: a line trimmed to its capitals (text-box) must not lose descenders, commas and
+   brackets, while the end still turns into «…» */
+.ellipsis { overflow: clip; overflow-clip-margin: 6px; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
 .boot { padding: 40vh 16px; text-align: center; color: var(--muted); }
 :focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
@@ -114,7 +116,12 @@ main { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap:
 .blk-h h2 { font-size: 14.5px; flex: 1; }
 .panel-h h2 { flex: 1; }
 .vh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
-.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: 34px; padding: 5px 12px; border-radius: var(--ctl-r); border: 1px solid var(--ctl-line); background: var(--surface); color: var(--fg); font-weight: 500; font-size: 13.5px; cursor: pointer; white-space: nowrap; text-decoration: none; }
+/* Control sizes in one place: every field, dropdown, button, switch half and icon button takes its height from
+   these two; a style or the phone changes only them, never an element on its own */
+:root { --ctl-h: 34px; --ctl-hs: 28px; }
+:root[data-variant="k"] { --ctl-h: 36px; --ctl-hs: 32px; }
+@media (max-width: 759px) { :root:root { --ctl-h: 40px; --ctl-hs: 36px; } }   /* a finger needs 40 px */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--ctl-h); padding: 0 12px; border-radius: var(--ctl-r); border: 1px solid var(--ctl-line); background: var(--surface); color: var(--fg); font-weight: 500; font-size: 13.5px; cursor: pointer; white-space: nowrap; text-decoration: none; }
 /* the label's line box is trimmed to cap height and baseline, so centring puts the capitals, not the font's ascent and
    descent, in the middle — the icon beside them is centred too. Without it the text rode 1.5px high and the icon
    looked 2px low next to it. Browsers without text-box keep the old look. */
@@ -124,9 +131,9 @@ main { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap:
 :is(.row, .panel-h, .blk-h):has(> .btn) > :is(span, p, small, b, strong, em, label):not(.btn, .chip, .mst, .tag, .pchip, .badge, .st, .dd-btn, .spin, .dot, .sw, .seg) { text-box: trim-both cap alphabetic; }
 .btn:hover { background: var(--soft); }
 .btn:disabled { opacity: .5; cursor: default; }
-.btn.icon { width: 34px; padding: 0; }
-.btn.small { min-height: 28px; padding: 2px 9px; font-size: 12.5px; }
-.btn.small.icon { width: 28px; }
+.btn.icon { width: var(--ctl-h); padding: 0; }
+.btn.small { min-height: var(--ctl-hs); padding: 0 9px; font-size: 12.5px; }
+.btn.small.icon { width: var(--ctl-hs); }
 .btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
 .btn.ghost:hover { background: var(--soft); color: var(--fg); }
 /* a button with a label is always drawn as a button: bare text beside framed buttons read as stray words */
@@ -136,21 +143,22 @@ main { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap:
 .btn.primary:hover { filter: brightness(1.07); }
 .btn.danger { color: var(--bad); }
 .btn.warn { background: var(--warn); border-color: var(--warn); color: var(--surface); }
-@media (max-width: 759px) { .btn { min-height: 42px; } .btn.icon { width: 42px; } .btn.small { min-height: 36px; } .btn.small.icon { width: 36px; } }
-.input, .select, .textarea { min-width: 0; min-height: 34px; border: 1px solid var(--ctl-line); border-radius: calc(var(--radius) * .7 + 2px); background: var(--bg); color: var(--fg); padding: 5px 10px; outline: none; }
+.input, .select, .textarea { min-width: 0; min-height: var(--ctl-h); border: 1px solid var(--ctl-line); border-radius: calc(var(--radius) * .7 + 2px); background: var(--bg); color: var(--fg); padding: 5px 10px; outline: none; }
 .input:focus, .select:focus, .textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .input.mono { font-family: var(--mono); font-size: 12.5px; }
 .textarea { font-family: var(--mono); font-size: 12.5px; line-height: 1.55; resize: vertical; min-height: 80px; width: 100%; }
-@media (max-width: 759px) { .input, .select { min-height: 42px; font-size: 16px; } }
+@media (max-width: 759px) { .input, .select { font-size: 16px; } }   /* 16 px keeps phones from zooming into the field */
 /* Own dropdowns (app.js, «dropdowns»): the button takes the select's classes, the native select stays hidden */
 .dd-native { display: none !important; }
 .dd-btn { display: inline-flex; align-items: center; gap: 6px; text-align: left; cursor: pointer; vertical-align: middle; }
 .dd-btn[hidden] { display: none; }
 .dd-in { display: grid; flex: 1 1 auto; min-width: 0; }
 .dd-in > * { grid-area: 1 / 1; min-width: 0; }
-.dd-t { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dd-t { overflow: clip; overflow-clip-margin: 6px; text-overflow: ellipsis; white-space: nowrap; }   /* see .ellipsis */
 .dd-sz { display: grid; height: 0; overflow: hidden; visibility: hidden; }
 .dd-sz > span { grid-area: 1 / 1; white-space: nowrap; }
+/* the chosen text centred by its capitals, like button labels beside it — otherwise the two sit 1.5px apart */
+.dd-t, .dd-sz > span { text-box: trim-both cap alphabetic; }
 .dd-arr { flex: none; width: 7px; height: 7px; margin: 0 3px 3px 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); transition: transform .15s; }
 .dd-btn.dd-on .dd-arr { transform: translateY(3px) rotate(-135deg); }
 .dd-btn:hover:not(:disabled) { border-color: var(--accent); }
@@ -234,7 +242,7 @@ button.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
 .notice .t { color: var(--fg); overflow-wrap: anywhere; }
 .notice svg { margin-top: 1px; }
 .seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--line); border-radius: calc(var(--radius) * .7 + 2px); padding: 2px; background: var(--bg); justify-self: start; }
-.seg button { border: 0; background: none; color: var(--muted); padding: 4px 11px; border-radius: calc(var(--radius) * .5 + 2px); cursor: pointer; min-height: 28px; font-size: 13px; font-weight: 500; }
+.seg button { border: 0; background: none; color: var(--muted); padding: 0 11px; border-radius: calc(var(--radius) * .5 + 2px); cursor: pointer; min-height: calc(var(--ctl-h) - 6px);   /* with the 2 px frame and padding of .seg the whole switch is --ctl-h */ font-size: 13px; font-weight: 500; }
 /* the chosen half must read at a glance: accent tint, accent text and an accent outline, not a shade lighter */
 .seg button.on { background: var(--accent-soft); color: var(--accent-ink); box-shadow: inset 0 0 0 1px var(--accent); }
 /* labels and numbers centred by their capitals, not by the font's ascent and descent (they rode 1–1.5px high) */
@@ -563,25 +571,15 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 }
 
 /* мониторинг */
-/* response-time line (msSpark): grey — how long the answer took, red stroke — failed, amber — over 5 s, gap — not checked */
-.spark { position: relative; height: 30px; min-width: 120px; }
-.spark > svg { position: absolute; inset: 0; width: 100%; height: 100%; overflow: visible; }
-.spark .ln { fill: none; stroke: var(--muted); stroke-width: 1.5; stroke-linejoin: round; vector-effect: non-scaling-stroke; }
-.spark .ar { fill: var(--muted); opacity: .12; }
-/* shaded stretches under the line, one rule for both: did not open — red, answers over 5 s — amber */
-/* solid and saturated: a see-through tint mixed with a dark background into dusty pink and brown */
-.spark .x { fill: color-mix(in srgb, var(--bad) 35%, #e0202a); }
-.spark .sl { fill: color-mix(in srgb, var(--warn) 45%, #e89400); }
-.spark-hits { position: absolute; inset: 0; display: flex; }
-.spark-hits i { flex: 1 1 0; }
-.spark.mini { min-width: 60px; height: 18px; }
-/* the other chart looks (MON_CHARTS); widths and gaps are multiples of 4 px — whole screen pixels at 125–175 %.
+/* chart looks (MON_CHARTS) as in the mockup; widths and gaps are multiples of 4 px — whole screen pixels at 125–175 %.
    Laid out from the right: when the cell is narrower, the oldest are cut, the newest stay */
+.ch-wrap { display: grid; gap: 3px; }
+.ch-axis { display: flex; justify-content: space-between; width: 380px; max-width: 100%; font-size: 11.5px; color: var(--faint); }
 .ch-ticks, .ch-cols, .ch-blocks { display: flex; justify-content: flex-end; gap: 4px; overflow: hidden; }
 .ch-ticks { height: 16px; }
 .ch-ticks i, .ch-cols i { width: 4px; flex: none; border-radius: 1px; background: var(--ok); }
 .ch-ticks i.none, .ch-cols i.none { background: var(--line); }
-.ch-cols { height: 28px; align-items: flex-end; }
+.ch-cols { height: 32px; align-items: flex-end; }
 .ch-cols i { background: var(--muted); height: 100%; }
 .ch-cols i.none { height: 4px; }
 :is(.ch-ticks, .ch-cols, .ch-blocks, .ch-hours) i.bad { background: var(--bad); }
@@ -600,7 +598,7 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .mon-box { container: monbox / inline-size; }
 @container monbox (max-width: 1000px) { .mon-tbl .mon-when { display: none; } }
 @container monbox (max-width: 880px) {
-  .ch-ticks, .ch-cols { max-width: 188px; }
+  .ch-ticks, .ch-cols, .ch-axis { max-width: 188px; }
   /* hours and blocks get smaller instead of cut: all 24 hours and all 12 blocks stay (8 and 12 px — still whole pixels) */
   .ch-hours > div { grid-template-columns: repeat(24, 8px); grid-auto-rows: 8px; }
   .ch-hours i { border-radius: 2px; }
@@ -618,7 +616,12 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .mon-row:hover { background: var(--soft); }
 /* laid out like a table: names on the left, charts of one width (16 × 8 px) lined up on the right */
 .mon-row .ellipsis { flex: 1 1 0; min-width: 0; }
-.mon-row > :is(.spark, .ch-ticks, .ch-cols) { flex: none; width: 124px; min-width: 0; }
+.mon-row > :is(.ch-ticks, .ch-cols, .ch-hmini, .ch-wmini) { flex: none; width: 124px; min-width: 0; }
+.ch-hmini { display: flex; justify-content: flex-end; gap: 4px; }
+.ch-hmini i { width: 8px; height: 8px; border-radius: 2px; flex: none; background: color-mix(in srgb, var(--fg) 16%, var(--surface)); }
+.ch-hmini i.bad { background: var(--bad); } .ch-hmini i.slow { background: var(--warn); }
+.ch-hmini i.none { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.ch-wmini { text-align: right; font-size: 13px; font-weight: 600; } .ch-wmini.ok { color: var(--ok); } .ch-wmini.bad { color: var(--bad); }
 /* Monitoring: three equal summary tiles, the switch row, the table and the timeline */
 .mon-ctrls { align-items: center; }
 .mon-sw { display: inline-flex; align-items: center; gap: 8px; font-size: 14px; cursor: pointer; }
@@ -630,6 +633,8 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 @media (max-width: 599px) { .mon-tiles { grid-template-columns: 1fr 1fr; } .mon-tile:last-child { grid-column: 1 / -1; } }
 .mtl-legend .slow::before { background: var(--warn); } .mtl-legend .bad::before { background: var(--bad); }
 .mtl-legend .none::before { background: var(--line); } .mtl-legend .ln::before { background: var(--muted); }
+.mtl-legend .ok::before { background: var(--ok); } .mtl-legend .cell::before { background: color-mix(in srgb, var(--fg) 16%, var(--surface)); }
+.mon-box .scroll > .mtl-legend { padding: 10px 2px 2px; }
 .mon-viewrow { margin-top: 4px; }
 .mst { display: inline-flex; align-items: center; gap: 6px; font-size: 13px; padding: 2px 9px; border-radius: var(--ctl-r); white-space: nowrap; background: var(--soft); color: var(--muted); }
 .mst::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
@@ -648,6 +653,17 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .mon-acts { display: flex; gap: 6px; justify-content: flex-end; }
 .mon-narrow { display: none; }
 .mtl { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 6px 12px; align-items: center; }
+/* a fixed-size chart: its column is as wide as the chart — it starts right after the names and the axis lies exactly under it */
+.mtl.ch-fixed { grid-template-columns: max-content max-content max-content; justify-content: start; column-gap: 16px; }
+/* on the timeline the 48 marks grow with the room: 4 → 28 px wide, always a multiple of 4 with a 4 px gap, so they
+   stay even and the chart spans the panel instead of a small strip on a wide screen */
+.mtl.ch-fixed :is(.ch-ticks, .ch-cols) i { width: var(--tw, 4px); }
+@container monbox (min-width: 840px) { .mtl.ch-fixed { --tw: 8px; } }
+@container monbox (min-width: 1030px) { .mtl.ch-fixed { --tw: 12px; } }
+@container monbox (min-width: 1220px) { .mtl.ch-fixed { --tw: 16px; } }
+@container monbox (min-width: 1410px) { .mtl.ch-fixed { --tw: 20px; } }
+@container monbox (min-width: 1600px) { .mtl.ch-fixed { --tw: 24px; } }
+@container monbox (min-width: 1790px) { .mtl.ch-fixed { --tw: 28px; } }
 .mtl-host { display: flex; align-items: center; gap: 8px; font-weight: 600; white-space: nowrap; }
 .mtl-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--line); }
 .mtl-dot.ok { background: var(--ok); } .mtl-dot.slow { background: var(--warn); } .mtl-dot.bad { background: var(--bad); }
@@ -662,8 +678,8 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
   .tbl.mon-tbl th, .tbl.mon-tbl td { padding-left: 4px; padding-right: 4px; }
   .mon-tbl .mon-host { font-size: 13px; }
   .scroll > table.tbl.mon-tbl:has(th) { min-width: 0; }
-  .mtl { grid-template-columns: minmax(0, 1fr) max-content; }
-  .mtl > .spark, .mtl-axis { grid-column: 1 / -1; }
+  .mtl, .mtl.ch-fixed { grid-template-columns: minmax(0, 1fr) max-content; }
+  .mtl > :is(.ch-ticks, .ch-cols), .mtl-axis { grid-column: 1 / -1; min-width: 0; }
   .mtl-host { white-space: normal; overflow-wrap: anywhere; }
 }
 @media (max-width: 759px) { .https-link span { display: none; } .top-in { gap: 8px; padding: 0 12px; } }
@@ -773,7 +789,7 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 :root:not([data-variant="k"]) .frow:has(> .lbl + :is(.input, .select, .dd-btn)),
 :root:not([data-variant="k"]) .frow:has(> .lbl + .row > :first-child:is(.input, .select, .dd-btn)) { align-items: start; }
 :root:not([data-variant="k"]) .frow:has(> .lbl + :is(.input, .select, .dd-btn)) > .lbl,
-:root:not([data-variant="k"]) .frow:has(> .lbl + .row > :first-child:is(.input, .select, .dd-btn)) > .lbl { min-height: 34px; display: flex; align-items: center; }
+:root:not([data-variant="k"]) .frow:has(> .lbl + .row > :first-child:is(.input, .select, .dd-btn)) > .lbl { min-height: var(--ctl-h); display: flex; align-items: center; }
 .cmd-row { grid-template-columns: 290px minmax(0, 1fr); }
 .cmd-row > .lbl code { white-space: nowrap; color: var(--fg); }
 @media (max-width: 759px) { .cmd-row { grid-template-columns: 1fr; gap: 2px; } }
@@ -807,7 +823,7 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 #burger, .quick { display: none; }
 /* поле проверки сжимается, если шапке тесно: пороги ниже считают ширину окна вместе с полосой прокрутки, а места без неё меньше */
 .quick { gap: 6px; flex: 0 1 auto; min-width: 0; }
-.quick .input { width: 200px; min-width: 60px; flex: 0 1 auto; min-height: 34px; }
+.quick .input { width: 200px; min-width: 60px; flex: 0 1 auto; min-height: var(--ctl-h); }
 @media (min-width: 760px) { :root:not([data-layout="tabs"]) .quick { display: flex; } }
 @media (min-width: 760px) and (max-width: 1099px) { :root[data-layout="menu"] #burger { display: inline-flex; } .quick .input { width: 150px; } }
 @media (min-width: 1100px) {
@@ -931,7 +947,7 @@ a.over-row:hover { background: var(--soft); }
 .ui-tip[hidden] { display: none; }
 /* «Оформление»: colour scheme buttons; the swatch is the scheme's page colour and its accent, half and half */
 .tints { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.tint { display: inline-flex; align-items: center; gap: 7px; min-height: 34px; padding: 4px 12px; border-radius: 999px; border: 1px solid var(--ctl-line, var(--line)); background: var(--surface); color: var(--fg); font: inherit; font-size: 14px; cursor: pointer; }
+.tint { display: inline-flex; align-items: center; gap: 7px; min-height: var(--ctl-h); padding: 4px 12px; border-radius: 999px; border: 1px solid var(--ctl-line, var(--line)); background: var(--surface); color: var(--fg); font: inherit; font-size: 14px; cursor: pointer; }
 .tint:has(i) { padding-left: 8px; }
 .tint i { width: 18px; height: 18px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1px rgba(127, 127, 127, .45); }
 .tint:hover { border-color: var(--accent); }
@@ -1191,8 +1207,8 @@ label.chk > input[type="checkbox"], label.chk > input[type="radio"] { flex: none
 :root[data-variant="k"] .blk-h h2 { font-size: 14px; font-weight: 500; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
 :root[data-variant="k"] .panel-h h2 { font-size: 19px; font-weight: 700; }
 /* кнопки: синяя обводка, главная — заливка */
-:root[data-variant="k"] .btn:not(.ghost) { border-color: var(--accent); color: var(--accent-ink); background: var(--surface); font-weight: 400; min-height: 38px; padding: 6px 18px; }
-:root[data-variant="k"] .btn.small:not(.ghost) { min-height: 32px; padding: 4px 12px; }
+:root[data-variant="k"] .btn:not(.ghost) { border-color: var(--accent); color: var(--accent-ink); background: var(--surface); font-weight: 400; min-height: var(--ctl-h); padding: 0 16px; }
+:root[data-variant="k"] .btn.small:not(.ghost) { min-height: var(--ctl-hs); padding: 0 12px; }
 :root[data-variant="k"] .cfg-tools { --bar-h: 36px; }
 :root[data-variant="k"] .cfg-tools > .input { min-height: var(--bar-h); padding-block: 0; }
 :root[data-variant="k"] .btn:not(.ghost):hover { background: var(--accent-soft); }
@@ -1202,12 +1218,12 @@ label.chk > input[type="checkbox"], label.chk > input[type="radio"] { flex: none
 :root[data-variant="k"] .btn.warn:not(.ghost) { border-color: var(--warn); color: var(--warn); }
 :root[data-variant="k"] .btn.icon:not(.ghost) { padding: 0; }
 /* a quiet button with a label on the page: the same size and frame as the others in its row */
-:root[data-variant="k"] :is(main, #side) .btn.ghost:not(.icon) { font-weight: 400; min-height: 38px; padding: 6px 18px; background: var(--surface); }
-:root[data-variant="k"] :is(main, #side) .btn.small.ghost:not(.icon) { min-height: 32px; padding: 4px 12px; }
+:root[data-variant="k"] :is(main, #side) .btn.ghost:not(.icon) { font-weight: 400; min-height: var(--ctl-h); padding: 0 16px; background: var(--surface); }
+:root[data-variant="k"] :is(main, #side) .btn.small.ghost:not(.icon) { min-height: var(--ctl-hs); padding: 0 12px; }
 :root[data-variant="k"] :is(main, #side) .btn.ghost:not(.icon):hover { background: var(--accent-soft); }
 /* поля — белые, с серой рамкой */
-:root[data-variant="k"] .input, :root[data-variant="k"] .select, :root[data-variant="k"] .textarea { background: var(--surface); border-color: var(--k-field); min-height: 40px; }
-:root[data-variant="k"] .quick .input { min-height: 36px; border-color: var(--line); }
+:root[data-variant="k"] .input, :root[data-variant="k"] .select, :root[data-variant="k"] .textarea { background: var(--surface); border-color: var(--k-field); min-height: var(--ctl-h); }
+:root[data-variant="k"] .quick .input { min-height: var(--ctl-h); border-color: var(--line); }
 :root[data-variant="k"] input[type="checkbox"], :root[data-variant="k"] input[type="radio"] { accent-color: var(--accent); }
 /* плашки состояния: прямоугольные, заглавными */
 :root[data-variant="k"] .pill { text-transform: uppercase; letter-spacing: .04em; font-weight: 500; font-size: 12px; }
@@ -1228,12 +1244,14 @@ label.chk > input[type="checkbox"], label.chk > input[type="radio"] { flex: none
 :root[data-variant="k"] .panel-h h2 { font-size: 24px; }
 :root[data-variant="k"] .blk-h h2 { font-size: 15px; }
 :root[data-variant="k"] .lbl { font-size: 15px; }
-:root[data-variant="k"] .input, :root[data-variant="k"] .select, :root[data-variant="k"] .textarea { min-height: 44px; font-size: 16px; padding: 8px 12px; }
-:root[data-variant="k"] .input.mono { font-size: 14.5px; }
-:root[data-variant="k"] .btn:not(.ghost) { min-height: 40px; font-size: 16px; padding: 6px 20px; }
-:root[data-variant="k"] .btn.small:not(.ghost) { min-height: 34px; font-size: 14.5px; padding: 4px 14px; }
-:root[data-variant="k"] :is(main, #side) .btn.ghost:not(.icon) { min-height: 40px; font-size: 16px; padding: 6px 20px; }
-:root[data-variant="k"] :is(main, #side) .btn.small.ghost:not(.icon) { min-height: 34px; font-size: 14.5px; padding: 4px 14px; }
+/* controls only as tall as the text needs: one height for fields, dropdowns, buttons and switches — 36 px,
+   small buttons 32 px (they were 40–50 px and stood unevenly next to each other) */
+:root[data-variant="k"] .input, :root[data-variant="k"] .select, :root[data-variant="k"] .textarea { min-height: var(--ctl-h); font-size: 15px; padding: 5px 12px; }
+:root[data-variant="k"] .input.mono { font-size: 14px; }
+:root[data-variant="k"] .btn:not(.ghost) { min-height: var(--ctl-h); font-size: 15px; padding: 0 16px; }
+:root[data-variant="k"] .btn.small:not(.ghost) { min-height: var(--ctl-hs); font-size: 14px; padding: 0 12px; }
+:root[data-variant="k"] :is(main, #side) .btn.ghost:not(.icon) { min-height: var(--ctl-h); font-size: 15px; padding: 0 16px; }
+:root[data-variant="k"] :is(main, #side) .btn.small.ghost:not(.icon) { min-height: var(--ctl-hs); font-size: 14px; padding: 0 12px; }
 /* «Проблемы»: кнопка исправления не крупнее текста замечания, иначе список из кнопок, а не из замечаний */
 :root[data-variant="k"] .problem .item-main b { font-size: 14.5px; }
 @media (min-width: 760px) { :root[data-variant="k"] .problem .btn.small:not(.ghost), :root[data-variant="k"] :is(main, #side) .problem .btn.small.ghost:not(.icon) { min-height: 26px; font-size: 13px; padding: 1px 10px; } }
@@ -1253,7 +1271,7 @@ label.chk > input[type="checkbox"], label.chk > input[type="radio"] { flex: none
 :root[data-variant="k"] input[type="checkbox"]:indeterminate::after { content: ""; width: 10px; height: 2px; background: #fff; }
 /* переключатель вида — рамки-кнопки, как «Clients | Categories | Applications» */
 :root[data-variant="k"] .seg { border: 0; padding: 0; background: none; gap: 0; }
-:root[data-variant="k"] .seg button { border: 1px solid var(--line); border-radius: 0; margin-left: -1px; min-height: 36px; padding: 6px 16px; font-size: 15px; font-weight: 400; color: var(--muted); background: var(--surface); }
+:root[data-variant="k"] .seg button { border: 1px solid var(--line); border-radius: 0; margin-left: -1px; min-height: var(--ctl-h); padding: 0 14px; font-size: 15px; font-weight: 400; color: var(--muted); background: var(--surface); }
 :root[data-variant="k"] .seg button:first-child { border-radius: 3px 0 0 3px; margin-left: 0; }
 :root[data-variant="k"] .seg button:last-child { border-radius: 0 3px 3px 0; }
 :root[data-variant="k"] .seg button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); box-shadow: none; position: relative; z-index: 1; }
@@ -1282,7 +1300,7 @@ label.chk > input[type="checkbox"], label.chk > input[type="radio"] { flex: none
 :root[data-variant="k"] .frow:has(> .lbl + .input), :root[data-variant="k"] .frow:has(> .lbl + .select) { position: relative; padding-top: 2px; }
 :root[data-variant="k"] .frow:has(> .lbl + .input) > .lbl, :root[data-variant="k"] .frow:has(> .lbl + .select) > .lbl {
   position: absolute; top: -8px; left: 10px; z-index: 1; background: var(--surface); padding: 0 4px; font-size: 13.5px; line-height: 18px; max-width: calc(100% - 24px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-:root[data-variant="k"] .frow > .lbl + .input, :root[data-variant="k"] .frow > .lbl + .select { max-width: 520px; min-height: 50px; font-size: 16.5px; padding: 10px 14px; }
+:root[data-variant="k"] .frow > .lbl + .input, :root[data-variant="k"] .frow > .lbl + .select { max-width: 520px; min-height: var(--ctl-h); font-size: 15px; padding: 5px 12px; }
 :root[data-variant="k"] .frow > .lbl + .input.mono { font-size: 15px; }
 :root[data-variant="k"] .frow + .frow { margin-top: 10px; }
 /* тёмная тема K — цвета со скриншота тёмной темы KeeneticOS 4.2 (справка Keenetic, Buddy 5):
@@ -1464,3 +1482,10 @@ label.chk > input[type="checkbox"], label.chk > input[type="radio"] { flex: none
 .th-z .acc { background: #ff6a14; width: 70%; } .th-z i.card { background: #fff; height: 30px; border: 1px solid #e2e3e8; border-top: 2px solid #ff6a14; }
 .look-new { display: grid; position: relative; }
 .look-new > .tag.new { position: absolute; top: 8px; right: 8px; }
+
+/* a field standing in a row with buttons or a dropdown: all of them one height (the tallest), in every style —
+   styles size fields and buttons separately and they ended up 4–8 px apart; plain text in the row stays centred */
+:is(.row, .quick, .search):has(> .input) > :is(.input, .btn, .dd-btn) { align-self: stretch; }
+/* an icon button is a square: as wide as it is tall in every style (K made them 28 × 34) */
+:root .btn.icon { width: var(--ctl-h); min-height: var(--ctl-h); padding: 0; flex: none; }
+:root .btn.small.icon { width: var(--ctl-hs); min-height: var(--ctl-hs); }

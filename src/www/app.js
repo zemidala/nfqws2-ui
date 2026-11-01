@@ -1230,49 +1230,12 @@ function updateSide() {
   renderSideMonitor(SIDE.monitor);
 }
 
-// Response-time line for a run of checks, oldest first: a grey line of how long each answer took, a red stroke where
-// the check failed, an amber one where it took longer than 5 s, a gap where nothing was checked. items: {ok, ms, tip}
-// or null. The line is SVG, so it scales to any width without the uneven pixels of separate cells; transparent zones
-// on top carry the tooltips.
-const SLOW_MS = 5000;
-function msSpark(items, cls = '') {
-  const n = items.length, W = 1000, H = 30, CAP = 3000;
-  const max = Math.max(1, ...items.filter((x) => x?.ok).map((x) => Math.min(x.ms, CAP)));
-  const X = (i) => n < 2 ? W / 2 : i / (n - 1) * W;
-  const Y = (ms) => H - 2 - Math.min(ms, CAP) / max * (H - 6);
-  const f = (p) => p[0].toFixed(1) + ',' + p[1].toFixed(1);
-  let line = '', area = '', run = [];
-  const flush = () => {
-    if (run.length === 1) run = [[run[0][0] - 4, run[0][1]], [run[0][0] + 4, run[0][1]]];   // a lone check — a short dash
-    if (run.length) { line += 'M' + run.map(f).join('L'); area += `M${run[0][0].toFixed(1)},${H}L${run.map(f).join('L')}L${run.at(-1)[0].toFixed(1)},${H}Z`; }
-    run = [];
-  };
-  // a failed check is an answer never received — the line goes to the top there instead of breaking, so failed and
-  // slow stretches read the same way: the line runs on, the shading under it says what happened
-  items.forEach((x, i) => (x ? run.push([X(i), x.ok ? Y(x.ms) : 1]) : flush()));
-  flush();
-  // a run of failed (or slow) checks is one shaded stretch over the whole time it lasted, half a step either side —
-  // two failures in a row are one event, not two separate strokes
-  const kind = (x) => !x ? '' : !x.ok ? 'x' : x.ms > SLOW_MS ? 'sl' : '';
-  const step = n < 2 ? W : W / (n - 1);
-  let marks = '';
-  for (let i = 0; i < n; i++) {
-    const k = kind(items[i]);
-    if (!k) continue;
-    let j = i;
-    while (j + 1 < n && kind(items[j + 1]) === k) j++;
-    const x0 = Math.max(0, X(i) - step / 2), x1 = Math.min(W, X(j) + step / 2);
-    marks += `<rect class="${k}" x="${x0.toFixed(1)}" y="0" width="${Math.max(x1 - x0, 6).toFixed(1)}" height="${H}"/>`;
-    i = j;
-  }
-  const el = h('div', { class: ('spark ' + cls).trim() }, h('div', { class: 'spark-hits' }, items.map((x) => h('i', { title: x?.tip || null }))));
-  el.insertAdjacentHTML('afterbegin', `<svg viewBox="0 0 ${W} ${H}" preserveAspectRatio="none" aria-hidden="true"><path class="ar" d="${area}"/>${marks}<path class="ln" d="${line}"/></svg>`);
-  return el;
-}
-// Monitoring chart, one of five looks chosen on the page (look.monChart). Input: checks as {ok, ms, tip} or null for
-// none, oldest first. Ticks, columns and blocks are a fixed multiple of 4 px wide with 4 px gaps: at 125, 150 and
-// 175 % scaling those land on whole screen pixels, so they stay even. When the cell is narrower, the oldest are cut.
-const MON_CHARTS = [['ticks', 'Полоски'], ['line', 'Линия'], ['hours', 'Часы'], ['cols', 'Столбики'], ['words', 'Словами']];
+const SLOW_MS = 5000;   // an answer slower than this counts as «slow»
+// Monitoring chart, one of the four looks from the approved mockup (local/design/monitoring-chart.html), chosen on the
+// page (look.monChart). Input: checks as {ok, ms, tip} or null for none, oldest first. Ticks, columns and blocks are a
+// fixed multiple of 4 px wide with 4 px gaps: at 125, 150 and 175 % scaling those land on whole screen pixels, so
+// they stay even. When the cell is narrower, the oldest are cut.
+const MON_CHARTS = [['ticks', 'Полоски'], ['hours', 'Часы'], ['cols', 'Столбики'], ['words', 'Словами']];
 const monChart = () => MON_CHARTS.some(([k]) => k === getLook().monChart) ? getLook().monChart : 'ticks';
 const chKind = (x) => !x ? 'none' : !x.ok ? 'bad' : x.ms > SLOW_MS ? 'slow' : 'ok';
 // n checks → n/size buckets: failed if any failed, slow if any slow, the mean answer time; tooltips joined
@@ -1313,10 +1276,19 @@ function chWords(items) {
   return h('div', { class: 'ch-words' }, text, h('div', { class: 'ch-blocks' }, chBuckets(items, Math.ceil(items.length / 12)).map((x) => h('i', { class: chKind(x), title: x?.tip || null }))));
 }
 // the column's recent checks: response time in ms, 0 — failed (a server before 1.27 sends true/false)
+// The same look as chosen on «Мониторинг», in a short row (the column on the right, the tile on «Обзор»)
 function uptimeBar(recent) {
-  const items = recent.slice(-16).map((v) => ({ ok: !!v, ms: v === true ? 1 : Number(v) || 0 }));   // 16 × (4 + 4) px fits the column
+  const all = recent.map((v) => ({ ok: !!v, ms: v === true ? 1 : Number(v) || 0 }));
+  const items = all.slice(-16);   // 16 × (4 + 4) px fits the row
   const k = monChart();
-  return k === 'line' ? msSpark(items, 'mini') : k === 'cols' ? chCols(items, 'mini') : chTicks(items, 'mini');
+  if (k === 'cols') return chCols(items, 'mini');
+  // hours: the last 10 pairs of checks (an hour each at the usual 30 min) as 8 px squares
+  if (k === 'hours') return h('div', { class: 'ch-hmini' }, chBuckets(all.slice(-20), 2).map((x) => h('i', { class: chKind(x) })));
+  if (k === 'words') {
+    const bad = all.filter((x) => !x.ok).length;
+    return h('span', { class: 'ch-wmini ' + (bad ? 'bad' : 'ok'), text: !bad ? 'без сбоев' : all.at(-1) && !all.at(-1).ok ? 'не открывается' : plural(bad, 'сбой', 'сбоя', 'сбоев') });
+  }
+  return chTicks(items, 'mini');
 }
 
 function renderSideMonitor(el) {
@@ -4404,11 +4376,23 @@ async function viewMonitor(main) {
   const histBar = (hist) => {
     const items = [...Array(Math.max(0, 96 - hist.length)).fill(null), ...hist.slice(-96).map(item)];
     const k = monChart();
-    return k === 'line' ? msSpark(items) : k === 'cols' ? chCols(chBuckets(items, 2)) : k === 'hours' ? chHours(hist.map(item))
-      : k === 'words' ? chWords(hist.slice(-96).map(item)) : chTicks(chBuckets(items, 2));
+    if (k === 'hours') return chHours(hist.map(item));
+    if (k === 'words') return chWords(hist.slice(-96).map(item));
+    // ticks and columns carry their time axis under them, as in the mockup
+    return h('div', { class: 'ch-wrap' }, k === 'cols' ? chCols(chBuckets(items, 2)) : chTicks(chBuckets(items, 2)), axisRow());
   };
-  const chartSel = h('select', { class: 'select', 'aria-label': 'Вид графика' }, MON_CHARTS.map(([k, t]) => h('option', { value: k, text: t, selected: k === monChart() })));
-  chartSel.addEventListener('change', () => { setLook({ monChart: chartSel.value }); draw(); updateSide(); });
+  const axisRow = () => { const hrs = Math.round(96 * Number(interval.value) / 60), half = Math.round(hrs / 2);
+    const t = (n) => n <= 72 ? n + ' ч' : Math.round(n / 24) + ' дн';
+    return h('div', { class: 'ch-axis' }, h('span', { text: t(hrs) + ' назад' }), h('span', { text: t(half) }), h('span', { text: 'сейчас' })); };
+  const colHead = () => { const hourly = Number(interval.value) === 30;
+    return { ticks: hourly ? 'По часам' : spanText(), hours: 'По часам, 00 → 23', cols: hourly ? 'Время ответа по часам' : 'Время ответа', words: 'За ' + spanText() }[monChart()]; };
+  const tblLegend = () => monChart() === 'hours' ? [['cell', 'всё хорошо'], ['slow', 'медленно'], ['bad', 'не открывался']]
+    : monChart() === 'cols' ? [['ln', 'время ответа'], ['slow', 'медленно'], ['bad', 'не открывался']] : null;
+  // the chart look — a switch of buttons like «Таблица / Шкала времени», right after it
+  const chartSeg = h('div', { class: 'seg', role: 'group', 'aria-label': 'Вид графика' });
+  const drawChartSeg = () => chartSeg.replaceChildren(...MON_CHARTS.map(([k, t]) => h('button', { type: 'button', class: monChart() === k ? 'on' : '', 'aria-pressed': String(monChart() === k), text: t,
+    onclick: () => { setLook({ monChart: k }); drawChartSeg(); draw(); updateSide(); } })));
+  drawChartSeg();
   const sumBox = h('div', { class: 'mon-tiles' });
   const tile = (big, lbl, cls = '') => h('div', { class: 'mon-tile' }, h('b', { class: cls, text: big }), h('span', { text: lbl }));
   const drawSum = () => {
@@ -4430,14 +4414,14 @@ async function viewMonitor(main) {
   const drawSeg = () => viewSeg.replaceChildren(...[['tbl', 'Таблица'], ['tl', 'Шкала времени']].map(([v, t]) =>
     h('button', { type: 'button', class: view === v ? 'on' : '', 'aria-pressed': String(view === v), text: t, onclick: () => { view = v; setLook({ monView: v }); drawSeg(); draw(); } })));
   const drawTable = () => {
-    const heads = [['host', 'Сайт', ''], ['now', 'Сейчас', ''], [null, monChart() === 'hours' ? 'По часам' : spanText(), 'mon-wide'], ['pct', 'Доступность', 'num'], ['when', 'Проверен', 'num mon-wide mon-when'], [null, '', '']];
+    const heads = [['host', 'Сайт', ''], ['now', 'Сейчас', ''], [null, colHead(), 'mon-wide'], ['pct', 'Доступность', 'num'], ['when', 'Проверен', 'num mon-wide mon-when'], [null, '', '']];
     const th = ([k, t, cls]) => h('th', { class: cls, 'aria-sort': k && sort.key === k ? (sort.dir > 0 ? 'ascending' : 'descending') : null },
       !k ? t : h('button', { class: 'th-sort', type: 'button', title: `Сортировать по столбцу «${t}»`, onclick: () => {
         sort = { key: k, dir: sort.key === k ? -sort.dir : 1 };
         try { localStorage.setItem('nfqws-ui-mon-sort', JSON.stringify(sort)); } catch { /* no storage */ }
         draw();
       } }, k === 'pct' ? [h('span', { class: 'mon-wide', text: t }), h('span', { class: 'mon-narrow', text: '%' })] : t, sort.key === k ? icon(sort.dir > 0 ? 'up' : 'down') : null));
-    return h('div', { class: 'scroll' }, h('table', { class: 'tbl mon-tbl' + (monChart() === 'line' ? '' : ' ch-fixed') }, h('thead', {}, h('tr', {}, heads.map(th))),
+    return h('div', { class: 'scroll' }, h('table', { class: 'tbl mon-tbl ch-fixed' }, h('thead', {}, h('tr', {}, heads.map(th))),
       h('tbody', {}, sorted().map((host) => {
         const hist = histOf(host), x = hist.at(-1), p = pctOf(hist);
         const down = x && !x[1] && !checking.has(host);
@@ -4450,7 +4434,7 @@ async function viewMonitor(main) {
           h('td', { class: 'num', text: p === null ? '—' : p + '%' }),
           h('td', { class: 'num sm muted mon-wide mon-when', text: x ? fmtAgo(nowS() - x[0]) : '—' }),
           h('td', {}, acts(host)));
-      }))));
+      }))), tblLegend() ? h('div', { class: 'mtl-legend sm muted mon-wide' }, tblLegend().map(([k, t]) => h('span', { class: k, text: t }))) : null);
   };
   // Timeline: every site on one time axis — the window from the oldest check to now in 96 slots, each slot shows the
   // worst result in it. A slot where every checked site failed points at the provider or the router, not a block.
@@ -4484,15 +4468,16 @@ async function viewMonitor(main) {
       return { ok: c.k !== 'bad', ms: c.k === 'slow' ? Math.max(...okMs) : Math.round(okMs.reduce((a, b) => a + b, 0) / (okMs.length || 1)), tip: c.xs.map(cellTitle).join('\n') };
     };
     const line = (cells) => { let prev = null; return cells.map((c) => (prev = c.xs.length ? slotItem(c) : c.k !== 'none' ? prev : null)); };   // a drifted slot repeats the one before
-    return h('div', { class: 'mtl' },
+    return h('div', { class: 'mtl ch-fixed' },
       grid.map(([host, cells]) => [
         h('div', { class: 'mono mtl-host' }, h('span', { class: 'mtl-dot ' + kindOf(histOf(host).at(-1)) }), host),
         (() => { const its = line(cells), k = monChart(), b = its.length > 48 ? chBuckets(its, 2) : its;
-          return k === 'line' ? msSpark(its) : k === 'cols' ? chCols(b) : chTicks(b); })(),   // hours and words do not fit a shared time axis — ticks there
+          return k === 'cols' ? chCols(b) : chTicks(b); })(),   // hours and words do not fit a shared time axis — ticks there
         h('div', { class: 'num sm', text: pctOf(histOf(host)) === null ? '—' : pctOf(histOf(host)) + '%' })]).flat(),
       h('div', { class: 'mtl-axis' }, [1, 0.75, 0.5, 0.25, 0].map((f) => h('span', { text: f ? ago(span * f) + ' назад' : 'сейчас' }))),
       run ? h('div', { class: 'mtl-note', text: `${fmtDate(Math.round(slotT(run[0])))} — ${fmtDate(Math.round(slotT(run[1] + 1)))}: не открывался ни один сайт. Похоже на сбой провайдера или роутера, а не на блокировку.` }) : null,
-      h('div', { class: 'mtl-legend sm muted' }, [['ln', 'время ответа'], ['slow', 'медленно, больше 5 с'], ['bad', 'не открывался'], ['none', 'разрыв — не проверялся']].map(([k, t]) => h('span', { class: k, text: t }))));
+      h('div', { class: 'mtl-legend sm muted' }, [monChart() === 'cols' ? ['ln', 'время ответа'] : ['ok', 'открывался'],
+        ['slow', 'медленно, больше 5 с'], ['bad', 'не открывался'], ['none', 'не проверялся']].map(([k, t]) => h('span', { class: k, text: t }))));
   };
   const draw = () => {
     drawSum();
@@ -4532,10 +4517,10 @@ async function viewMonitor(main) {
     panel('Сайты', h('div', { class: 'row mon-ctrls' },
       h('label', { class: 'mon-sw', for: 'mon-on' }, enabled, h('span', { text: 'Проверять' })), interval,
       btn('Проверить все', async () => { toast('Проверяю…'); const r = await guarded(() => api('monitor_run')); if (r) { m.data = r.data; draw(); await loadState(); } }, 'small', 'refresh')),
-      h('p', { class: 'sm muted', text: 'Сайты открываются с самого роутера через основной nfqws2. В таблице — время ответа при последних 96 проверках: серая линия — сколько шёл ответ, красная черта — сайт не открылся, жёлтая — ответ дольше 5 секунд. При смене «открывается ↔ нет» может прийти сообщение в Telegram — см. «Уведомления».' }),
+      h('p', { class: 'sm muted', text: 'Сайты открываются с самого роутера через основной nfqws2. История — последние 96 проверок: красное — сайт не открылся, жёлтое — ответ дольше 5 секунд. При смене «открывается ↔ нет» может прийти сообщение в Telegram — см. «Уведомления».' }),
       sumBox,
       h('div', { class: 'row' }, add, btn('Добавить', addSite, 'primary', 'plus')), addNote,
-      h('div', { class: 'row mon-viewrow' }, viewSeg, newTag('mon:view'), h('span', { class: 'grow' }), h('label', { class: 'sm muted', text: 'График' }), chartSel, newTag('mon:chart')), listBox));
+      h('div', { class: 'row mon-viewrow' }, viewSeg, newTag('mon:view'), chartSeg, newTag('mon:chart')), listBox));
   drawSeg();
   interval.addEventListener('change', () => { save(); draw(); });
 }
