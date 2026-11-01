@@ -1202,10 +1202,7 @@ async function route(refresh = false) {
   // a full-screen config editor sits in <body>: it goes away with the page; leaving the page ends full screen
   document.querySelectorAll('body > .cfg').forEach((e) => e.remove());
   document.documentElement.classList.remove('cfg-fs');
-  if (r.tab !== 'settings' || r.arg !== 'raw') {
-    if (S.cfgFull && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
-    S.cfgFull = false;
-  }
+  if (r.tab !== 'settings' || r.arg !== 'raw') S.cfgFull = false;
   const main = document.getElementById('main');
   if (!S.state || refresh) {
     if (!S.state) main.replaceChildren(skel(2, 5));
@@ -4058,10 +4055,6 @@ async function paneRaw(content) {
     if (!on && spot.parentNode) spot.replaceWith(cfgEl);
     cfgEl.classList.toggle('full', on);
     document.documentElement.classList.toggle('cfg-fs', on);   // the page behind does not scroll (no second scrollbar)
-    // the browser's own full screen too (its bars go away, like F11); the whole page goes full screen, not the block,
-    // so dialogs, lists and toasts still show. Without the API (or refused) the block still fills the window
-    if (on && !document.fullscreenElement) document.documentElement.requestFullscreen?.().catch(() => {});
-    if (!on && document.fullscreenElement) document.exitFullscreen?.().catch(() => {});
     fsBtn.replaceChildren(icon(on ? 'shrink' : 'expand'));
     fsBtn.setAttribute('aria-label', on ? 'Обычный размер' : 'Во весь экран');
     fsBtn.dataset.tip = on ? 'Обычный размер (Esc)' : 'Во весь экран — редактор на всё окно браузера, выход по Esc';
@@ -4075,11 +4068,6 @@ async function paneRaw(content) {
   const drawerBtn = h('button', { type: 'button', class: 'cfg-xh', onclick: () => { cfgEl.classList.toggle('xopen'); drawDrawer(); } });
   const fsBtn = h('button', { type: 'button', class: 'btn small icon cfg-fs', 'aria-label': 'Во весь экран', 'data-tip': 'Во весь экран — редактор на всё окно браузера, выход по Esc',
     onclick: () => setFull(!cfgEl.classList.contains('full')) }, icon('expand'));
-  // the browser left full screen by itself (Esc there is taken by the browser, or F11) — the editor follows
-  document.addEventListener('fullscreenchange', function onFs() {
-    if (!cfgEl.isConnected) { document.removeEventListener('fullscreenchange', onFs); return; }
-    if (!document.fullscreenElement && cfgEl.classList.contains('full')) setFull(false);
-  });
   // capture phase: runs before a dropdown, menu or dialog closes itself on the same Esc — then full screen stays
   document.addEventListener('keydown', function onEsc(e) {
     if (!cfgEl.isConnected) { document.removeEventListener('keydown', onEsc, true); return; }
