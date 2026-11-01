@@ -348,6 +348,12 @@ const tsOnlyStep = (step) => {
 const needsTs = (steps) => (steps || []).some(tsOnlyStep);
 const tsChip = () => h('span', { class: 'chip', text: 'нужны метки TCP', title: `Маскировка только через tcp_ts: работает на устройствах с временными метками TCP (Linux, Android, macOS, iOS). На Windows — ${WIN_TS_HINT}` });
 const spinner = (text) => h('div', { class: 'skeleton' }, h('span', { class: 'spin' }), text);
+// Placeholder shaped like the content while it loads (a panel: heading and lines); fades in only after 0.15 s, so a
+// fast load shows nothing. Spinners with a text stay where the wait is an action («Проверяю…»), not plain loading.
+const skel = (panels = 1, lines = 4) => h('div', { class: 'skel', role: 'status', 'aria-busy': 'true' },
+  h('span', { class: 'sr-only', text: 'Загрузка…' }),
+  Array.from({ length: panels }, (_, p) => h('div', { class: 'skel-panel' }, h('i', { class: 'h' }),
+    Array.from({ length: lines }, (_, i) => h('i', { style: `width:${[92, 78, 85, 64, 88, 70][(i + p) % 6]}%` })))));
 const levelIcon = (lvl) => h('span', { class: 'lvl ' + lvl }, icon({ error: 'bad', warning: 'alert', info: 'info', ok: 'ok' }[lvl]));
 const notice = (kind, title, text, ...extra) => h('div', { class: 'notice ' + kind },
   icon({ ok: 'ok', bad: 'bad', warn: 'alert', info: 'info' }[kind]),
@@ -1131,7 +1137,7 @@ async function route(refresh = false) {
   updateChrome();
   const main = document.getElementById('main');
   if (!S.state || refresh) {
-    if (!S.state) main.replaceChildren(spinner('Загрузка…'));
+    if (!S.state) main.replaceChildren(skel(2, 5));
     try { await loadState(); } catch (e) { main.replaceChildren(notice('bad', 'Не удалось получить состояние', e.message)); return; }
   }
   if (seq !== routeSeq) return;
@@ -1140,11 +1146,14 @@ async function route(refresh = false) {
   // новое на этой странице: метки внутри видны весь этот заход, после отрисовки страница считается открытой
   S.newHere = new Set(pageFeatures(pageOf(r)));
   const target = railTarget(main, pageOf(r));
-  target.replaceChildren(subTabs(pageOf(r)));
+  // the page draws itself after its data arrives; until then a skeleton holds its place
+  const wait = skel(2, 5);
+  target.replaceChildren(subTabs(pageOf(r)), wait);
   placeSide();
   updatedNote();
   try {
     await (views[r.tab] || viewOverview)(target, r);
+    wait.remove();
     if (seq === routeSeq) seenPage(pageOf(r));
   } catch (e) {
     console.error(e);
@@ -4110,7 +4119,7 @@ async function compareSnapshot(e) {
   const box = h('div', { class: 'stack' });
   body.replaceChildren(h('div', { class: 'stack' }, h('div', { class: 'row' }, h('span', { class: 'sm muted', text: 'Файл:' }), pick), box));
   async function show(f) {
-    box.replaceChildren(spinner('Загрузка…'));
+    box.replaceChildren(skel(1, 4));
     const r = await api('snapshot_file', { id: e.id, file: f }).catch((x) => ({ error: x.message }));
     if (r.error) { box.replaceChildren(notice('warn', 'Файла нет в снимке', 'Он появился позже, чем сделан снимок.')); return; }
     box.replaceChildren(h('p', { class: 'sm muted', text: r.current === null ? 'Сейчас этого файла нет.' : 'Красным — как было в снимке, зелёным — как сейчас.' }), renderDiff(diffLines(r.content, r.current ?? '')));
@@ -5317,7 +5326,7 @@ async function viewCommunity(main) {
 
 async function viewFreeze(main) {
   const sites = h('input', { class: 'input mono grow', placeholder: 'свои сайты через запятую, например king.hr (необязательно)', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Свои сайты' });
-  const out = h('div', { class: 'stack', style: 'gap:14px' }, spinner('Загрузка…'));
+  const out = h('div', { class: 'stack', style: 'gap:14px' }, skel(1, 4));
   const startBtn = btn('Запустить пробу', start, 'primary', 'play');
   main.append(
     h('div', { class: 'vh' }, h('h1', { text: 'Обрыв на 16 КБ' })),
@@ -5439,7 +5448,7 @@ const DNS_SITE_TEXT = { ok: ['верно', 'ok'], fake: ['заглушка', 'ba
 async function viewDns(main) {
   const startBtn = btn('Проверить', start, 'primary');
   const when = h('span');
-  const out = h('div', { class: 'stack', style: 'gap:14px' }, spinner('Загрузка…'));
+  const out = h('div', { class: 'stack', style: 'gap:14px' }, skel(1, 4));
   main.append(
     h('div', { class: 'vh' }, h('h1', { text: 'DNS-серверы' }), h('span', { class: 'grow' }), startBtn),
     h('p', { class: 'muted dns-lead' }, 'Какие DNS-серверы отвечают с этого роутера, не перехватывает ли провайдер обычный DNS и не подменяет ли адреса закрытых сайтов. ', when,
@@ -5686,7 +5695,7 @@ async function viewCfg(main) {
   const mon = (S.state.monitor?.sites || []).map((x) => x.host);
   const sites = h('input', { class: 'input mono grow', value: mon.join(', '), placeholder: 'сайты через запятую, например rutracker.org, youtube.com', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Сайты для проверки' });
   const chips = h('div', { class: 'row' });
-  const out = h('div', { class: 'stack', style: 'gap:14px' }, spinner('Загрузка…'));
+  const out = h('div', { class: 'stack', style: 'gap:14px' }, skel(1, 4));
   const startBtn = btn('Проверить', start, 'primary', 'play');
   let last = null;
   let detail = false;
@@ -6689,7 +6698,7 @@ function openDiff(title, a, b) {
 
 async function openHistory(name, onRestored) {
   const isConf = name === 'nfqws2.conf';
-  const body = h('div', { class: 'modal-b' }, spinner('Загрузка…'));
+  const body = h('div', { class: 'modal-b' }, skel(1, 4));
   const restoreBtn = btn('Восстановить эту версию', null, 'warn', 'history', { disabled: true });
   const bg = modal('История: ' + name, body, restoreBtn);
   const [hist, cur] = await Promise.all([api('history', { name }), isConf ? api('conf_get') : api('list_get', { name })]).catch((e) => { body.replaceChildren(notice('bad', e.message)); return []; });
@@ -6746,7 +6755,7 @@ async function openHistory(name, onRestored) {
 
 // Файлы, которые менеджер пакетов положил при обновлении nfqws2 рядом с изменёнными вами: новые стандартные версии
 async function openLeftovers() {
-  const body = h('div', { class: 'modal-b' }, spinner('Загрузка…'));
+  const body = h('div', { class: 'modal-b' }, skel(1, 4));
   const allBtn = btn('Удалить все', null, 'warn', 'trash', { disabled: true });
   const bg = modal('Файлы от обновления nfqws2', body, allBtn);
   const del = async (names) => {
