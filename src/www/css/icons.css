@@ -1,0 +1,52 @@
+/* Interface styles: icons next to text. Loaded by index.html in a fixed order (see the list there) — the order matters. */
+
+/* ---------- выравнивание иконок с текстом ----------
+   Иконки центрируются по рамке строки, а середина строчных букв на ~1px ниже —
+   поэтому рядом с текстом иконку опускаем на 1px (в квадратных кнопках-иконках не трогаем).
+   Buttons are not nudged: measured by ink, a centred icon already sits on the middle of the button and of its label,
+   and the 1px drop put it 1.5px low. */
+.tabs a > svg, .bottom a > svg, .icon-link > svg, .chip > svg { position: relative; top: 1px; }
+.icon-link { display: inline-flex; align-items: center; gap: 5px; }
+.check-go { padding-left: 12px; padding-right: 10px; }
+.check-go svg { width: 15px; height: 15px; }
+
+/* строки «подпись — значение»: подпись по базовой линии первой строки значения (поле, чипы, текст) */
+.frow { align-items: baseline; }
+.frow > .lbl { padding-top: 0; }
+/* the value starts with a field or a dropdown: the label is centred on that control's height instead — at the
+   baseline a 13px label and a 15px field text sit ~2px apart. Text and chip values keep the baseline. */
+:root:not([data-variant="k"]) .frow:has(> .lbl + :is(.input, .select, .dd-btn)),
+:root:not([data-variant="k"]) .frow:has(> .lbl + .row > :first-child:is(.input, .select, .dd-btn)) { align-items: start; }
+:root:not([data-variant="k"]) .frow:has(> .lbl + :is(.input, .select, .dd-btn)) > .lbl,
+:root:not([data-variant="k"]) .frow:has(> .lbl + .row > :first-child:is(.input, .select, .dd-btn)) > .lbl { min-height: var(--ctl-h); display: flex; align-items: center; }
+.cmd-row { grid-template-columns: 290px minmax(0, 1fr); }
+.cmd-row > .lbl code { white-space: nowrap; color: var(--fg); }
+@media (max-width: 759px) { .cmd-row { grid-template-columns: 1fr; gap: 2px; } }
+/* a command and its caption are one item: caption right under the command, items 12 px apart; the copy button is
+   small so the command line is not 40 px tall */
+:root:root:root .frow.cmd-row { row-gap: 2px; align-items: center; }
+:root:root:root .frow.cmd-row + .frow.cmd-row { margin-top: 0; }   /* the panel's 14 px gap is the step between items */
+:root:root:root .cmd-row > .lbl { padding: 0; min-height: 0; }
+:root:root:root .cmd-row > .lbl .btn { height: 24px; min-height: 24px; width: 24px; }
+.tbl td.date { white-space: nowrap; font-variant-numeric: tabular-nums; }
+
+/* поиск в списке: на узком экране уходит на свою строку, а не сжимается рядом с сортировкой */
+.list-search { flex: 1 1 240px; min-width: 0; }
+
+/* шапка на средних ширинах: подписи у второстепенных кнопок прячем, иконки с подсказками остаются */
+@media (max-width: 1439px) { .repo-link span, .https-link span, .undo-label { display: none; } }
+/* 760–1099px: вкладки без подписей, кроме открытой, — иначе шапка шире экрана */
+@media (min-width: 760px) and (max-width: 1099px) { .tabs a:not(.on) span { display: none; } .tabs a { padding: 0 10px; } .brand small { display: none; } }
+
+/* выбор интерфейса провайдера */
+.iface-pick { grid-column: 2; display: grid; gap: 8px; }
+.iface-list { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 4px; }
+.iface { display: inline-flex; align-items: center; gap: 8px; flex-wrap: wrap; padding: 5px 10px; border: 1px solid var(--line); border-radius: calc(var(--radius) * .7 + 2px); background: var(--surface); color: var(--fg); font-size: var(--fs-sm); cursor: pointer; text-align: left; }
+.iface:hover { background: var(--soft); }
+.iface.on { border-color: var(--accent); background: var(--accent-soft); box-shadow: inset 0 0 0 1px var(--accent); }
+.iface.dim { color: var(--muted); }   /* colour, not opacity: opacity also faded the already faint address below Lc 40 */
+.tbl tr.dim > td { opacity: .6; }
+.iface .mono { font-weight: 600; }
+/* «Параметры запуска»: добавление из списков */
+.base-add .select { flex: 1 1 180px; min-width: 0; }
+@media (max-width: 759px) { .iface-pick { grid-column: 1; } .base-add .select { max-width: 100%; flex: 1 1 100%; } }

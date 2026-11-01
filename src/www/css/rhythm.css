@@ -1,0 +1,42 @@
+/* Interface styles: one spacing rhythm, compact on a phone. Loaded by index.html in a fixed order (see the list there) — the order matters. */
+
+/* ---------- one spacing rhythm, compact on a phone ----------
+   related lines (caption and value, command and its note) 2–4 px; items in a block 8–14 px; blocks 14 px.
+   :root ×3 — above every style's own paddings and margins */
+/* a heading row that did not fit (markWraps in app.js): heading on the first line, the rest from the left under it */
+:root:root:root .wrapped { row-gap: 6px; }
+:root:root:root .wrapped > :first-child:is(h1, h2, h3, input.input) { flex: 1 1 100%; }
+:root:root:root .wrapped > :not(:first-child) { margin-left: 0; }
+/* in a wrapped heading row the note («0 Б в памяти», a date, a count) takes its own line under the heading and the
+   buttons stay together in one row — not a staircase of note, button, button */
+:root:root:root :is(.panel-h, .blk-h, .vh).wrapped > :not(:first-child):not(.btn, a, button, .tag, .grow, .seg, .dd-btn, label, :has(.btn, button)) { flex: 1 1 100%; }
+:root:root:root .wrapped > span.grow:empty { display: none; }   /* the spacer only: a field with class grow is :empty too */
+/* read-only «label — value» rows: one line, close together */
+:root:root:root .frow.kv { grid-template-columns: 170px minmax(0, 1fr); align-items: baseline; }
+@media (max-width: 599px) {
+  :root:root:root :is(.blk, .panel) { padding: 14px; }
+  /* blocks space their parts with gap: a margin on a part only adds a hole (8–12 px on top of the gap) */
+  :root:root:root :is(.blk, .panel) > :is(p, form, details, .row, .scroll, .notice, .conn-form, .dns-sites) { margin-block: 0; }
+  :root:root:root .frow + .frow { margin-top: 0; }             /* the block's gap is the step between fields */
+  /* caption above its field: 4 px, no field-high caption box (beside the field it was centred on the field) */
+  :root:root:root .frow:not(.kv) { row-gap: 4px; }
+  :root:root:root .frow:not(.kv) > .lbl { min-height: 0; display: block; padding: 0; }
+  :root:root:root .mon-tile { padding: 12px 14px; }
+  /* the phone table has no history column: the chart switch would change nothing (the timeline keeps it) */
+  :root:root:root .mon-viewrow:has(+ * .mon-tbl) > .mon-chartseg,
+  :root:root:root .mon-viewrow:has(+ * .mon-tbl) > .mon-chartseg + .tag { display: none; }
+  :root:root:root .tbl.mon-tbl td { padding-top: 6px; padding-bottom: 6px; }
+  /* table rows as cards: lines 2 px apart, cards 8 px apart */
+  :root:root:root:root .tbl.cardy tr { padding: 10px 12px; margin-bottom: 8px; }
+  :root:root:root:root .tbl.cardy td { padding: 2px 0; }
+  :root:root:root:root .tbl.cardy td:first-child { padding-bottom: 4px; }
+  :root:root:root:root .tbl.cardy td:not([data-th]) { padding-top: 6px; }
+  /* the empty «put the cursor on an argument» frame: on a phone it only takes room */
+  :root:root:root .help:has(> span.muted:only-child) { display: none; }
+  :root:root:root .frow.kv { grid-template-columns: max-content minmax(0, 1fr); column-gap: 14px; }
+  :root:root:root .frow.kv > .lbl { white-space: nowrap; }   /* «Описание и помощь» in one line, the value wraps instead */
+  :root:root:root .frow.kv + .frow.kv { margin-top: -6px; }     /* 8 px between «label — value» lines */
+  /* a switch spans the width in equal parts and never breaks into two lines */
+  :root:root:root .seg { display: flex; flex-wrap: nowrap; width: 100%; }
+  :root:root:root .seg > button { flex: 1 1 0; min-width: 0; padding: 0 6px; white-space: normal; line-height: 1.15; }
+}

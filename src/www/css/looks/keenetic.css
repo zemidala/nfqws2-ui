@@ -1,0 +1,161 @@
+/* Interface styles: style K. Loaded by index.html in a fixed order (see the list there) — the order matters. */
+
+/* ---------- стиль K · Keenetic ----------
+   По скриншотам веб-интерфейса KeeneticOS 5.1: синий #0097dc, меню #fafafa, выбранный пункт #ebebeb, «подключено» #e4faef.
+   Логотипа и названия Keenetic нет — только стиль. Тёмная тема — своя, в тех же правилах. */
+.nav-h > svg, .mnav .k-ic { display: none; }
+:root[data-variant="k"] {
+  --radius: 4px; --gap: 18px; --side-w: 340px;
+  --sans: "Roboto", "Segoe UI", system-ui, -apple-system, sans-serif; --mono: "Roboto Mono", ui-monospace, Consolas, monospace;
+  --bg: #f2f2f2; --surface: #ffffff; --line: #e3e3e3; --fg: #1f1f1f; --muted: #6e6e6e; --faint: #7c7c7c;
+  --accent: #0097dc; --accent-ink: #0090d2; --accent-fg: #ffffff; --accent-soft: #ecf5fa; --soft: #f5f5f5;
+  --ok: #1f9d55; --ok-soft: #e4faef; --k-side: #fafafa; --k-active: #ebebeb; --k-field: #b9b9b9;
+  --tk-opt: #0081bd; --tk-fn: #1f8a4c; --tk-key: #8a3ab9; --tk-p: #9a9a9a;
+  --shadow: 0 1px 3px rgba(0, 0, 0, .05);
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-variant="k"]:not([data-mode="light"]) { --bg: #17181b; --surface: #222428; --line: #31353a; --fg: #e8e8e8; --muted: #b7bcbf; --faint: #adb3b9; --accent: #2bb0f0; --accent-fg: #06202e; --accent-soft: #16303f; --soft: #2a2d31; --ok: #65cd91; --ok-soft: #173325; --k-side: #1b1d20; --k-active: #2a2d31; --k-field: #50555b; --tk-opt: #5cc4f5; --tk-fn: #5fd39a; --tk-p: #6a6f75; --shadow: none; --accent-ink: #75c4e6; --bad: #ffa09b; --bad-fg: #2a0b0a; --tk-key: #d0ade5; }
+}
+:root[data-variant="k"][data-mode="dark"] { --bg: #17181b; --surface: #222428; --line: #31353a; --fg: #e8e8e8; --muted: #b7bcbf; --faint: #adb3b9; --accent: #2bb0f0; --accent-fg: #06202e; --accent-soft: #16303f; --soft: #2a2d31; --ok: #65cd91; --ok-soft: #173325; --k-side: #1b1d20; --k-active: #2a2d31; --k-field: #50555b; --tk-opt: #5cc4f5; --tk-fn: #5fd39a; --tk-p: #6a6f75; --shadow: none; --accent-ink: #75c4e6; --bad: #ffa09b; --bad-fg: #2a0b0a; --tk-key: #d0ade5; }
+:root[data-variant="k"] body { font-size: var(--fs-md); }
+/* меню: заголовки групп — синие заглавные со значком, пункты — обычным текстом, выбранный — серой полосой */
+:root[data-variant="k"] .mnav { background: var(--k-side); padding: 10px 0 20px; }
+:root[data-variant="k"] #side:has(.mnav) { background: var(--k-side); }
+:root[data-variant="k"] .mnav .nav-h { margin: 6px 0 2px; padding: 14px 20px 6px; border-top: 0; color: var(--accent-ink); font-size: var(--fs-sm); font-weight: 700; letter-spacing: .03em; gap: 12px; }
+:root[data-variant="k"] .mnav .nav-h::before { display: none; }
+:root[data-variant="k"] .nav-h > svg { display: inline-block; width: 24px; height: 24px; stroke-width: 2.2; }
+:root[data-variant="k"] .mnav a { border-radius: 0; padding: 8px 20px 8px 52px; min-height: 38px; font-size: var(--fs-md); }
+:root[data-variant="k"] .mnav .mtop > a { padding-left: 20px; gap: 12px; }
+:root[data-variant="k"] .mnav .k-ic { display: inline-flex; color: var(--accent-ink); }
+:root[data-variant="k"] .mnav .k-ic svg { width: 24px; height: 24px; }
+:root[data-variant="k"] .mnav a:hover { background: var(--k-active); }
+:root[data-variant="k"] .mnav a.on { background: var(--k-active); color: var(--fg); font-weight: 400; }
+/* заголовок страницы — крупный и жирный */
+:root[data-variant="k"] .vh h1 { font-size: var(--fs-2xl); font-weight: 700; }
+/* карточки: белые, заголовок заглавными с разрядкой */
+:root[data-variant="k"] .blk, :root[data-variant="k"] .panel { padding: 20px 22px; }
+:root[data-variant="k"] .blk-h h2 { font-size: var(--fs-md); font-weight: 500; text-transform: uppercase; letter-spacing: .1em; color: var(--muted); }
+:root[data-variant="k"] .panel-h h2 { font-size: var(--fs-xl); font-weight: 700; }
+/* кнопки: синяя обводка, главная — заливка */
+:root[data-variant="k"] .btn:not(.ghost) { border-color: var(--accent); color: var(--accent-ink); background: var(--surface); font-weight: 400; min-height: var(--ctl-h); padding: 0 16px; }
+:root[data-variant="k"] .btn.small:not(.ghost) { min-height: var(--ctl-hs); padding: 0 12px; }
+:root[data-variant="k"] .cfg-tools { --bar-h: 36px; }
+:root[data-variant="k"] .cfg-tools > .input { min-height: var(--bar-h); padding-block: 0; }
+:root[data-variant="k"] .btn:not(.ghost):hover { background: var(--accent-soft); }
+:root[data-variant="k"] .btn.primary { background: var(--accent); color: var(--accent-fg); }
+:root[data-variant="k"] .btn.primary:hover { background: var(--accent); filter: brightness(1.07); }
+:root[data-variant="k"] .btn.danger:not(.ghost) { border-color: var(--bad); color: var(--bad); }
+:root[data-variant="k"] .btn.warn:not(.ghost) { border-color: var(--warn); color: var(--warn); }
+:root[data-variant="k"] .btn.icon:not(.ghost) { padding: 0; }
+/* a quiet button with a label on the page: the same size and frame as the others in its row */
+:root[data-variant="k"] :is(main, #side) .btn.ghost:not(.icon) { font-weight: 400; min-height: var(--ctl-h); padding: 0 16px; background: var(--surface); }
+:root[data-variant="k"] :is(main, #side) .btn.small.ghost:not(.icon) { min-height: var(--ctl-hs); padding: 0 12px; }
+:root[data-variant="k"] :is(main, #side) .btn.ghost:not(.icon):hover { background: var(--accent-soft); }
+/* поля — белые, с серой рамкой */
+:root[data-variant="k"] .input, :root[data-variant="k"] .select, :root[data-variant="k"] .textarea { background: var(--surface); border-color: var(--k-field); min-height: var(--ctl-h); }
+:root[data-variant="k"] .quick .input { min-height: var(--ctl-h); border-color: var(--line); }
+:root[data-variant="k"] input[type="checkbox"], :root[data-variant="k"] input[type="radio"] { accent-color: var(--accent); }
+/* плашки состояния: прямоугольные, заглавными */
+:root[data-variant="k"] .pill { text-transform: uppercase; letter-spacing: .04em; font-weight: 500; font-size: var(--fs-xs); }
+/* таблицы: шапка на сером, жирная */
+:root[data-variant="k"] .tbl th { background: var(--k-side); color: var(--fg); font-weight: 700; font-size: var(--fs-sm); padding: 10px; }
+:root[data-variant="k"] .tbl td { padding: 10px; }
+/* вкладки — подчёркивание синим */
+:root[data-variant="k"] .subtabs a { font-size: var(--fs-md); }
+:root[data-variant="k"] .seg button.on { color: var(--accent-ink); }
+/* размеры — как у Keenetic (замер по скриншотам KeeneticOS 5.1): текст 16px, меню 16px с шагом 40px, заголовок 32px, меню 280px */
+@media (min-width: 1100px) { :root[data-variant="k"][data-layout="menu"] { --side-w: 280px; } }
+:root[data-variant="k"] { --top-h: 60px; }
+:root[data-variant="k"] body { font-size: var(--fs-md); }
+:root[data-variant="k"] .sm { font-size: var(--fs-md); }
+:root[data-variant="k"] .mnav .nav-h { font-size: var(--fs-md); padding: 16px 20px 6px; }
+:root[data-variant="k"] .mnav a { font-size: var(--fs-md); min-height: 40px; padding: 8px 20px 8px 56px; }
+:root[data-variant="k"] .vh h1 { font-size: var(--fs-2xl); }
+:root[data-variant="k"] .panel-h h2 { font-size: var(--fs-xl); }
+:root[data-variant="k"] .blk-h h2 { font-size: var(--fs-md); }
+:root[data-variant="k"] .lbl { font-size: var(--fs-md); }
+/* controls only as tall as the text needs: one height for fields, dropdowns, buttons and switches — 36 px,
+   small buttons 32 px (they were 40–50 px and stood unevenly next to each other) */
+:root[data-variant="k"] .input, :root[data-variant="k"] .select, :root[data-variant="k"] .textarea { min-height: var(--ctl-h); font-size: var(--fs-md); padding: 5px 12px; }
+:root[data-variant="k"] .input.mono { font-size: var(--fs-md); }
+:root[data-variant="k"] .btn:not(.ghost) { min-height: var(--ctl-h); font-size: var(--fs-md); padding: 0 16px; }
+:root[data-variant="k"] .btn.small:not(.ghost) { min-height: var(--ctl-hs); font-size: var(--fs-md); padding: 0 12px; }
+:root[data-variant="k"] :is(main, #side) .btn.ghost:not(.icon) { min-height: var(--ctl-h); font-size: var(--fs-md); padding: 0 16px; }
+:root[data-variant="k"] :is(main, #side) .btn.small.ghost:not(.icon) { min-height: var(--ctl-hs); font-size: var(--fs-md); padding: 0 12px; }
+/* «Проблемы»: кнопка исправления не крупнее текста замечания, иначе список из кнопок, а не из замечаний */
+:root[data-variant="k"] .problem .item-main b { font-size: var(--fs-md); }
+@media (min-width: 760px) { :root[data-variant="k"] .problem .btn.small:not(.ghost), :root[data-variant="k"] :is(main, #side) .problem .btn.small.ghost:not(.icon) { min-height: 26px; font-size: var(--fs-sm); padding: 1px 10px; } }
+:root[data-variant="k"] .tbl { font-size: var(--fs-md); }
+:root[data-variant="k"] .tbl th { font-size: var(--fs-md); padding: 12px 14px; }
+:root[data-variant="k"] .tbl td { padding: 12px 14px; }
+/* верхняя панель: белая, значки — синие, как поиск и шестерёнка у Keenetic */
+:root[data-variant="k"] .top .btn.ghost { color: var(--accent-ink); }
+:root[data-variant="k"] .top .btn.ghost:hover { background: var(--accent-soft); }
+:root[data-variant="k"] .top svg { width: 20px; height: 20px; }
+/* галочка Keenetic: квадрат 20px, отмеченная — синяя заливка с белой птичкой */
+:root[data-variant="k"] input[type="checkbox"] { appearance: none; -webkit-appearance: none; width: 20px; height: 20px; margin: 0; flex: none; border: 1.5px solid #8a8a8a; border-radius: 2px; background: var(--surface); display: inline-grid; place-content: center; cursor: pointer; vertical-align: middle; }
+:root[data-variant="k"] input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+:root[data-variant="k"] input[type="checkbox"]:checked::after { content: ""; width: 5px; height: 10px; border: solid #fff; border-width: 0 2px 2px 0; transform: translate(-0.5px, -2px) rotate(45deg); }   /* centred by the ink's weight, as above */
+:root[data-variant="k"] input[type="checkbox"]:disabled { opacity: .5; cursor: default; }
+:root[data-variant="k"] input[type="checkbox"]:indeterminate { background: var(--accent); border-color: var(--accent); }
+:root[data-variant="k"] input[type="checkbox"]:indeterminate::after { content: ""; width: 10px; height: 2px; background: #fff; }
+/* переключатель вида — рамки-кнопки, как «Clients | Categories | Applications» */
+:root[data-variant="k"] .seg { border: 0; padding: 0; background: none; gap: 0; }
+:root[data-variant="k"] .seg button { border: 1px solid var(--line); border-radius: 0; margin-left: -1px; min-height: var(--ctl-h); padding: 0 14px; font-size: var(--fs-md); font-weight: 400; color: var(--muted); background: var(--surface); }
+:root[data-variant="k"] .seg button:first-child { border-radius: 3px 0 0 3px; margin-left: 0; }
+:root[data-variant="k"] .seg button:last-child { border-radius: 0 3px 3px 0; }
+:root[data-variant="k"] .seg button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); box-shadow: none; position: relative; z-index: 1; }
+/* вкладки страницы — как сегменты Keenetic: крупный текст, выбранная — чёрная с синей чертой */
+:root[data-variant="k"] .subtabs a { font-size: var(--fs-lg); font-weight: 400; padding: 10px 16px; border-bottom-width: 3px; }
+:root[data-variant="k"] .subtabs a.on { font-weight: 400; }
+@media (max-width: 759px) {
+  :root[data-variant="k"] .vh h1 { font-size: var(--fs-2xl); }
+  :root[data-variant="k"] .subtabs a { font-size: var(--fs-md); padding: 9px 12px; }
+}
+:root[data-variant="k"] .top .btn.ghost.danger { color: var(--bad); }
+/* у Keenetic меню узкое: «новое» в нём — точка, чтобы названия не обрезались */
+:root[data-variant="k"] .mnav .tag.new { font-size: 0; padding: 0; width: 8px; height: 8px; border-radius: 50%; background: var(--accent); border: 0; display: inline-block; }
+/* страница — белая, формы прямо на ней, без рамок: у Keenetic карточки только на «Системном мониторе» */
+:root[data-variant="k"] { --bg: #ffffff; }
+:root[data-variant="k"][data-mode="dark"] { --bg: #222428; --muted: #b7bcbf; --faint: #adb3b9; --accent-ink: #75c4e6; --ok: #65cd91; --bad: #ffa09b; --bad-fg: #2a0b0a; --tk-key: #d0ade5; }
+@media (prefers-color-scheme: dark) { :root[data-variant="k"]:not([data-mode="light"]) { --bg: #222428; --muted: #b7bcbf; --faint: #adb3b9; --accent-ink: #75c4e6; --ok: #65cd91; --bad: #ffa09b; --bad-fg: #2a0b0a; --tk-key: #d0ade5; } }
+:root[data-variant="k"] .panel { border-color: transparent; box-shadow: none; padding: 8px 0 18px; border-radius: 0; }
+:root[data-variant="k"] .panel + .panel { border-top: 1px solid var(--line); padding-top: 22px; }
+/* K with a colour scheme: the panel shows as a card of its own colour, so it gets inner padding and a radius */
+:root[data-variant="k"][data-scheme]:not([data-palette]) main .panel { padding: 18px 22px 22px; border-radius: 6px; }
+:root[data-variant="k"][data-scheme]:not([data-palette]) main .panel + .panel { border-top: 0; margin-top: 4px; }
+:root[data-variant="k"] .ov .blk, :root[data-variant="k"] .ov .panel, :root[data-variant="k"] .ov-brief > .blk { border: 1px solid var(--line); box-shadow: var(--shadow); border-radius: 4px; }
+:root[data-variant="k"] .ov { background: var(--k-side); margin: -4px -8px 0; padding: 4px 8px 8px; }
+/* поля формы: подпись — над полем; если поле одно — в его рамке, как «Mode» / «Segment name» у Keenetic */
+:root[data-variant="k"] .frow { grid-template-columns: minmax(0, 1fr); gap: 6px; align-items: start; }
+:root[data-variant="k"] .frow > .lbl { font-size: var(--fs-md); color: var(--muted); padding: 0; }
+:root[data-variant="k"] .frow > .hint { grid-column: 1; margin-top: 0; font-size: var(--fs-sm); }
+:root[data-variant="k"] .frow:has(> .lbl + .input), :root[data-variant="k"] .frow:has(> .lbl + .select) { position: relative; padding-top: 2px; }
+:root[data-variant="k"] .frow:has(> .lbl + .input) > .lbl, :root[data-variant="k"] .frow:has(> .lbl + .select) > .lbl {
+  position: absolute; top: -8px; left: 10px; z-index: 1; background: var(--surface); padding: 0 4px; font-size: var(--fs-sm); line-height: 18px; max-width: calc(100% - 24px); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+:root[data-variant="k"] .frow > .lbl + .input, :root[data-variant="k"] .frow > .lbl + .select { max-width: 520px; min-height: var(--ctl-h); font-size: var(--fs-md); padding: 5px 12px; }
+:root[data-variant="k"] .frow > .lbl + .input.mono { font-size: var(--fs-md); }
+:root[data-variant="k"] .frow + .frow { margin-top: 10px; }
+/* тёмная тема K — цвета со скриншота тёмной темы KeeneticOS 4.2 (справка Keenetic, Buddy 5):
+   фон #1a2533, меню #151c26, рамки #4c545e, текст #c2c2c2, подписи #949b9f, синий #269fd4 */
+:root[data-variant="k"][data-mode="dark"] { --bg: #1a2533; --surface: #1a2533; --line: #3d4652; --fg: #d0d3d6; --muted: #b7bcbf; --faint: #adb3b9; --accent: #269fd4; --accent-fg: #ffffff; --accent-soft: #1f3a52; --soft: #222e3d; --ok: #65cd91; --ok-soft: #183a2c; --k-side: #151c26; --k-active: #2a3a50; --k-field: #4c545e; --tk-opt: #5cc4f5; --tk-fn: #5fd39a; --tk-p: #6f7880; --shadow: none; --accent-ink: #75c4e6; --bad: #ffa09b; --bad-fg: #2a0b0a; --tk-key: #d0ade5; }
+@media (prefers-color-scheme: dark) {
+  :root[data-variant="k"]:not([data-mode="light"]) { --bg: #1a2533; --surface: #1a2533; --line: #3d4652; --fg: #d0d3d6; --muted: #b7bcbf; --faint: #adb3b9; --accent: #269fd4; --accent-fg: #ffffff; --accent-soft: #1f3a52; --soft: #222e3d; --ok: #65cd91; --ok-soft: #183a2c; --k-side: #151c26; --k-active: #2a3a50; --k-field: #4c545e; --tk-opt: #5cc4f5; --tk-fn: #5fd39a; --tk-p: #6f7880; --shadow: none; --accent-ink: #75c4e6; --bad: #ffa09b; --bad-fg: #2a0b0a; --tk-key: #d0ade5; }
+}
+/* у Keenetic в тёмной теме у карточек рамка светлее линий внутри */
+:root[data-variant="k"][data-mode="dark"] .ov .blk { border-color: #4c545e; }
+@media (prefers-color-scheme: dark) { :root[data-variant="k"]:not([data-mode="light"]) .ov .blk { border-color: #4c545e; } }
+:root[data-variant="k"][data-mode="dark"] .ov { background: none; }
+@media (prefers-color-scheme: dark) { :root[data-variant="k"]:not([data-mode="light"]) .ov { background: none; } }
+/* меню компактнее, чтобы всё помещалось без прокрутки на обычном экране (24 пункта) */
+:root[data-variant="k"] .mnav { padding: 6px 0 10px; }
+:root[data-variant="k"] .mnav a { min-height: 32px; padding: 5px 16px 5px 50px; font-size: var(--fs-md); }
+:root[data-variant="k"] .mnav .mtop > a { padding-left: 16px; }
+:root[data-variant="k"] .mnav .nav-h { margin: 4px 0 0; padding: 10px 16px 4px; font-size: var(--fs-sm); }
+:root[data-variant="k"] .nav-h > svg, :root[data-variant="k"] .mnav .k-ic svg { width: 22px; height: 22px; }
+@media (min-width: 1100px) { :root[data-variant="k"][data-layout="menu"] { --side-w: 250px; } }
+/* полосы прокрутки — в цветах темы, а не светлые системные */
+:root[data-variant="k"] .mnav a { min-height: 29px; padding-top: 4px; padding-bottom: 4px; font-size: var(--fs-md); }
+:root[data-variant="k"] .mnav .nav-h { padding: 8px 16px 3px; }
+/* в выезжающем меню на телефоне — строки под палец */
+@media (max-width: 759px) { :root[data-variant="k"] .mnav a { min-height: 40px; font-size: var(--fs-md); } :root[data-variant="k"] .mnav .nav-h { padding: 12px 16px 4px; } }

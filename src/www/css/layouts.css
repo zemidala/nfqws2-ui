@@ -1,0 +1,329 @@
+/* Interface styles: layouts: side menu, tabs, around the site. Loaded by index.html in a fixed order (see the list there) — the order matters. */
+
+/* ---------- компоновки: «Боковое меню» (menu), «Вкладки по задачам» (tabs), «Вокруг сайта» (site) ---------- */
+.brand { align-items: center; gap: 9px; }
+.brand > span { display: inline-flex; align-items: baseline; gap: 6px; }
+.zd { flex: none; display: block; }
+#burger, .quick { display: none; }
+/* поле проверки сжимается, если шапке тесно: пороги ниже считают ширину окна вместе с полосой прокрутки, а места без неё меньше */
+.quick { gap: 6px; flex: 0 1 auto; min-width: 0; }
+.quick .input { width: 200px; min-width: 60px; flex: 0 1 auto; min-height: var(--ctl-h); }
+@media (min-width: 760px) { :root:not([data-layout="tabs"]) .quick { display: flex; } }
+@media (min-width: 760px) and (max-width: 1099px) { :root[data-layout="menu"] #burger { display: inline-flex; } .quick .input { width: 150px; } }
+@media (min-width: 1100px) {
+  :root[data-layout="menu"] { --side-w: 236px; }
+  :root[data-layout="site"] .layout { display: block; }
+  :root[data-layout="site"] #side { display: none; }
+  /* без колонки обзора управление сервисом и плашка «нужен перезапуск» остаются в шапке */
+  :root:not([data-layout="tabs"]) #banner { display: block; }
+  :root:not([data-layout="tabs"]) .svc-ctl { display: inline-flex; }
+  :root:not([data-layout="tabs"]) #refresh-top { display: inline-flex; }
+}
+@media (min-width: 1280px) { :root[data-layout="menu"] .svc-ctl .ctl-label { display: block; text-box: trim-both cap alphabetic; } :root[data-layout="menu"] .svc-ctl .btn { width: auto; padding: 0 12px; } }
+/* «Вокруг сайта»: в шапке ещё и вкладки, и поле проверки — подписи второстепенных кнопок появляются только на очень широком экране */
+@media (min-width: 1760px) { :root[data-layout="site"] .svc-ctl .ctl-label { display: block; text-box: trim-both cap alphabetic; } :root[data-layout="site"] .svc-ctl .btn { width: auto; padding: 0 12px; } }
+@media (max-width: 1759px) { :root[data-layout="site"] .repo-link span, :root[data-layout="site"] .https-link span, :root[data-layout="site"] .undo-label { display: none; } }
+/* шапка не должна быть шире экрана: на промежуточных ширинах подписи остаются только у открытой вкладки */
+@media (min-width: 1100px) and (max-width: 1279px) { :root[data-layout="tabs"] .tabs a:not(.on) span { display: none; } }
+@media (min-width: 1100px) and (max-width: 1439px) { :root[data-layout="site"] .tabs a:not(.on) span { display: none; } :root[data-layout="site"] .quick .input { width: 150px; } }
+@media (min-width: 760px) and (max-width: 1099px) { .repo-link { display: none; } .top-in { gap: 8px; } :root[data-layout="site"] .quick { display: none; } .quick .input { width: 130px; } }
+.mnav { padding: 10px 8px 20px; background: var(--surface); min-height: 100%; }
+.soon { display: flex; align-items: center; gap: 8px; padding: 6px 10px; min-height: 34px; font-size: var(--fs-sm); color: var(--faint); cursor: not-allowed; user-select: none; }
+.tag { margin-left: auto; flex: none; font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; line-height: 16px; color: var(--faint); }
+.subtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
+.subtabs a, .subtabs .soon { flex: none; padding: 7px 12px; min-height: 0; white-space: nowrap; border-bottom: 2px solid transparent; font-weight: 500; font-size: var(--fs-sm); }
+.subtabs a { color: var(--muted); }
+.subtabs a:hover { color: var(--fg); }
+.subtabs a.on { color: var(--fg); border-bottom-color: var(--accent); font-weight: 600; }
+.subtabs .tag { margin-left: 0; }
+.drawer { position: fixed; inset: 0; z-index: 60; background: rgba(0, 0, 0, .45); }
+.drawer-in { width: min(290px, 86vw); height: 100%; overflow-y: auto; background: var(--surface); box-shadow: 8px 0 30px rgba(0, 0, 0, .3); padding-bottom: env(safe-area-inset-bottom); }
+.bottom button { flex: 1; min-height: 58px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 3px; color: var(--muted); font-size: var(--fs-xs); font-weight: 500; background: none; border: 0; cursor: pointer; padding: 0; }
+.bottom a, .bottom button { min-width: 0; }
+.site-name { font-family: var(--mono); font-size: var(--fs-lg); overflow-wrap: anywhere; }
+.about-brand { display: flex; gap: 14px; align-items: center; }
+.lthumb { width: 100%; max-width: 200px; height: auto; display: block; }
+
+/* страница «Обзор»: четыре вида раскладки одних и тех же блоков */
+.ov .blk { align-content: start; }
+/* группы: внутри группы блоки соприкасаются */
+.ov-groups { display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr)); gap: 14px; align-items: start; }
+.ogrp { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); box-shadow: var(--shadow); overflow: hidden; min-width: 0; }
+:root[data-variant="b"] .ogrp { border-color: transparent; }
+.ogrp > h3 { padding: 10px 16px; font-size: var(--fs-md); background: var(--soft); border-bottom: 1px solid var(--line); }
+.ogrp > .blk, .ocell > .blk { border: 0; border-radius: 0; box-shadow: none; border-bottom: 1px solid var(--line); padding: 14px 16px; }
+.ogrp > .blk:last-child, .ocell > .blk:last-child { border-bottom: 0; }
+/* плитки и две колонки */
+.ov-tiles { display: grid; gap: 14px; }
+.tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 2px; color: inherit; box-shadow: var(--shadow); min-width: 0; }
+:root[data-variant="b"] .tile { border-color: transparent; }
+.tile:hover { border-color: var(--accent); }
+.tile small { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.tile b { font-size: var(--fs-xl); line-height: 1.2; }
+.tile span { font-size: var(--fs-sm); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tile.ok b { color: var(--ok); } .tile.bad b { color: var(--bad); }
+.ov-cols { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
+.ov-cols > .stack { gap: 14px; }
+.ov-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }
+@media (max-width: 1099px) { .ov-cols { grid-template-columns: minmax(0, 1fr); } }
+@media (max-width: 759px) { .ov-pair { grid-template-columns: minmax(0, 1fr); } }
+/* кладка: карточки плотно уложены в колонки */
+.ov-masonry { columns: 3 320px; column-gap: 14px; }
+.ov-masonry > .blk { break-inside: avoid; margin-bottom: 14px; }
+/* панель: одна поверхность, ячейки разделены линиями */
+.ov-panel { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; }
+.ov-panel > .blk, .ocell { border: 0; border-radius: 0; box-shadow: none; background: var(--surface); }
+.ov-panel > .blk { padding: 14px 16px; }
+.ocell { display: grid; align-content: start; min-width: 0; }
+@media (max-width: 1099px) { .ov-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ov-panel > :last-child:nth-child(odd) { grid-column: 1 / -1; } }
+@media (max-width: 759px) { .ov-panel { grid-template-columns: minmax(0, 1fr); } }
+.over-rows { display: grid; gap: 1px; margin-inline: -6px; }
+.over-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 7px; color: inherit; min-width: 0; font-size: var(--fs-sm); }
+a.over-row:hover { background: var(--soft); }
+.over-row .ellipsis { flex: 1; }
+.over-row .faint { flex: 0 1 auto; max-width: 50%; }
+.kv { display: flex; justify-content: space-between; align-items: baseline; gap: 10px; font-size: var(--fs-sm); }
+
+
+/* меню списков: разделы «сайты» и «IP», строка в одну линию (полоска — обход или исключение, номера профилей, число записей),
+   действия закреплены внизу */
+.nav a.lrow { min-height: 30px; padding: 4px 8px 4px 4px; gap: 7px; font-size: var(--fs-sm); }
+.lrow .bar { width: 3px; height: 16px; border-radius: 2px; flex: none; }
+.lrow .bar.inc { background: var(--accent); } .lrow .bar.exc { background: var(--warn); }
+/* при нехватке места сначала сжимается имя файла, потом название */
+.lrow .nm { display: flex; align-items: baseline; }
+.lrow .nm .t, .lrow .nm i { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.lrow .nm .t { flex: 0 1 auto; }
+.lrow .nm i { flex: 0 100 auto; font-style: normal; font-size: var(--fs-xs); color: var(--faint); margin-left: 6px; }
+.lrow .nm .t.mono { font-size: var(--fs-sm); }
+@media (min-width: 1200px) { .split.lists { grid-template-columns: 300px minmax(0, 1fr); } }
+.nav a.lrow.off:not(.on) { color: var(--muted); }
+.lrow .tail { gap: 3px; }
+.lrow .lk { flex: none; display: inline-flex; color: var(--faint); }
+.lrow .lk svg { width: 12px; height: 12px; }
+.pchip { font: 600 var(--fs-xs)/16px var(--mono); color: var(--muted); background: var(--soft); border-radius: 4px; padding: 0 4px; }
+.pchip.exc { color: var(--warn); background: var(--warn-soft); }
+.lrow .tail .errdot, .lrow .tail .warndot { margin-left: 3px; }
+.lsec-h, .lsub { display: flex; align-items: center; gap: 6px; width: 100%; background: none; border: 0; color: var(--fg); font: inherit; text-align: left; cursor: pointer; border-radius: calc(var(--radius) * .7 + 2px); }
+.lsec-h { padding: 9px 6px 5px; font-size: var(--fs-sm); }
+.lsec-h:hover, .lsub:hover { background: var(--soft); }
+.lsec-h b { white-space: nowrap; }
+/* list column toolbar: search, grouping, order */
+.lnav-ctl { display: grid; gap: 8px; padding: 2px 4px 10px; margin-bottom: 4px; border-bottom: 1px solid var(--line); position: relative; }
+.lnav-ctl > .tag.new { position: absolute; top: -2px; right: 4px; }
+.lnav-ctl > .input { width: 100%; }
+.lnav-opt { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
+.lnav-opt > * { min-width: 0; width: 100%; }
+.lnav-empty { padding: 12px 6px; }
+.lsec-h .pnum { font: 600 var(--fs-sm)None var(--mono); color: var(--accent-ink); white-space: nowrap; flex: none; }
+.lsec-h .pnum + b { white-space: normal; min-width: 0; }
+.lsec-h .pnum ~ .cnt { flex: none; overflow: visible; }
+.lrole { font-size: var(--fs-xs); color: var(--warn); }
+/* own tooltip (shared handler in app.js): graphite with an orange line, the same in every theme */
+.ui-tip { position: fixed; z-index: 1000; max-width: min(320px, calc(100vw - 16px)); padding: 7px 10px 7px 13px; border-radius: 6px;
+  background: #23262e; color: #eceef3; border: 1px solid #3a3e48; box-shadow: inset 3px 0 #ff6a14, 0 6px 18px rgba(0, 0, 0, .28);
+  font: 400 var(--fs-sm)/1.4 var(--sans, system-ui); font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0;   /* "--new" stays two hyphens */
+  white-space: pre-line; overflow-wrap: anywhere; pointer-events: none; }
+.ui-tip::before { content: ""; position: absolute; left: var(--ax, 50%); top: -6px; width: 10px; height: 10px; transform: translateX(-50%) rotate(45deg);
+  background: #23262e; border: 1px solid #3a3e48; border-right: 0; border-bottom: 0; }
+.ui-tip.up::before { top: auto; bottom: -6px; border: 1px solid #3a3e48; border-left: 0; border-top: 0; }
+.ui-tip[hidden] { display: none; }
+/* «Оформление»: colour scheme buttons; the swatch is the scheme's page colour and its accent, half and half */
+.tints { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.tint { display: inline-flex; align-items: center; gap: 7px; min-height: var(--ctl-h); padding: 4px 12px; border-radius: 999px; border: 1px solid var(--ctl-line, var(--line)); background: var(--surface); color: var(--fg); font: inherit; font-size: var(--fs-md); cursor: pointer; }
+.tint:has(i) { padding-left: 8px; }
+.tint i { width: 18px; height: 18px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 1px rgba(127, 127, 127, .45); }
+.tint:hover { border-color: var(--accent); }
+.tint.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: var(--accent-soft); }
+/* device connections page */
+.conn-form { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+@media (max-width: 599px) { .conn-form { grid-template-columns: minmax(0, 1fr); } }
+.conn-sum { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }   /* the panel's gap is the step to the table */
+.conn-tbl td { vertical-align: top; }
+.conn-tbl td.nowrap { white-space: nowrap; }
+.conn-tbl td.warnc { color: var(--warn); }
+/* phone: a row is a card — address and verdict on top, port, then sent / received side by side, nfqws2 below */
+/* :root ×4 — above every style's table cell padding (it gave each cell 12 px top and bottom: half a screen per card).
+   Card: address and verdict on top, the port right under the address, sent / received side by side, nfqws2 below;
+   related lines 2 px apart, groups 8 px, cards 10 px */
+@media (max-width: 599px) {
+  :root:root:root:root .conn-tbl thead { display: none; }
+  :root:root:root:root .scroll > .conn-tbl, :root:root:root:root .conn-tbl tbody { display: block; width: 100%; min-width: 0; }
+  :root:root:root:root .conn-tbl tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  :root:root:root:root .conn-tbl tr:first-child { padding-top: 0; }
+  :root:root:root:root .conn-tbl td.c-dst > .sm { font-size: var(--fs-xs); overflow-wrap: anywhere; }   /* the network name under the address, not bigger than it */
+  :root:root:root:root .conn-tbl td { display: block; padding: 0; border: 0; text-align: left; background: none; line-height: 1.35; }
+  :root:root:root:root .conn-tbl td.c-dst { grid-column: 1; grid-row: 1; }
+  :root:root:root:root .conn-tbl td.c-res { grid-column: 2; grid-row: 1; justify-self: end; align-self: start; }
+  :root:root:root:root .conn-tbl td.c-port { grid-column: 1 / -1; grid-row: 2; margin-top: -6px; font-size: var(--fs-xs); color: var(--muted); }
+  :root:root:root:root .conn-tbl td.num { grid-row: 3; }
+  :root:root:root:root .conn-tbl td.num + td.num { grid-column: 2; justify-self: end; text-align: right; }
+  :root:root:root:root .conn-tbl td.c-nfq { grid-column: 1 / -1; }
+  :root:root:root:root .conn-tbl td[data-h]::before { content: attr(data-h); display: block; margin-bottom: 2px; font-size: var(--fs-xs); color: var(--muted); }
+}
+/* DNS servers page */
+.dns-lead { margin: -4px 0 14px; max-width: 860px; }
+.dns-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
+.dns-tile { display: grid; align-content: start; gap: 6px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--ok); border-radius: var(--radius); }
+.dns-tile.bad { border-top-color: var(--bad); } .dns-tile.warn { border-top-color: var(--warn); }
+.dns-tile .v { font-size: var(--fs-xl); line-height: 1.25; }
+.dns-tile.ok .v { color: var(--ok); } .dns-tile.bad .v { color: var(--bad); } .dns-tile.warn .v { color: var(--warn); }
+/* still being checked: the tile keeps its place, a neutral top line and a spinner instead of the verdict */
+.dns-tile.wait { border-top-color: var(--line); }
+.dns-tile.wait .v { display: flex; align-items: center; gap: 8px; font-weight: 500; }
+.dns-adv.wait h2 { font-weight: 500; }
+.dnsx-step { display: inline-flex; align-items: center; gap: 8px; }
+.panel-h:has(> .dnsx-step) > h2 { flex: none; }   /* the progress goes right after the title, «Остановить» to the right */
+/* a spinner in a table cell or beside small text: the size of a digit */
+.spin.xs { width: 11px; height: 11px; border-width: 1.5px; color: var(--muted); vertical-align: -1px; }
+.dns-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
+.dns-card { display: grid; align-content: start; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); }
+.dns-card .hd { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+.dns-pr { display: grid; grid-template-columns: 58px auto 1fr; gap: 2px 8px; align-items: center; }
+.dns-pr .chip { justify-self: start; }
+.dns-pr .num { text-align: right; }
+.dns-pr .why { grid-column: 2 / -1; }
+.dns-sites { display: grid; }
+.dns-site { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.dns-site > .sm { grid-column: 1 / -1; overflow-wrap: anywhere; }
+.dns-card.best { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
+/* DNS page: one advice block (border by verdict), own DNS rows on top of the table, a caption row before the public ones */
+:root:root main .panel.dns-adv.ok { border-top-color: var(--ok); } :root:root main .panel.dns-adv.bad { border-top-color: var(--bad); }   /* outrank the style's own top line */
+.panel.dns-adv p { margin: 0; }
+.tbl.dnsx-tbl tr.own td { background: var(--soft); } .tbl.dnsx-tbl tr.own td.nm { font-weight: 600; }
+.tbl.dnsx-tbl tr.sep td { padding-top: 6px; padding-bottom: 4px; font-size: var(--fs-xs); color: var(--muted); background: none; }
+details.dns-more-panel > summary { cursor: pointer; color: var(--accent-ink); }
+/* extended DNS check */
+.ok-t { color: var(--ok); } .bad-t { color: var(--bad); }
+.dnsx-prog { height: 6px; border-radius: 3px; background: var(--soft); overflow: hidden; } .dnsx-prog i { display: block; height: 100%; background: var(--accent); transition: width .3s; }
+.dnsx-best { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 10px; }
+.dnsx-tile { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--soft); }
+.dnsx-tile.top { border-color: var(--accent); }
+.dnsx-tile .big { font-size: var(--fs-xl); font-weight: 600; }
+.dnsx-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; }
+.tbl.dnsx-tbl td { vertical-align: middle; }
+:root:root:root .tbl.dnsx-tbl td, :root:root:root .tbl.dnsx-tbl th { padding-top: 7px; padding-bottom: 7px; }
+.tbl.dnsx-tbl td.mono, .tbl.dnsx-tbl td.num { white-space: nowrap; }
+/* the table fits its block at any width, never scrolls sideways: «who answered» is cut with «…» (the whole in the
+   tooltip), the address column goes when the block is narrow (the address is in the name's tooltip) */
+.scroll > .tbl.dnsx-tbl { min-width: 0; width: 100%; }
+.tbl.dnsx-tbl td.who { max-width: 0; width: 34%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@container main (max-width: 1499px) { .tbl.dnsx-tbl .hide-narrow { display: none; } }
+.tbl.dnsx-tbl tr.best td { background: var(--accent-soft); }
+.tbl.dnsx-tbl td.num, .tbl.dnsx-tbl th.num { text-align: right; }
+@container main (max-width: 760px) { .dnsx-best { grid-template-columns: minmax(0, 1fr); gap: 6px; }
+  .dnsx-tile { grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; row-gap: 0; padding: 8px 12px; }
+  .dnsx-tile b { grid-column: 1; } .dnsx-tile .big { grid-column: 2; grid-row: 1 / span 2; align-self: center; font-size: var(--fs-lg); } .dnsx-tile .sm { grid-column: 1; } }
+/* phone: a server is a two-line card — name and stubs on top; DoH · DoT · UDP; who answered */
+@media (max-width: 599px) {
+  :root:root:root:root .dnsx-tbl thead { display: none; }
+  :root:root:root:root .scroll > .dnsx-tbl, :root:root:root:root .dnsx-tbl tbody { display: block; width: 100%; min-width: 0; }
+  :root:root:root:root .dnsx-tbl tr { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)) auto; gap: 2px 8px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+  :root:root:root:root .dnsx-tbl tr.best { padding: 8px; border-radius: var(--radius); background: var(--accent-soft); }
+  :root:root:root:root .dnsx-tbl tr.own { padding: 8px; margin-bottom: 4px; border-radius: var(--radius); background: var(--soft); border: 0; }
+  :root:root:root:root .dnsx-tbl tr.sep { display: block; padding: 6px 0 2px; border: 0; }
+  :root:root:root:root .dnsx-tbl tr.sep td { display: block; }
+  :root:root:root:root .dnsx-tbl td { display: block; padding: 0; border: 0; background: none; text-align: left; }
+  :root:root:root:root .dnsx-tbl td.nm { grid-column: 1 / 4; font-weight: 600; } :root:root:root:root .dnsx-tbl td.sub { grid-column: 4; grid-row: 1; justify-self: end; }
+  :root:root:root:root .dnsx-tbl td.hide-narrow { display: none; }
+  :root:root:root:root .dnsx-tbl td[data-h] { font-size: var(--fs-xs); grid-row: 2; }
+  :root:root:root:root .dnsx-tbl td[data-h]::before { content: attr(data-h) " "; color: var(--muted); }
+  :root:root:root:root .dnsx-tbl td[data-h] > *, :root:root:root:root .dnsx-tbl td.who > * { font-size: var(--fs-xs); white-space: nowrap; }
+  :root:root:root:root .dnsx-tbl td.who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root:root:root:root .dnsx-tbl td.who { grid-column: 1 / -1; }
+}
+.dns-best { margin-left: auto; font-size: var(--fs-xs); font-weight: 600; padding: 0 6px; border-radius: 4px; background: var(--accent); color: var(--accent-fg); }
+.dns-adv a { color: var(--accent-ink); }
+/* status chips on this page carry a dot, as on «Мониторинг» */
+:is(.dns-card, .dns-site, .dns-more) .chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.dns-more { margin-top: 12px; } .dns-more summary { cursor: pointer; color: var(--accent-ink); }
+.dns-more .tbl { margin-top: 8px; }
+.lsec-h .cnt { margin-left: auto; color: var(--faint); font-size: var(--fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }
+.lsub { padding: 5px 8px 3px 6px; font-size: var(--fs-xs); color: var(--faint); }
+.lsec-h .ar, .lsub .ar { color: var(--faint); width: 12px; display: inline-block; transition: transform .15s; }
+.lsec.closed .lsec-h .ar, .lsub[aria-expanded="false"] .ar { transform: rotate(-90deg); }
+.lsec.closed .lsec-b { display: none; }
+.sq { width: 22px; height: 22px; border-radius: 5px; background: var(--soft); display: inline-grid; place-items: center; font-size: var(--fs-xs); font-weight: 700; flex: none; color: var(--muted); }
+.lnav-acts { position: sticky; bottom: -6px; display: grid; gap: 1px; margin-top: 6px; padding: 4px 0 6px; background: var(--surface); border-top: 1px solid var(--line); }
+.ltitle { font-size: var(--fs-md); font-weight: 700; }
+.ent { grid-template-columns: 22px 16px minmax(0, 1fr) auto auto auto; }
+.ent .note.faint { color: var(--faint); }
+.ent .chk { min-height: 28px; color: var(--muted); }
+@media (max-width: 759px) { .ent { grid-template-columns: 22px minmax(0, 1fr) auto; } .ent .chk { display: none; } }
+@media (max-width: 899px) { .lnav-acts { position: static; border-top: 0; display: contents; } }
+.lhead { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }
+.lhead > .row:first-child { flex: 1 1 100%; }
+.lhead > .row:empty { display: none; }
+
+/* диагноз блокировки: ступени проверки */
+.dsteps { display: grid; }
+.dstep { display: grid; grid-template-columns: 22px 210px minmax(0, 1fr); gap: 10px; align-items: baseline; padding: 9px 0; border-top: 1px solid var(--line); }
+.dstep:first-child { border-top: 0; }
+.dstep > :first-child { align-self: center; justify-self: center; }
+.dstep.skip b { color: var(--faint); font-weight: 500; }
+@media (max-width: 759px) { .dstep { grid-template-columns: 22px minmax(0, 1fr); } .dstep > :last-child { grid-column: 2; } }
+.tag.new { border-color: var(--accent); color: var(--accent-ink); }
+/* «Обрыв на 16 КБ»: строки сетей; на телефоне — карточки */
+.frz-row { display: grid; grid-template-columns: minmax(0, 1.3fr) 80px minmax(0, 2fr) 240px; gap: 6px 14px; align-items: center; padding: 10px 0; border-top: 1px solid var(--line); }
+.frz-row:first-child { border-top: 0; }
+.frz-act { flex-wrap: wrap; justify-content: flex-end; }
+@media (max-width: 759px) { .frz-row { grid-template-columns: minmax(0, 1fr) auto; } .frz-row > :nth-child(3), .frz-row > .frz-act { grid-column: 1 / -1; } .frz-act { justify-content: flex-start; } .frz-act:empty { display: none; } }
+/* «новое»: точка на вкладках, разделах нижней панели, кнопках меню и у группы в свёрнутом меню */
+.tabs a.has-new, .bottom a.has-new, .bottom > button.has-new, #burger.has-new, .mgrp.has-new .nav-h { position: relative; }
+.tabs a.has-new::after, .bottom a.has-new::after, .bottom > button.has-new::after, #burger.has-new::after, :root[data-navmini] .mgrp.has-new .nav-h::after {
+  content: ''; position: absolute; top: 6px; right: 6px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); }
+.bottom a.has-new::after, .bottom > button.has-new::after { top: 8px; right: calc(50% - 16px); }
+.subtabs a { display: inline-flex; align-items: center; gap: 6px; }
+
+/* подбор: ход по шагам и перебранные значения уточнения */
+.flow { display: flex; flex-wrap: wrap; gap: 2px; border-radius: var(--radius); overflow: hidden; }
+.flow > div { flex: 1 1 150px; min-width: 0; padding: 8px 12px; background: var(--soft); display: grid; gap: 1px; font-size: var(--fs-sm); color: var(--muted); }
+.flow > div b { font-size: var(--fs-sm); color: var(--fg); }
+.flow > div span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.flow > div.done { background: var(--ok-soft); }
+.flow > div.now { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
+.tune { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.tune span { font-family: var(--mono); font-size: var(--fs-sm); padding: 3px 8px; border-radius: 5px; background: var(--bad-soft); color: var(--bad); cursor: default; }
+.tune span.y { background: var(--ok-soft); color: var(--ok); }
+.tune span.h { background: var(--warn-soft); color: var(--warn); }
+.tune span.best { box-shadow: 0 0 0 2px currentColor; }
+
+/* история подборов: запуск — раскрывающаяся строка */
+.prun { border: 1px solid var(--line); border-radius: var(--radius); padding: 0 12px; }
+.prun > summary { display: flex; align-items: center; gap: 10px; padding: 8px 0; cursor: pointer; list-style: none; min-width: 0; }
+.prun > summary::-webkit-details-marker { display: none; }
+.prun[open] { padding-bottom: 10px; }
+.prun[open] > summary { border-bottom: 1px solid var(--line); margin-bottom: 8px; }
+
+/* верхняя панель: слева — знак и имя интерфейса, справа — сам nfqws2: версия, состояние, управление */
+.svc-box { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
+/* router load: small chips before nfqws2 */
+.load { display: inline-flex; align-items: center; gap: 6px; }
+.load[hidden] { display: none; }
+.lchip { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
+.lchip > span { display: block; text-box: trim-both cap alphabetic; }
+.lchip b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }
+.lchip.warn { border-color: var(--warn); background: var(--warn-soft); }
+.lchip.warn, .lchip.warn b { color: var(--warn); }
+.lsep { width: 1px; height: 20px; background: var(--line); margin-left: 2px; }
+.top #svc { height: 24px; padding-block: 0; }   /* the state pill and the load chips — one height in the row */
+@media (max-width: 1365px) { .lchip.opt { display: none; } }
+.load-m { display: none; }
+@media (max-width: 767px) {
+  .svc-box > .load { display: none; }
+  .load-m:not([hidden]) { display: flex; justify-content: center; gap: 6px; padding: 4px 16px 6px; }
+  .load-m .lsep { display: none; }
+}
+.svc-name { font-weight: 600; font-size: var(--fs-sm); display: inline-flex; align-items: baseline; gap: 5px; }
+.svc-name small { font-weight: 500; color: var(--muted); font-size: var(--fs-xs); }
+.nfq-up { display: inline-flex; align-items: center; gap: 4px; border: 0; border-radius: var(--ctl-r); padding: 1px 8px; background: var(--accent-soft); color: var(--accent-ink); font: inherit; font-size: var(--fs-xs); font-weight: 700; line-height: 18px; cursor: pointer; }
+.nfq-up svg { display: none; width: 18px; height: 18px; }
+@media (max-width: 1099px) { .nfq-up { position: relative; background: none; padding: 6px; } .nfq-up .t { display: none; } .nfq-up svg { display: block; }
+  .nfq-up::after { content: ""; position: absolute; top: 4px; right: 3px; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); } }
+@media (max-width: 1099px) { .svc-name { display: none; } .svc-box { gap: 4px; } }
+@media (min-width: 1100px) and (max-width: 1919px) { :root[data-layout="site"] .svc-name { display: none; } }
+
+/* боковое меню: названия групп — заметные заголовки, а не ещё один пункт */
+:root .mnav .nav-h { margin: 12px 2px 4px; padding: 12px 8px 6px; border-top: 1px solid var(--line); font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--accent-ink); }
+:root .mnav .nav-h::before { content: ""; width: 3px; height: 12px; border-radius: 2px; background: var(--accent); flex: none; }

@@ -1,0 +1,94 @@
+/* Interface styles: phone: everything fits the width. Loaded by index.html in a fixed order (see the list there) — the order matters. */
+
+/* ---- телефон: всё помещается по ширине, ничего не уезжает за край ---- */
+/* верхняя панель: на узком экране остаётся знак без названия, иначе «Остановить» оказывается за краем */
+@media (max-width: 479px) {
+  .brand > span { display: none; }
+  .top-in { padding: 0 10px; }
+  .top .pill { padding: 2px 8px; }
+}
+@media (max-width: 339px) { .top .pill { font-size: 0; gap: 0; padding: 6px; } }
+/* переключатель вида в заголовке страницы («Обзор»: пять кнопок) — на телефоне во всю ширину, кнопки делят её поровну;
+   иначе он шире экрана и растягивает за собой всю страницу */
+@media (max-width: 479px) {
+  .vh > .seg { display: flex; flex-wrap: nowrap; width: 100%; }
+  .vh > .seg button { flex: 1 1 0; min-width: 0; padding-inline: 2px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  :root[data-variant="k"] .vh > .seg button { padding-inline: 2px; font-size: var(--fs-md); }
+}
+/* таблицы из четырёх и более колонок не сжимаем в столбики — пусть прокручиваются вбок */
+@media (max-width: 759px) { .scroll > .tbl:has(th:nth-child(4)) { min-width: 600px; } }
+/* phone: a wide table as cards (cardTable() in app.js) — a row is a framed card, the first cell its title, the
+   others «label … value», the buttons at the bottom right; nothing scrolls sideways */
+@media (max-width: 599px) {
+  .tbl td { overflow-wrap: anywhere; }   /* a long name or message breaks rather than widen the table past the screen */
+  .tbl td.nowrap { white-space: normal; }
+  .mon-tbl .mst { padding: 2px 7px; } .mon-tbl .mst::before { display: none; }   /* the colour says it; the dot cost 13 px */
+  :root .scroll > table.tbl.cardy { min-width: 0; }
+  .tbl.cardy, .tbl.cardy tbody { display: block; }
+  .tbl.cardy thead { display: none; }
+  /* snapshots keep «select all» above the cards */
+  .tbl.cardy.snaps thead { display: block; margin-bottom: 8px; } .tbl.cardy.snaps thead tr { display: block; }
+  .tbl.cardy.snaps thead th { display: none; } .tbl.cardy.snaps thead th.chk { display: flex; align-items: center; gap: 8px; padding: 4px 0; border: 0; background: none; }
+  /* card: the checkbox in the top right corner on the «Когда» line, not a line of its own; the four actions in one row */
+  :root:root:root:root .tbl.cardy.snaps tbody tr { position: relative; }
+  :root:root:root:root .tbl.cardy.snaps tbody td.chk { position: absolute; top: 10px; right: 12px; padding: 0; width: auto; }
+  :root:root:root:root .tbl.cardy.snaps tbody td.chk + td { padding-right: 34px; }
+  :root:root:root:root .tbl.cardy.snaps .acts-row { display: grid; grid-template-columns: 1fr 1fr auto auto; gap: 6px; }
+  :root:root:root:root .tbl.cardy.snaps .acts-row > .btn:not(.icon) { padding: 0 8px; min-width: 0; }
+  :root:root:root:root .tbl.cardy.snaps .acts-row > :is(.btn.icon, a.btn) { width: 34px; min-width: 34px; padding: 0; }
+  :root:root:root:root .tbl.cardy.snaps thead th.chk { white-space: nowrap; }
+  .tbl.cardy.snaps thead th.chk::after { content: "выбрать все"; color: var(--muted); font-weight: 400; font-size: var(--fs-sm); text-transform: none; letter-spacing: 0; font-family: var(--sans); }
+  .tbl.cardy tr { display: block; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); margin-bottom: 10px; }
+  :root:root:root .tbl.cardy td { display: block; padding: 3px 0; border: 0; text-align: right; overflow-wrap: anywhere; white-space: normal; width: auto; }
+  .tbl.cardy td::before { content: attr(data-th); float: left; margin-right: 12px; color: var(--muted); font-size: var(--fs-sm); font-weight: 400; text-align: left; }
+  .tbl.cardy td:not([data-th])::before, .tbl.cardy td:first-child::before { content: none; }
+  .tbl.cardy td:first-child { text-align: left; font-weight: 600; padding-bottom: 6px; }
+  .tbl.cardy td:empty { display: none; }
+  .tbl.cardy td:not([data-th]) { padding-top: 8px; }
+  .tbl.cardy td > .row { justify-content: flex-start; }   /* card actions from the left: a button that wraps starts a new line there, not alone on the right */
+  .tbl.cardy tr.sel, .tbl.cardy tr.mon-down { border-color: var(--accent); }
+}
+/* колонка с длинным текстом: без минимума браузер сжимает её до слова в строке */
+.tbl th.wide { min-width: 140px; }   /* 230 px kept tables wider than the window at 1100 px */
+/* a number column's header may wrap («Не сработала»): nowrap made it wider than its numbers ever are */
+.tbl th.num { white-space: normal; }
+/* long strategies and host names break anywhere rather than hold a column wide */
+.tbl td.mono, .tbl td > .mono, .tbl td > code { overflow-wrap: anywhere; }
+/* a narrow content area: tighter cells, so a six-column table fits without scrolling sideways */
+@container main (max-width: 860px) { :root:root:root .tbl :is(th, td) { padding-left: 7px; padding-right: 7px; } }   /* over the styles' own cell padding */
+/* результаты подбора, колонка «откуда»: длинное «уточнение: fake ×6 tcp_md5 + multisplit» на телефоне сжималось в столбик по слову в строке */
+.tbl td.src { min-width: 150px; }
+/* крестик на метке — под палец */
+@media (max-width: 759px), (pointer: coarse) {
+  .chip .x { min-width: 26px; min-height: 26px; margin: -5px -8px -5px -2px; font-size: var(--fs-md); }
+}
+/* пояснение рядом с кнопкой: если рядом ему тесно — переносится под кнопку, а не сжимается в столбик */
+.note-wide { flex: 1 1 220px; min-width: 0; }
+/* подбор: поле «Своя стратегия» раскрывается по нажатию — форма и так длинная */
+.own-st { display: grid; gap: 6px; min-width: 0; }
+.own-st > summary { cursor: pointer; color: var(--accent-ink); width: fit-content; font-size: var(--fs-md); min-height: 28px; display: flex; align-items: center; gap: 6px; }
+.own-st > summary::before { content: "▸"; }
+.own-st[open] > summary::before { content: "▾"; }
+/* компоновка «Вкладки» на планшете: вкладки, кнопки и состояние nfqws2 в одну строку помещаются только без названия */
+@media (min-width: 760px) and (max-width: 899px) {
+  :root[data-layout="tabs"] .brand > span { display: none; }
+  :root[data-layout="tabs"] .tabs a { padding: 0 9px; }
+  :root[data-layout="site"] .tabs a { padding: 0 8px; }
+}
+/* поле ввода в строке с кнопкой или списком: если ему осталось меньше 180px — сосед переносится на следующую строку */
+.row > .input.grow { flex: 1 1 180px; min-width: 0; }
+/* галочка с длинной подписью: подпись переносится по словам рядом с галочкой, а не уезжает под неё */
+label.row { flex-wrap: nowrap; }
+label.row > input[type="checkbox"], label.row > input[type="radio"] { flex: none; }
+/* checkbox with a caption that may wrap: the box sits on the FIRST line, centred on it. Inputs inherit the label's
+   font with its line-height (font: inherit), so 1lh is the caption's line box. */
+/* the caption text is the baseline of the whole label (so a row label in a .frow lines up with it); the box keeps
+   to the top of the first line — without align-self it would be the baseline itself and pull the row label down */
+label.chk { display: flex; align-items: baseline; gap: 8px; }
+label.chk > input[type="checkbox"], label.chk > input[type="radio"] { flex: none; align-self: flex-start; margin-top: max(0px, calc((1lh - 18px) / 2)); }
+:root[data-variant="k"] label.chk > input[type="checkbox"] { margin-top: max(0px, calc((1lh - 20px) / 2)); }
+
+/* версия интерфейса у ссылки на репозиторий */
+.repo-link { color: var(--muted); font-size: var(--fs-xs); font-weight: 500; gap: 5px; }
+.repo-link:hover { color: var(--fg); }
+@media (max-width: 759px) { .repo-link { display: none; } }

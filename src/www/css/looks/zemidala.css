@@ -1,0 +1,56 @@
+/* Interface styles: style Z: the K layout with the brand palette. Loaded by index.html in a fixed order (see the list there) — the order matters. */
+
+/* ---------- Z · zemidala: the K layout with the brand palette (data-variant="k" data-palette="zd") ----------
+   Orange #ff6a14 fills (buttons, switches, markers) carry black text (7:1); orange as text is darker on light
+   (#c2490a) and lighter on dark (#ff8a45) — the pure brand orange reads at 2.9:1 as text. Black #07080b and
+   graphite surfaces, brand grey #9aa1b5 for captions in the black menu, blue #1d4dff as the second colour.
+   The selectors carry data-variant too, so they outrank every K colour block above (and its later overrides). */
+:root[data-variant="k"][data-palette="zd"] {
+  --bg: #f4f4f6; --surface: #ffffff; --line: #e2e3e8; --fg: #07080b; --muted: #5d6270; --faint: #737888;
+  --accent: #ff6a14; --accent-ink: #c2490a; --accent-fg: #07080b; --accent-soft: #fff1e8; --soft: #f1f2f5;
+  --k-side: #07080b; --k-active: #1a1208; --k-field: #8f939c; --zd-blue: #1d4dff; --zd-blue-soft: #eef2ff;
+}
+:root[data-variant="k"][data-palette="zd"][data-mode="dark"] {
+  --bg: #07080b; --surface: #111318; --line: #23262e; --fg: #eceef3; --muted: #b4bacb; --faint: #a3a9bb;
+  --accent: #ff6a14; --accent-ink: #ff8a45; --accent-fg: #07080b; --accent-soft: #2a1709; --soft: #191c22;
+  --k-side: #07080b; --k-active: #1a1208; --k-field: #5f636c; --zd-blue: #8ea4ff; --zd-blue-soft: #121a3a; --shadow: none;
+}
+@media (prefers-color-scheme: dark) {
+  :root[data-variant="k"][data-palette="zd"]:not([data-mode="light"]) {
+    --bg: #07080b; --surface: #111318; --line: #23262e; --fg: #eceef3; --muted: #b4bacb; --faint: #a3a9bb;
+    --accent: #ff6a14; --accent-ink: #ff8a45; --accent-fg: #07080b; --accent-soft: #2a1709; --soft: #191c22;
+    --k-side: #07080b; --k-active: #1a1208; --k-field: #5f636c; --zd-blue: #8ea4ff; --zd-blue-soft: #121a3a; --shadow: none;
+  }
+}
+/* the menu is black in both themes: its own text colours, scoped to it */
+:root[data-palette="zd"] #side:has(.mnav), :root[data-palette="zd"] .mnav {
+  --fg: #e8e9ee; --muted: #9aa1b5; --faint: #9aa1b5; --accent-ink: #ff8a45; --line: #23262e; color: var(--fg);
+}
+:root[data-palette="zd"] .mnav a.on { color: #ff8a45; font-weight: 600; box-shadow: inset 3px 0 #ff6a14; }
+:root[data-palette="zd"] .mnav a:hover { color: #ff8a45; }
+:root[data-palette="zd"] .mnav .tag.new { background: #1d4dff; }
+/* K paints table heads and the overview backdrop with the menu colour — black here, so they get their own */
+:root[data-palette="zd"] .tbl th { background: var(--soft); }
+:root[data-palette="zd"] .ov { background: transparent; }
+/* every block gets the orange line on top; information notes use the blue second colour */
+:root[data-palette="zd"] main .panel { border-top: 2px solid #ff6a14; }
+/* K panels are flat and flush with the page; in Z a panel is a visible card, so its content needs room inside */
+:root[data-palette="zd"] main .panel, :root[data-palette="zd"] main .panel + .panel { padding: 18px 22px 22px; border-radius: 4px; }
+@media (max-width: 479px) { :root[data-palette="zd"] main .panel, :root[data-palette="zd"] main .panel + .panel { padding: 14px 14px 16px; } }
+:root[data-palette="zd"] .notice.info { background: var(--zd-blue-soft); color: var(--fg); box-shadow: inset 3px 0 var(--zd-blue); }
+:root[data-palette="zd"] .notice.info > svg { color: var(--zd-blue); }
+.th-z { background: #f4f4f6; } .th-z .tl { background: #07080b; padding: 4px; } .th-z i { background: #3a3d45; height: 5px; }
+.th-z .acc { background: #ff6a14; width: 70%; } .th-z i.card { background: #fff; height: 30px; border: 1px solid #e2e3e8; border-top: 2px solid #ff6a14; }
+.look-new { display: grid; position: relative; }
+.look-new > .tag.new { position: absolute; top: 8px; right: 8px; }
+
+/* an empty slot (input suggestions, notes filled later) takes no room: each one still added the block gap and left
+   a 30–50 px hole between an editor and its help */
+:is(.panel, .stack, .mcol, .blk) > :empty:not(input, textarea, select, canvas, img, i, .spin, .grow, hr) { display: none; }
+/* a field standing in a row with buttons or a dropdown: all of them one height (the tallest), in every style —
+   styles size fields and buttons separately and they ended up 4–8 px apart; plain text in the row stays centred */
+/* exactly the control height, not «the tallest»: a three-line hint in the same row stretched the button to its size */
+:is(.row, .quick, .search):has(> .input) > :is(input.input, .btn, .dd-btn) { align-self: center; height: var(--ctl-h); min-height: var(--ctl-h); }
+/* an icon button is a square: as wide as it is tall in every style (K made them 28 × 34) */
+:root .btn.icon { width: var(--ctl-h); min-height: var(--ctl-h); padding: 0; flex: none; }
+:root .btn.small.icon { width: var(--ctl-hs); min-height: var(--ctl-hs); }

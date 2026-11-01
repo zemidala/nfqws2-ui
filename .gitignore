@@ -1,3 +1,8 @@
 dist/
 *.ipk
 node_modules/
+# scenarios: device addresses of your network and run results
+tests/e2e/targets.local.mjs
+tests/e2e/report/
+tests/e2e/test-results/
+tests/e2e/.pw-shell.config.mjs

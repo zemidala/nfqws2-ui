@@ -1,0 +1,60 @@
+/* Interface styles: character of the styles A, B, C. Loaded by index.html in a fixed order (see the list there) — the order matters. */
+
+/* ---------- character of the styles A, B, C ----------
+   One face (Inter) everywhere, so the styles differ by density, shape and how blocks are presented; inside a style
+   every control is still one height and the type keeps its six steps (just set per style). */
+/* A · Консоль: dense and technical — small type and controls, near-square corners, joined panels, mono headings */
+:root[data-variant="a"] { --radius: 3px; --gap: 0px; --ctl-h: 30px;
+  --fs-xs: 11px; --fs-sm: 12px; --fs-md: 14px; --fs-lg: 15px; --fs-xl: 17px; --fs-2xl: 22px; }
+:root[data-variant="a"] :is(main h1, .panel-h h2, .vh h1) { font-family: var(--mono); font-weight: 600; letter-spacing: -.01em; }
+:root[data-variant="a"] .panel-h h2 { font-size: var(--fs-sm); text-transform: uppercase; letter-spacing: .06em; color: var(--muted); }
+:root[data-variant="a"] main .panel { padding: 12px 14px; gap: 10px; }
+:root[data-variant="a"] main > .panel + .panel, :root[data-variant="a"] .mcol > .panel + .panel { margin-top: -15px; border-top-color: transparent; border-top-left-radius: 0; border-top-right-radius: 0; }
+:root[data-variant="a"] .tbl th { font-family: var(--mono); text-transform: uppercase; letter-spacing: .04em; }
+:root[data-variant="a"] .tbl :is(th, td) { padding-top: 5px; padding-bottom: 5px; }
+:root[data-variant="a"] .btn { font-weight: 500; }
+:root[data-variant="a"] .mnav { background: var(--bg); padding: 8px 0 20px; }
+:root[data-variant="a"] .mnav :is(.nav a, .nav-h) { font-family: var(--mono); }
+:root[data-variant="a"] .mnav .mlinks > a { min-height: 28px; padding: 4px 14px; border-radius: 0; border-left: 2px solid transparent; }
+:root[data-variant="a"] .mnav .mlinks > a.on { background: none; border-left-color: var(--accent); }
+:root[data-variant="a"] .mnav .nav-h { text-transform: uppercase; letter-spacing: .06em; padding: 14px 14px 4px; }
+:root[data-variant="a"] .mon-tiles { gap: 0; }
+:root[data-variant="a"] .mon-tile { border-radius: 0; background: transparent; padding: 10px 14px; }
+:root[data-variant="a"] .mon-tile + .mon-tile { border-left-width: 0; }
+:root[data-variant="a"] .mon-tile b { font-family: var(--mono); font-size: var(--fs-xl); }
+/* B · Карточки: spacious and soft — pill buttons, round cards with a shadow and room inside, bigger page title */
+:root[data-variant="b"] { --radius: 16px; --ctl-h: 38px; --fs-2xl: 28px; --ctl-r: 999px;
+  --shadow: 0 1px 2px rgba(16, 40, 34, .05), 0 6px 20px rgba(16, 40, 34, .06); }
+:root[data-variant="b"][data-mode="dark"] { --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25); }
+@media (prefers-color-scheme: dark) { :root[data-variant="b"]:not([data-mode="light"]) { --shadow: 0 1px 2px rgba(0, 0, 0, .3), 0 8px 24px rgba(0, 0, 0, .25); } }
+:root[data-variant="b"] main .panel { padding: 22px 24px; gap: 16px; }
+:root[data-variant="b"] :is(.input, .select, .textarea) { border-radius: 12px; }
+:root[data-variant="b"] .panel-h h2 { font-weight: 700; }
+:root[data-variant="b"] .tbl :is(th, td) { padding-top: 10px; padding-bottom: 10px; }
+:root[data-variant="b"] .tbl th { border-bottom-width: 0; background: var(--soft); }
+:root[data-variant="b"] .tbl th:first-child { border-radius: 10px 0 0 10px; } :root[data-variant="b"] .tbl th:last-child { border-radius: 0 10px 10px 0; }
+:root[data-variant="b"] .mnav { background: var(--bg); padding: 14px 12px 24px; }
+:root[data-variant="b"] .mnav .mlinks > a { min-height: 38px; padding: 6px 14px; border-radius: 999px; }
+:root[data-variant="b"] .mnav .mlinks > a.on { background: var(--accent); color: var(--accent-fg); }
+:root[data-variant="b"] .mnav .mlinks > a.on > svg { color: var(--accent-fg); }
+:root[data-variant="b"] .mnav .mlinks > a.on :is(.tail, .tag) { color: var(--accent-fg); border-color: currentColor; }   /* the count on the filled pill: faint grey on the accent read at Lc 0–9 */
+:root[data-variant="b"] .mon-tiles { gap: 16px; }
+:root[data-variant="b"] .mon-tile { border: 0; border-radius: 14px; padding: 18px 20px; background: var(--accent-soft); }
+:root[data-variant="b"] .mon-tile b { font-size: var(--fs-2xl); font-weight: 700; }
+/* C · Схема: outlined — framed panels, a block title with an accent bar, outlined buttons, accent table heads */
+:root[data-variant="c"] { --radius: 8px; --gap: 12px; --shadow: none; }
+:root[data-variant="c"] main .panel { border-width: 1.5px; border-color: color-mix(in srgb, var(--fg) 18%, var(--surface)); }
+:root[data-variant="c"] .panel-h h2 { border-left: 3px solid var(--accent); padding-left: 10px; }
+:root[data-variant="c"] .btn:not(.primary):not(.ghost) { background: transparent; border-color: var(--accent); color: var(--accent-ink); }
+:root[data-variant="c"] .tbl th { color: var(--accent-ink); font-weight: 600; border-bottom: 1.5px solid var(--accent); }
+:root[data-variant="c"] .tbl td { border-bottom-style: dashed; }
+/* the menu drawn as a scheme: a line down each group, every page a node on it, the open one an accent node */
+:root[data-variant="c"] .mnav .mlinks > a { position: relative; margin-left: 14px; padding-left: 18px; border-radius: 0 var(--ctl-r) var(--ctl-r) 0; border-left: 1.5px solid var(--line); }
+:root[data-variant="c"] .mnav .mlinks > a::before { content: ""; position: absolute; left: -5px; top: 50%; width: 8px; height: 8px; margin-top: -4px; border-radius: 50%; background: var(--surface); border: 1.5px solid var(--line); }
+:root[data-variant="c"] .mnav .mlinks > a.on::before { background: var(--accent); border-color: var(--accent); }
+:root[data-variant="c"] .mnav .mlinks > a.on { background: none; }
+:root[data-variant="c"] .mon-tile { background: transparent; border: 1.5px dashed color-mix(in srgb, var(--fg) 22%, var(--surface)); }
+
+/* a one-line field and a dropdown are exactly --ctl-h tall in every style: vertical padding on top of the line height
+   made them 3 px taller than the buttons beside them (style A: 33 against 30) */
+:root:root input.input, :root:root .select { height: var(--ctl-h); min-height: var(--ctl-h); padding-top: 0; padding-bottom: 0; }

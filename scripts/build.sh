@@ -19,8 +19,17 @@ TAR="tar --owner=0 --group=0 --numeric-owner --sort=name --mtime=@$SOURCE_DATE_E
 
 rm -rf "$OUT"; mkdir -p "$OUT"
 
-# ?v= — версия и хеш файлов: браузер не возьмёт старые app.js/app.css из кеша даже при той же версии
-HASH=$(cat src/www/app.js src/www/app.css | sha256sum | cut -c1-8)
+# lib/map.php (which server sections each command loads) must match the code, or a command may miss a function
+if command -v php >/dev/null 2>&1; then
+	php scripts/libmap.php src/www check || exit 1
+	php scripts/pagemap.php src/www check || exit 1   # js/core/pages.js: which page files each view loads
+else
+	echo "WARNING: no php — lib/map.php not checked" >&2
+fi
+
+# ?v= — версия и хеш файлов: браузер не возьмёт старые скрипты и стили из кеша даже при той же версии.
+# The same hash as scratchpad deploys: all .js and .css under js/, css/ and app.js, in name order
+HASH=$(cd src/www && find js css app.js -type f \( -name '*.js' -o -name '*.css' \) | LC_ALL=C sort | xargs cat | sha256sum | cut -c1-8)
 
 # pack <система> <каталог интерфейса> <каталог программ> <имя .ipk>
 # Собирает $STAGE/<система>/data с подставленной версией и пакет из него
@@ -28,7 +37,8 @@ pack() {
 	S=$STAGE/$1; D=$S/data; W=$D$2; B=$D$3
 	mkdir -p "$W/docs" "$B"
 	cp README.md CHANGELOG.md "$W/docs/"
-	cp src/www/index.html src/www/app.js src/www/app.css src/www/api.php src/www/icon.svg src/www/manifest.json "$W/"
+	cp src/www/index.html src/www/app.js src/www/api.php src/www/icon.svg src/www/manifest.json "$W/"
+	cp -R src/www/lib src/www/js src/www/css "$W/"
 	cp src/bin/nfqws-ui-setup src/bin/nfqws-ui "$B/"
 	sed -i "s/?v=[0-9A-Za-z.-]*\"/?v=$VERSION-$HASH\"/g" "$W/index.html"
 	sed -i "s/^const UI_VERSION = '[^']*';/const UI_VERSION = '$VERSION';/" "$W/api.php"

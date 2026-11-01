@@ -1,0 +1,187 @@
+/* Interface styles: panels, buttons, fields, chips, tables. Loaded by index.html in a fixed order (see the list there) — the order matters. */
+
+/* ---------- блоки и элементы ---------- */
+.blk, .panel { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 14px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 10px; min-width: 0; box-shadow: var(--shadow); align-content: start; }
+.panel { padding: 16px; gap: 14px; }
+:root[data-variant="b"] .blk, :root[data-variant="b"] .panel { border-color: transparent; }
+.blk-h, .panel-h { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.blk-h h2 { font-size: var(--fs-md); flex: 1; }
+.panel-h h2 { flex: 1; }
+.vh { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-height: var(--ctl-h); }   /* one height with or without buttons: the heading stands in the same place on every page */
+/* Control sizes in one place: every field, dropdown, button, switch half and icon button takes its height from
+   these two; a style or the phone changes only them, never an element on its own */
+/* one height for everything: a «small» button differs only by its font, so it lines up with fields and switches */
+:root { --ctl-h: 34px; --ctl-hs: var(--ctl-h); }
+:root[data-variant="k"] { --ctl-h: 36px; }
+@media (max-width: 759px) { :root:root { --ctl-h: 40px; } }   /* a finger needs 40 px */
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; min-height: var(--ctl-h); padding: 0 12px; border-radius: var(--ctl-r); border: 1px solid var(--ctl-line); background: var(--surface); color: var(--fg); font-weight: 500; font-size: var(--fs-sm); cursor: pointer; white-space: nowrap; text-decoration: none; }
+/* the label's line box is trimmed to cap height and baseline, so centring puts the capitals, not the font's ascent and
+   descent, in the middle — the icon beside them is centred too. Without it the text rode 1.5px high and the icon
+   looked 2px low next to it. Browsers without text-box keep the old look. */
+.btn > btn-l { display: block; text-box: trim-both cap alphabetic; }
+/* plain text standing in a row beside a button is centred the same way, or the two sit 1.5px apart; badges and
+   chips keep their own box */
+:is(.row, .panel-h, .blk-h):has(> .btn) > :is(span, p, small, b, strong, em, label):not(.btn, .chip, .mst, .tag, .pchip, .badge, .st, .dd-btn, .spin, .dot, .sw, .seg) { text-box: trim-both cap alphabetic; }
+.btn:hover { background: var(--soft); }
+.btn:disabled { opacity: .5; cursor: default; }
+.btn.icon { width: var(--ctl-h); padding: 0; }
+.btn.small { min-height: var(--ctl-hs); padding: 0 9px; font-size: var(--fs-sm); }
+.btn.small.icon { width: var(--ctl-hs); }
+.btn.ghost { border-color: transparent; background: transparent; color: var(--muted); }
+.btn.ghost:hover { background: var(--soft); color: var(--fg); }
+/* a button with a label is always drawn as a button: bare text beside framed buttons read as stray words */
+:root :is(main, #side) .btn.ghost:not(.icon) { border-color: var(--ctl-line); color: var(--fg); }
+:root[data-variant="k"] :is(main, #side) .btn.ghost:not(.icon) { border-color: var(--accent); color: var(--accent-ink); }
+.btn.primary { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.btn.primary:hover { filter: brightness(1.07); }
+.btn.danger { color: var(--bad); }
+.btn.warn { background: var(--warn); border-color: var(--warn); color: var(--surface); }
+.input, .select, .textarea { min-width: 0; min-height: var(--ctl-h); border: 1px solid var(--ctl-line); border-radius: calc(var(--radius) * .7 + 2px); background: var(--bg); color: var(--fg); padding: 5px 10px; outline: none; }
+.input:focus, .select:focus, .textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.input.mono { font-family: var(--mono); font-size: var(--fs-sm); }
+.textarea { font-family: var(--mono); font-size: var(--fs-sm); line-height: 1.55; resize: vertical; min-height: 80px; width: 100%; }
+@media (max-width: 759px) { .input, .select { font-size: var(--fs-md); } }   /* 16 px keeps phones from zooming into the field */
+/* Own dropdowns (app.js, «dropdowns»): the button takes the select's classes, the native select stays hidden */
+.dd-native { display: none !important; }
+.dd-btn { display: inline-flex; align-items: center; gap: 6px; text-align: left; cursor: pointer; vertical-align: middle; }
+.dd-btn[hidden] { display: none; }
+.dd-in { display: grid; flex: 1 1 auto; min-width: 0; }
+.dd-in > * { grid-area: 1 / 1; min-width: 0; }
+.dd-t { overflow: clip; overflow-clip-margin: 6px; text-overflow: ellipsis; white-space: nowrap; }   /* see .ellipsis */
+.dd-sz { display: grid; height: 0; overflow: hidden; visibility: hidden; }
+.dd-sz > span { grid-area: 1 / 1; white-space: nowrap; }
+/* the chosen text centred by its capitals, like button labels beside it — otherwise the two sit 1.5px apart */
+.dd-t, .dd-sz > span { text-box: trim-both cap alphabetic; }
+.dd-arr { flex: none; width: 7px; height: 7px; margin: 0 3px 3px 6px; border-right: 1.5px solid var(--muted); border-bottom: 1.5px solid var(--muted); transform: rotate(45deg); transition: transform .15s; }
+.dd-btn.dd-on .dd-arr { transform: translateY(3px) rotate(-135deg); }
+.dd-btn:hover:not(:disabled) { border-color: var(--accent); }
+.dd-btn.dd-on, .dd-btn:focus-visible { outline: none; border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.dd-btn:disabled { opacity: .5; cursor: default; }
+.dd-back { position: fixed; inset: 0; z-index: 70; }
+.dd-back.on { background: rgba(10, 12, 16, .45); }
+.dd-pop { position: fixed; z-index: 71; display: flex; flex-direction: column; max-width: min(460px, calc(100vw - 16px)); padding: 4px; background: var(--surface); color: var(--fg); border: 1px solid var(--line); border-radius: calc(var(--radius) * .7 + 2px); box-shadow: 0 8px 24px rgba(0, 0, 0, .18); font-size: var(--fs-sm); }
+.dd-opts { overflow: auto; min-height: 0; }
+.dd-search { padding: 2px 2px 6px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
+.dd-q { width: 100%; }
+.dd-g { padding: 8px 10px 3px; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.dd-o { display: flex; align-items: center; gap: 6px; padding: 7px 12px 7px 8px; border-radius: calc(var(--radius) * .5 + 1px); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dd-o::before { content: ""; width: 14px; flex: none; }
+.dd-o[aria-selected="true"] { color: var(--accent-ink); }
+.dd-o[aria-selected="true"]::before { content: "✓"; font-weight: 700; }
+.dd-o.act { background: var(--soft); }
+.dd-o[aria-disabled="true"] { color: var(--faint); cursor: default; }
+.dd-none { padding: 10px 12px; color: var(--muted); }
+.dd-sh { display: flex; align-items: center; justify-content: space-between; gap: 10px; padding: 10px 4px 8px 10px; }
+.dd-pop.sheet { left: 0; right: 0; bottom: 0; max-width: none; max-height: 70vh; padding: 0 8px calc(12px + env(safe-area-inset-bottom)); border-radius: 14px 14px 0 0; font-size: var(--fs-md); }
+.dd-pop.sheet .dd-o { padding: 12px 12px 12px 8px; white-space: normal; }
+/* Own checkboxes and radio buttons in every style, drawn from theme colors (style K refines them below) */
+input[type="checkbox"], input[type="radio"] { appearance: none; -webkit-appearance: none; width: 18px; height: 18px; margin: 0; flex: none; border: 1.5px solid var(--muted); border-radius: min(calc(var(--radius) * .4 + 1px), 5px); background: var(--surface); display: inline-grid; place-content: center; cursor: pointer; vertical-align: middle; transition: background-color .12s, border-color .12s; }
+input[type="radio"] { border-radius: 50%; }
+input[type="checkbox"]:hover:not(:disabled), input[type="radio"]:hover:not(:disabled) { border-color: var(--accent); }
+input[type="checkbox"]:focus-visible, input[type="radio"]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input[type="checkbox"]:checked, input[type="checkbox"]:indeterminate, input[type="radio"]:checked { background: var(--accent); border-color: var(--accent); }
+/* the tick's ink is centred by its weight, measured at 4×: it sat 1 px low and 0.4 px right of the box centre */
+input[type="checkbox"]:checked::after { content: ""; width: 4px; height: 9px; border: solid var(--accent-fg); border-width: 0 2px 2px 0; transform: translate(-0.5px, -2px) rotate(45deg); }
+input[type="checkbox"]:indeterminate::after { content: ""; width: 9px; height: 2px; background: var(--accent-fg); }
+input[type="radio"]:checked::after { content: ""; width: 8px; height: 8px; border-radius: 50%; background: var(--accent-fg); }
+input[type="checkbox"]:disabled, input[type="radio"]:disabled { opacity: .45; cursor: default; }
+.chip { display: inline-flex; align-items: center; gap: 5px; padding: 1px 9px; border-radius: var(--ctl-r); background: var(--soft); font-size: var(--fs-xs); white-space: nowrap; color: var(--fg); border: 1px solid var(--line); max-width: 100%; }
+.chip.accent { background: var(--accent-soft); color: var(--accent-ink); }
+.chip:is(.accent, .ok, .warn, .bad) { border-color: transparent; }
+.chip.ok { background: var(--ok-soft); color: var(--ok); } .chip.warn { background: var(--warn-soft); color: var(--warn); } .chip.bad { background: var(--bad-soft); color: var(--bad); }
+.chip.add { background: transparent; border: 1px dashed var(--line); color: var(--muted); cursor: pointer; }
+.chip.add:hover { color: var(--fg); border-color: var(--muted); }
+.chip .x { background: none; border: 0; padding: 0 0 0 2px; color: var(--faint); cursor: pointer; font-size: var(--fs-sm); line-height: 1; }
+.chip .x:hover { color: var(--bad); }
+.chip.mono { font-family: var(--mono); }
+/* a chip you can press looks pressable: the control border (3:1) and the accent on hover; plain label chips stay flat */
+button.chip { cursor: pointer; font-size: var(--fs-xs); border-color: var(--ctl-line); background: var(--surface); min-height: 26px; }
+button.chip:hover { border-color: var(--accent); color: var(--accent-ink); }
+button.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.chips { display: flex; flex-wrap: wrap; gap: 5px; align-items: center; min-width: 0; }
+.chips.blobs { flex-direction: column; align-items: flex-start; }
+/* own on/off switch: track in the accent colour when on, in the faint text colour when off — readable in every theme */
+.sw { position: relative; flex: none; width: 40px; height: 22px; padding: 0; border: 0; border-radius: 11px; background: var(--faint); cursor: pointer; transition: background .15s; vertical-align: middle; }
+.sw::after { content: ""; position: absolute; top: 3px; left: 3px; width: 16px; height: 16px; border-radius: 50%; background: var(--surface); transition: left .15s; }
+.sw[aria-checked="true"] { background: var(--accent); }
+.sw[aria-checked="true"]::after { left: 21px; background: var(--accent-fg); }
+.sw:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.swl { display: inline-flex; align-items: center; gap: 8px; cursor: pointer; }
+/* Devices page */
+.dev-lead { margin: 0 0 12px; max-width: 75ch; }
+.tbl.devs td { vertical-align: middle; }
+.tbl.devs tr.off td:not(:last-child) { color: var(--muted); }
+.tbl.devs td:last-child { width: 1%; }
+.dev-name { display: flex; flex-wrap: wrap; align-items: center; gap: 2px 0; min-width: 0; overflow-wrap: anywhere; }
+.dev-dot { display: inline-block; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ok); margin-right: 8px; }
+.dev-dot.gone { background: var(--faint); }
+/* the name stays on the dot's line: one line, a long name ends with «…» (the whole name in the tooltip) */
+.dev-name > .dev-n { flex: 1 1 0; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dev-name > .dev-tag { flex-basis: 100%; padding-left: 16px; }
+.dev-tag { margin-left: 8px; font-size: var(--fs-xs); padding: 1px 7px; border-radius: var(--ctl-r); background: var(--soft); color: var(--muted); white-space: nowrap; }
+.dev-cnt { font-size: var(--fs-md); color: var(--muted); } .dev-cnt b { color: var(--fg); font-weight: 500; }
+.dev-act { display: flex; align-items: center; gap: 4px; }
+/* sortable header: the whole header text is the button; the arrow shows the column and direction */
+.th-sort { all: unset; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font: inherit; color: inherit; white-space: nowrap; }
+.th-sort:hover { color: var(--accent-ink); }
+.th-sort:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.th-sort svg { width: 14px; height: 14px; flex: none; }
+.dev-act .slot { width: 30px; flex: none; }
+/* every row one height: the «forget» button is as small as its empty slot, not a 34–40 px control beside a switch */
+:root:root:root .dev-act .btn.slot { width: 30px; height: 30px; min-height: 30px; padding: 0; }
+.dev-act { min-height: 30px; }
+/* phone: the table is exactly the screen wide — the name column takes the rest and ends with «…» */
+@media (max-width: 599px) {
+  :root:root .scroll > table.tbl.devs { table-layout: fixed; width: 100%; min-width: 0; }
+  :root:root .tbl.devs td:last-child, :root:root .tbl.devs th:last-child { width: 96px; }
+  :root:root .tbl.devs td, :root:root .tbl.devs th { padding-top: 6px; padding-bottom: 6px; }
+}
+/* hidden columns still count for the narrow-screen «min-width: 600px» of wide tables — drop it here */
+@media (max-width: 599px) { .tbl.devs .hide-narrow { display: none; } .scroll > table.tbl.devs:has(th) { min-width: 0; } }
+.blob-row { display: flex; flex-wrap: wrap; gap: 4px 8px; align-items: center; min-width: 0; }
+.blob-row .chip { max-width: 100%; overflow-wrap: anywhere; }
+.lvl { display: inline-flex; flex: none; margin-top: 2px; }
+.lvl.error { color: var(--bad); } .lvl.warning { color: var(--warn); } .lvl.info { color: var(--accent-ink); } .lvl.ok { color: var(--ok); }
+.notice { border-radius: calc(var(--radius) * .8 + 2px); padding: 10px 12px; display: flex; gap: 10px; align-items: flex-start; }
+.notice.ok { background: var(--ok-soft); color: var(--ok); } .notice.bad { background: var(--bad-soft); color: var(--bad); }
+.notice.warn { background: var(--warn-soft); color: var(--warn); } .notice.info { background: var(--accent-soft); color: var(--accent-ink); }
+.notice .t { color: var(--fg); overflow-wrap: anywhere; }
+.notice svg { margin-top: 1px; }
+.seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--line); border-radius: calc(var(--radius) * .7 + 2px); padding: 2px; background: var(--bg); justify-self: start; }
+.seg button { border: 0; background: none; color: var(--muted); padding: 0 11px; border-radius: calc(var(--radius) * .5 + 2px); cursor: pointer; min-height: calc(var(--ctl-h) - 6px);   /* with the 2 px frame and padding of .seg the whole switch is --ctl-h */ font-size: var(--fs-sm); font-weight: 500; }
+/* the chosen half must read at a glance: accent tint, accent text and an accent outline, not a shade lighter */
+.seg button.on { background: var(--accent-soft); color: var(--accent-ink); box-shadow: inset 0 0 0 1px var(--accent); }
+/* labels and numbers centred by their capitals, not by the font's ascent and descent (they rode 1–1.5px high) */
+.seg button { text-box: trim-both cap alphabetic; }
+.frow { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 8px 14px; align-items: start; }
+.frow > .lbl { font-size: var(--fs-sm); color: var(--muted); padding-top: 5px; }
+.frow > .hint { grid-column: 2; font-size: var(--fs-xs); color: var(--faint); margin-top: -4px; }
+@media (max-width: 759px) { .frow { grid-template-columns: minmax(0, 1fr); } .frow > .hint { grid-column: 1; } .frow > .lbl { padding-top: 0; } }
+.spin { width: 15px; height: 15px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; flex: none; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.skeleton { color: var(--muted); display: flex; gap: 10px; align-items: center; }
+/* loading placeholder (skel()): panels of soft bars with a slow wave; appears after 0.15 s so fast loads do not flash */
+.skel { display: grid; gap: 14px; animation: skel-in .2s ease .15s both; }
+.skel-panel { display: grid; gap: 12px; padding: 18px 20px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+.modal-b .skel-panel, .stack > .skel .skel-panel { border: 0; padding: 4px 0; background: none; }
+.skel i { display: block; height: 12px; border-radius: 6px; background: linear-gradient(90deg, var(--soft) 30%, color-mix(in srgb, var(--soft), var(--fg) 9%) 50%, var(--soft) 70%) 0 0 / 300% 100%; animation: skel-wave 1.6s linear infinite; }
+.skel i.h { height: 18px; width: 34%; margin-bottom: 4px; }
+@keyframes skel-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes skel-wave { from { background-position: 100% 0; } to { background-position: 0 0; } }
+@media (prefers-reduced-motion: reduce) { .skel i { animation: none; } }
+.sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip-path: inset(50%); white-space: nowrap; }
+details > summary { cursor: pointer; color: var(--muted); font-size: var(--fs-sm); list-style: none; }
+details > summary::-webkit-details-marker { display: none; }
+details > summary::before { content: "▸ "; } details[open] > summary::before { content: "▾ "; }
+pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0; white-space: pre-wrap; word-break: break-all; max-height: 60vh; overflow: auto; }
+.scroll { overflow-x: auto; }
+.tbl { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+.tbl th, .tbl td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
+.tbl th { color: var(--muted); font-weight: 500; font-size: var(--fs-xs); }
+.tbl td.num, .tbl th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }   /* «680 мс» never splits into two lines */
+.tbl tr:last-child td { border-bottom: 0; }
+.list { display: grid; }
+.item { display: flex; align-items: center; gap: 10px; padding: 10px 2px; border-top: 1px solid var(--line); min-width: 0; color: inherit; }
+.item:first-child { border-top: 0; }
+.item-main { flex: 1; min-width: 0; display: grid; grid-template-columns: minmax(0, 1fr); gap: 1px; }
+.item-title { font-weight: 600; }

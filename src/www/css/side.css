@@ -1,0 +1,53 @@
+/* Interface styles: the overview column and section menus. Loaded by index.html in a fixed order (see the list there) — the order matters. */
+
+/* ---------- колонка обзора ---------- */
+.svc { display: flex; align-items: center; gap: 8px; }
+.svc-state { font-size: var(--fs-lg); font-weight: 700; display: flex; align-items: center; gap: 8px; flex: 1; }
+.svc-state.ok { color: var(--ok); } .svc-state.bad { color: var(--bad); }
+.svc-state .dot { width: 10px; height: 10px; }
+.search { display: flex; gap: 8px; min-width: 0; } .search .input { flex: 1; min-width: 0; width: 0; }
+.routes { border: 1px solid var(--line); border-radius: calc(var(--radius) * .8 + 2px); }
+.route { display: grid; grid-template-columns: 48px minmax(0, 1fr); gap: 8px; padding: 6px 10px; border-top: 1px solid var(--line); align-items: baseline; }
+.route:first-child { border-top: 0; }
+.route-k { font-weight: 600; color: var(--muted); font-size: var(--fs-xs); }
+.steps-why { margin: 4px 0 0; padding: 0; list-style: none; display: grid; gap: 2px; font-size: var(--fs-sm); color: var(--muted); }
+.steps-why li.ok { color: var(--ok); font-weight: 600; }
+.act { display: flex; align-items: center; gap: 10px; padding: 6px 0; border-top: 1px solid var(--line); }
+.act:first-child { border-top: 0; }
+.mon-note { display: grid; gap: 8px; } .mon-note:empty { display: none; }
+/* site that was typed again: shown where it already is */
+.act .item-main b { font-weight: 600; font-size: var(--fs-sm); }
+.problems { display: grid; gap: 2px; margin-inline: -6px; }
+.problem { display: flex; gap: 8px; align-items: flex-start; padding: 6px; border-radius: 7px; color: inherit; min-width: 0; }
+.problem:hover { background: var(--soft); }
+.problem .item-main b { font-weight: 600; font-size: var(--fs-sm); }
+.problem code { color: var(--muted); font-size: var(--fs-xs); }
+.recent { display: flex; flex-wrap: wrap; gap: 5px; }
+
+/* ---------- боковые меню разделов ---------- */
+.split { display: grid; grid-template-columns: 250px minmax(0, 1fr); gap: 18px; align-items: start; }
+@media (max-width: 1279px) and (min-width: 1100px) { .split { grid-template-columns: 220px minmax(0, 1fr); } }
+@media (max-width: 899px) { .split { grid-template-columns: 1fr; } }
+.nav { display: grid; gap: 1px; align-content: start; }
+.nav-h { font-size: var(--fs-xs); font-weight: 600; color: var(--muted); padding: 10px 10px 4px; display: flex; gap: 6px; align-items: center; }
+.nav a, .nav button.ni { display: flex; align-items: center; gap: 8px; width: 100%; text-align: left; font-size: var(--fs-sm); background: none; border: 0; color: var(--fg); padding: 6px 10px; border-radius: calc(var(--radius) * .7 + 2px); cursor: pointer; min-height: 34px; }
+.nav a:hover, .nav button.ni:hover { background: var(--soft); }
+.nav a.on, .nav button.ni.on { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
+.nav .tail { margin-left: auto; color: var(--faint); font-size: var(--fs-xs); display: inline-flex; gap: 6px; align-items: center; font-weight: 400; flex: none; }
+.nav .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
+.nav .drag-over { box-shadow: 0 -2px 0 var(--accent) inset; }
+@media (max-width: 899px) {
+  .nav.scrollable { display: flex; overflow-x: auto; gap: 4px; padding-bottom: 4px; }
+  .nav.scrollable .nav-h { display: none; }
+  .nav.scrollable a { width: auto; white-space: nowrap; flex: none; }
+}
+.pn { width: 20px; height: 20px; border-radius: 50%; display: block; text-align: center; align-content: center; text-box: trim-both cap alphabetic; font-size: var(--fs-xs); font-weight: 700; border: 2px solid var(--ok); flex: none; font-variant-numeric: tabular-nums lining-nums; }
+.pn.pi { display: grid; place-items: center; text-box: none; color: var(--accent-ink); border-color: currentColor; }   /* «Свой профиль», «Вставить чужой»: an icon in the circle */
+.pn.pi svg { width: 12px; height: 12px; display: block; }
+.pn.partial { border-color: var(--warn); } .pn.dead, .pn.excludes-only { border-color: var(--bad); } .pn.err { border-color: var(--bad); color: var(--bad); }
+.errdot { width: 7px; height: 7px; border-radius: 50%; background: var(--bad); flex: none; }
+.warndot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); flex: none; }
+.grip { color: var(--faint); cursor: grab; letter-spacing: -2px; user-select: none; font-size: var(--fs-sm); }
+.lnav { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px; max-height: calc(100vh - var(--top-h) - 40px); overflow: auto; position: sticky; top: calc(var(--top-h) + 16px); box-shadow: var(--shadow); }
+:root[data-variant="b"] .lnav { border-color: transparent; }
+@media (max-width: 899px) { .lnav { position: static; max-height: 360px; } }

@@ -1,0 +1,29 @@
+/* Interface styles: the menu folded into icons. Loaded by index.html in a fixed order (see the list there) — the order matters. */
+
+/* ---------- меню, свёрнутое в полоску значков (как «Скрыть меню» у Keenetic) ---------- */
+.nav-mini, .mfly-h { display: none; }
+@media (min-width: 1100px) {
+  :root[data-layout="menu"]:not([data-simple]) .nav-mini { display: flex; align-items: center; gap: 10px; width: 100%; margin-top: 10px; padding: 10px 16px; border: 0; border-top: 1px solid var(--line); background: none; color: var(--accent-ink); font: inherit; font-size: var(--fs-md); cursor: pointer; text-align: left; }
+  :root[data-layout="menu"]:not([data-simple]) .nav-mini:hover { background: var(--soft); }
+  :root[data-navmini][data-layout="menu"]:not([data-simple]) { --side-w: 64px !important; }
+  :root[data-navmini][data-layout="menu"]:not([data-simple]) #side { overflow: visible; }
+  :root[data-navmini]:not([data-simple]) .mnav { padding: 6px 0; }
+  :root[data-navmini]:not([data-simple]) .mnav .nh-t, :root[data-navmini]:not([data-simple]) .mtop .nm, :root[data-navmini]:not([data-simple]) .mtop .tail, :root[data-navmini]:not([data-simple]) .mtop .tag { display: none; }
+  :root[data-navmini]:not([data-simple]) .nav-h > svg, :root[data-navmini]:not([data-simple]) .mnav .k-ic { display: inline-flex; }
+  :root[data-navmini]:not([data-simple]) .mnav .nav-h, :root[data-navmini]:not([data-simple]) .mtop > a, :root[data-navmini]:not([data-simple]) .nav-mini {
+    justify-content: center; padding: 12px 0 !important; margin: 0 !important; border-top: 0; min-height: 48px; cursor: pointer; border-radius: 0; }
+  :root[data-navmini]:not([data-simple]) .mnav .nav-h::before { display: none; }
+  :root[data-navmini]:not([data-simple]) .nav-h > svg, :root[data-navmini]:not([data-simple]) .mnav .k-ic svg { width: 24px; height: 24px; }
+  :root[data-navmini]:not([data-simple]) .mgrp { position: relative; }
+  :root[data-navmini]:not([data-simple]) .mgrp.here > .nav-h, :root[data-navmini]:not([data-simple]) .mtop > a.on { background: var(--accent-soft); }
+  :root[data-navmini]:not([data-simple]) .mgrp:hover > .nav-h { background: var(--soft); }
+  /* страницы группы всплывают справа от значка */
+  :root[data-navmini]:not([data-simple]) .mlinks { display: none; position: absolute; left: 100%; top: 0; z-index: 60; min-width: 240px; padding: 6px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 0 4px 4px 0; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); }
+  :root[data-navmini]:not([data-simple]) .mgrp:hover > .mlinks, :root[data-navmini]:not([data-simple]) .mgrp:focus-within > .mlinks { display: block; }
+  :root[data-navmini]:not([data-simple]) .mlinks > a { padding: 7px 16px !important; min-height: 34px; }
+  :root[data-navmini]:not([data-simple]) .mfly-h { display: block; padding: 6px 16px 4px; font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent-ink); }
+}
+/* «Структура» в редакторе спрятана — код на всю ширину */
+:root[data-nooutline] .cfg { grid-template-columns: minmax(0, 1fr); }
+:root[data-nooutline] .cfg > .outline { display: none; }
+.cfg-tools .btn.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-ink); }

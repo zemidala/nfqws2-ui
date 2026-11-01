@@ -1,0 +1,272 @@
+/* Interface styles: dialogs, toasts, login, update, logs, documents. Loaded by index.html in a fixed order (see the list there) — the order matters. */
+
+/* ---------- диалог, уведомления, вход ---------- */
+.modal-bg { position: fixed; inset: 0; z-index: 50; background: rgba(10, 12, 16, .5); display: flex; align-items: flex-end; justify-content: center; }
+@media (min-width: 760px) { .modal-bg { align-items: center; padding: 24px; } }
+.modal { background: var(--surface); width: 100%; max-width: 1100px; max-height: 92vh; border-radius: 16px 16px 0 0; display: flex; flex-direction: column; overflow: hidden; }
+@media (min-width: 760px) { .modal { border-radius: 14px; max-height: 88vh; } }
+.modal-h { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
+.modal-h h2 { flex: 1; }
+.modal-b { padding: 16px; overflow: auto; flex: 1; }
+.modal-f { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); flex-wrap: wrap; }
+.hist { display: grid; gap: 14px; }
+@media (min-width: 760px) { .hist { grid-template-columns: 260px 1fr; } }
+.versions { display: grid; gap: 4px; align-content: start; max-height: 30vh; overflow: auto; }
+@media (min-width: 760px) { .versions { max-height: 62vh; } }
+.version { text-align: left; border: 1px solid var(--line); background: var(--surface); border-radius: 8px; padding: 7px 10px; cursor: pointer; display: grid; gap: 1px; }
+.version.on { border-color: var(--accent); background: var(--accent-soft); }
+.version small { color: var(--muted); font-size: var(--fs-xs); }
+#toasts { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(70px + env(safe-area-inset-bottom)); z-index: 60; display: grid; gap: 8px; width: min(460px, calc(100% - 32px)); }
+@media (min-width: 760px) { #toasts { bottom: 24px; } }
+.toast { background: var(--fg); color: var(--bg); border-radius: 10px; padding: 10px 14px; display: flex; gap: 12px; align-items: center; box-shadow: 0 6px 24px rgba(0, 0, 0, .2); }
+.toast span { flex: 1; }
+.toast button { background: none; border: 0; color: var(--accent-ink); font-weight: 700; cursor: pointer; padding: 4px; }
+.toast.err { background: var(--bad); color: var(--bad-fg, #fff); }
+.login { max-width: 360px; margin: 16vh auto 0; padding: 16px; }
+
+/* режим «во всю ширину» для конфига целиком */
+.split.settings.focus { grid-template-columns: minmax(0, 1fr); }
+.split.settings.focus > .nav { display: none; }
+.nowrap { white-space: nowrap; }
+.hint.error { color: var(--bad); } .hint.warning { color: var(--warn); } .hint.info { color: var(--accent-ink); }
+
+/* поправки раскладки: длинные подписи в выпадающих списках не растягивают карточки */
+select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
+.nav { grid-template-columns: minmax(0, 1fr); }
+.step-main > *, .params > *, .chips > * { min-width: 0; }
+.chip { white-space: normal; overflow-wrap: break-word; text-align: left; }   /* long chips wrap between words; a word breaks only if it alone is wider */
+/* a status chip alone in a table cell never wraps: its column takes the chip's width */
+.tbl td:has(> .chip:only-child) { white-space: nowrap; }
+/* …and takes only the chip's width — in a real table; a table shown as cards on a phone has block cells (1% there
+   squeezed the cell and pushed the chip past the screen edge) */
+@media (min-width: 600px) { .tbl:not(.cardy) td:has(> .chip:only-child) { width: 1%; } }
+.tbl td > .chip:only-child { white-space: nowrap; }
+@media (max-width: 1599px) { .two { grid-template-columns: 1fr; } .two > .help { position: static; } }
+@media (min-width: 1600px) { .two { grid-template-columns: minmax(0, 1fr) 300px; } }
+@media (max-width: 759px) {
+  .step { position: relative; grid-template-columns: 26px minmax(0, 1fr); }
+  .step-ctl { position: absolute; top: 4px; right: 4px; grid-column: auto; }
+  .step-t { padding-right: 112px; }
+  .cfg-tools .input { width: 100%; }
+}
+
+/* мониторинг */
+/* chart looks (MON_CHARTS) as in the mockup; widths and gaps are multiples of 4 px — whole screen pixels at 125–175 %.
+   Laid out from the right: when the cell is narrower, the oldest are cut, the newest stay */
+.ch-wrap { display: grid; gap: 3px; }
+.ch-axis { display: flex; justify-content: space-between; width: 380px; max-width: 100%; font-size: var(--fs-xs); color: var(--faint); }
+.ch-ticks, .ch-cols, .ch-blocks { display: flex; justify-content: flex-end; gap: 4px; overflow: hidden; }
+.ch-ticks { height: 16px; }
+.ch-ticks i, .ch-cols i { width: 4px; flex: none; border-radius: 1px; background: var(--ok); }
+.ch-ticks i.none, .ch-cols i.none { background: var(--line); }
+.ch-cols { height: 32px; align-items: flex-end; }
+.ch-cols i { background: var(--muted); height: 100%; }
+.ch-cols i.none { height: 4px; }
+:is(.ch-ticks, .ch-cols, .ch-blocks, .ch-hours) i.bad { background: var(--bad); }
+:is(.ch-ticks, .ch-cols, .ch-blocks, .ch-hours) i.slow { background: var(--warn); }
+.ch-ticks.mini, .ch-cols.mini { height: 14px; min-width: 60px; }
+.ch-hours { display: grid; grid-template-columns: max-content max-content; gap: 4px 8px; align-items: center; font-size: var(--fs-xs); color: var(--muted); }
+.ch-hours > div { display: grid; grid-template-columns: repeat(24, 12px); grid-auto-rows: 12px; gap: 4px; }
+.ch-hours i { border-radius: 3px; background: color-mix(in srgb, var(--fg) 16%, var(--surface)); }
+.ch-hours i.none { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.ch-hours i.future { background: transparent; box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--line) 60%, transparent); }   /* hours still to come */
+/* a fixed-size chart: its column is as wide as the chart, the room left goes to the other columns */
+.mon-tbl.ch-fixed .mon-hcell { width: 1%; min-width: 0; }
+.ch-words { min-width: 380px; } .ch-words > :first-child { white-space: nowrap; }   /* words on one line, all 12 blocks */
+/* the table watches its own width: with little room the «checked» column goes (the time is in the tooltips),
+   with even less a fixed chart shows only its newest marks — max-width also caps what the table reserves for it */
+.mon-box { container: monbox / inline-size; }
+@container monbox (max-width: 1000px) { .mon-tbl .mon-when { display: none; } }
+@container monbox (max-width: 880px) {
+  .ch-ticks, .ch-cols, .ch-axis { max-width: 188px; }
+  /* hours and blocks get smaller instead of cut: all 24 hours and all 12 blocks stay (8 and 12 px — still whole pixels) */
+  .ch-hours > div { grid-template-columns: repeat(24, 8px); grid-auto-rows: 8px; }
+  .ch-hours i { border-radius: 2px; }
+  .ch-words .ch-blocks i { width: 12px; }
+  .ch-words { min-width: 0; }
+  .mon-tbl .mon-acts > .btn:not(:first-child) { display: none; }   /* only «check now»; the rest through the site name */
+}
+.ch-words { display: grid; gap: 6px; font-size: var(--fs-sm); }
+.ch-words .ok { color: var(--ok); } .ch-words .bad { color: var(--bad); }
+.ch-blocks { justify-content: flex-start; }
+.ch-blocks i { width: 28px; height: 12px; flex: none; border-radius: 3px; background: color-mix(in srgb, var(--fg) 16%, var(--surface)); }
+.ch-blocks i.none { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.mon-mini { display: grid; gap: 2px; margin-inline: -6px; }
+.mon-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 7px; background: none; border: 0; cursor: pointer; text-align: left; min-width: 0; }
+.mon-row:hover { background: var(--soft); }
+/* laid out like a table: names on the left, charts of one width (16 × 8 px) lined up on the right */
+.mon-row .ellipsis { flex: 1 1 0; min-width: 0; }
+.mon-row > :is(.ch-ticks, .ch-cols, .ch-hmini, .ch-wmini) { flex: none; width: 124px; min-width: 0; }
+.ch-hmini { display: flex; justify-content: flex-end; gap: 4px; }
+.ch-hmini i { width: 8px; height: 8px; border-radius: 2px; flex: none; background: color-mix(in srgb, var(--fg) 16%, var(--surface)); }
+.ch-hmini i.bad { background: var(--bad); } .ch-hmini i.slow { background: var(--warn); }
+.ch-hmini i.none { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.ch-wmini { text-align: right; font-size: var(--fs-sm); font-weight: 600; } .ch-wmini.ok { color: var(--ok); } .ch-wmini.bad { color: var(--bad); }
+/* Monitoring: three equal summary tiles, the switch row, the table and the timeline */
+.mon-ctrls { align-items: center; }
+.mon-sw { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-md); cursor: pointer; }
+.mon-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+.mon-tile { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; background: var(--soft); min-width: 0; }
+.mon-tile b { display: block; font-size: var(--fs-2xl); font-weight: 600; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.mon-tile span { display: block; font-size: var(--fs-sm); color: var(--muted); margin-top: 2px; }
+.mon-tile .okc { color: var(--ok); } .mon-tile .badc { color: var(--bad); }
+@media (max-width: 599px) { .mon-tiles { grid-template-columns: 1fr 1fr; } .mon-tile:last-child { grid-column: 1 / -1; } }
+.mtl-legend .slow::before { background: var(--warn); } .mtl-legend .bad::before { background: var(--bad); }
+.mtl-legend .none::before { background: var(--line); } .mtl-legend .ln::before { background: var(--muted); }
+.mtl-legend .ok::before { background: var(--ok); } .mtl-legend .cell::before { background: color-mix(in srgb, var(--fg) 16%, var(--surface)); }
+.mon-box .scroll > .mtl-legend { padding: 10px 2px 2px; }
+.mon-viewrow { margin-top: 4px; }
+.mon-viewrow > .tag { margin-left: 0; }   /* the «new» mark next to its switch, not pushed to the far edge */
+.mst { display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); padding: 2px 9px; border-radius: var(--ctl-r); white-space: nowrap; background: var(--soft); color: var(--muted); }
+.mst::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.mst:has(.spin)::before { display: none; }
+.mst.ok { background: var(--ok-soft); color: var(--ok); }
+.mst.slow { background: var(--warn-soft); color: var(--warn); }
+.mst.bad { background: var(--bad-soft); color: var(--bad); }
+.tbl.mon-tbl td { vertical-align: middle; }
+.tbl.mon-tbl tr.mon-dup td { background: var(--warn-soft); }
+.mon-host .linkish { all: unset; cursor: pointer; font-weight: 600; overflow-wrap: break-word; }
+.mon-host .linkish:hover { color: var(--accent-ink); text-decoration: underline; }
+.mon-host .linkish:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
+.mon-hcell { width: 40%; min-width: 180px; }
+.tbl.mon-tbl tr.mon-down td { background: var(--bad-soft); }   /* a site that does not open now: first in the list, tinted */
+.mon-why { margin-top: 3px; max-width: 32ch; font-size: var(--fs-sm); font-family: var(--sans); font-weight: 400; color: var(--bad); }
+.mon-acts { display: flex; gap: 6px; justify-content: flex-end; }
+.mon-narrow { display: none; }
+.mtl { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 6px 12px; align-items: center; }
+/* a fixed-size chart: its column is as wide as the chart — it starts right after the names and the axis lies exactly under it */
+.mtl.ch-fixed { grid-template-columns: max-content max-content max-content; justify-content: start; column-gap: 16px; }
+/* On the timeline the 48 marks spread with the room: the step (--st) grows 8 → 32 px, and each look keeps its face —
+   ticks and columns stay narrow bars (--bw) with a growing gap, hours stay squares of at most 16 px (--hs), words are
+   12 blocks over the same width. Every size is a multiple of 4, so marks stay even at any screen scaling. */
+.mtl.ch-fixed { --st: 8px; --bw: 4px; --hs: 4px; }
+.mtl.ch-fixed :is(.ch-ticks, .ch-cols):not(.hsq) { gap: calc(var(--st) - var(--bw)); }
+.mtl.ch-fixed :is(.ch-ticks, .ch-cols):not(.hsq) i { width: var(--bw); }
+.mtl.ch-fixed .ch-ticks:not(.hsq) { height: 20px; }
+.mtl.ch-fixed .ch-ticks.hsq { gap: calc(var(--st) - var(--hs)); align-items: center; height: 16px; }
+.mtl.ch-fixed .ch-ticks.hsq i { width: var(--hs); height: var(--hs); border-radius: 3px; background: color-mix(in srgb, var(--fg) 16%, var(--surface)); }
+.mtl.ch-fixed .ch-ticks.hsq i.bad { background: var(--bad); } .mtl.ch-fixed .ch-ticks.hsq i.slow { background: var(--warn); }
+.mtl.ch-fixed .ch-ticks.hsq i.none { background: transparent; box-shadow: inset 0 0 0 1px var(--line); }
+.mtl.ch-fixed .ch-blocks.tl i { width: calc(var(--st) * 4 - 4px); }   /* 12 × (4·st − 4) + 11 × 4 = 48·st − 4 */
+@container monbox (min-width: 840px) { .mtl.ch-fixed { --st: 12px; --bw: 4px; --hs: 8px; } }
+@container monbox (min-width: 1030px) { .mtl.ch-fixed { --st: 16px; --bw: 8px; --hs: 12px; } }
+@container monbox (min-width: 1220px) { .mtl.ch-fixed { --st: 20px; --bw: 8px; --hs: 16px; } }
+@container monbox (min-width: 1410px) { .mtl.ch-fixed { --st: 24px; --bw: 12px; --hs: 16px; } }
+@container monbox (min-width: 1600px) { .mtl.ch-fixed { --st: 28px; --bw: 12px; --hs: 16px; } }
+@container monbox (min-width: 1790px) { .mtl.ch-fixed { --st: 32px; --bw: 16px; --hs: 16px; } }
+.mtl-host { display: flex; align-items: center; gap: 8px; font-weight: 600; white-space: nowrap; }
+.mtl-dot { width: 8px; height: 8px; border-radius: 50%; flex: none; background: var(--line); }
+.mtl-dot.ok { background: var(--ok); } .mtl-dot.slow { background: var(--warn); } .mtl-dot.bad { background: var(--bad); }
+.mtl-axis { grid-column: 2; display: flex; justify-content: space-between; font-size: var(--fs-xs); color: var(--muted); }
+.mtl-note { grid-column: 1 / -1; font-size: var(--fs-sm); padding: 8px 10px; border-radius: var(--radius); background: var(--bad-soft); color: var(--bad); }
+.mtl-legend { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 6px 16px; }
+.mtl-legend span::before { content: ""; display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 6px; vertical-align: -1px; }
+/* phone: table without history and «checked» columns, «%» instead of «Доступность», details through the site name */
+@media (max-width: 599px) {
+  .mon-tbl .mon-wide { display: none; } .mon-tbl .mon-narrow { display: inline; }
+  .mon-tbl .mon-acts > .btn:not(:first-child) { display: none; }   /* only «check now»; details and removal — through the site name */
+  .tbl.mon-tbl th, .tbl.mon-tbl td { padding-left: 4px; padding-right: 4px; }
+  .mon-tbl .mon-host { font-size: var(--fs-sm); min-width: 120px; }   /* room for the reason under the name */
+  .mon-tbl .mon-why { font-size: var(--fs-xs); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }   /* two lines; the whole reason is in the tooltip */
+  .scroll > table.tbl.mon-tbl:has(th) { min-width: 0; }
+  .mtl, .mtl.ch-fixed { grid-template-columns: minmax(0, 1fr) max-content; }
+  .mtl > :is(.ch-ticks, .ch-cols), .mtl-axis { grid-column: 1 / -1; min-width: 0; }
+  .mtl-host { white-space: normal; overflow-wrap: anywhere; }
+}
+@media (max-width: 759px) { .https-link span { display: none; } .top-in { gap: 8px; padding: 0 12px; } }
+
+/* перезапуск с проверкой */
+#pending:empty { display: none; }
+.pending { border-bottom: 1px solid var(--line); }
+.pending.warn { background: var(--warn-soft); } .pending.bad { background: var(--bad-soft); }
+.pending-in { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; padding: 10px 16px; }
+.pending-in .item-main { flex: 1 1 260px; }   /* с основой 0 текст сжимался в столбик по букве, а кнопки не уходили на свою строку */
+.pending-in .item-main b { color: var(--fg); }
+.pending .chip.ok { background: var(--surface); }
+/* проблемы с кнопкой исправления */
+.problem { align-items: flex-start; }
+.problem-link { display: grid; gap: 1px; color: inherit; min-width: 0; }
+.problem-link:hover b { color: var(--accent-ink); }
+.problem:hover { background: transparent; }
+@media (max-width: 759px) { .undo-label { display: none; } }
+.notice > .btn, .notice > .row { align-self: center; }
+
+/* кнопки в уведомлениях и выпадающие меню выравниваются одинаково */
+.menu { display: inline-flex; vertical-align: middle; }
+.notice-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; align-self: center; flex: none; }
+/* кнопки уходят под текст, когда рядом им тесно, — и в узкой колонке на широком экране */
+.notice { flex-wrap: wrap; } .notice > .grow { flex: 1 1 160px; min-width: 0; }
+@media (max-width: 759px) { .notice-actions { width: 100%; } }
+
+/* управление сервисом: на широком экране — в блоке «Сервис», на узком — значки в верхней панели */
+.svc-buttons { display: grid; grid-auto-flow: column; grid-auto-columns: minmax(0, 1fr); gap: 8px; }   /* one row of equal buttons */
+:root:root[data-variant] .svc-buttons > .btn.small { padding-inline: 8px; }   /* above the style's own button padding, so two fit in a narrow column */
+.svc-ctl { display: inline-flex; gap: 6px; }
+.svc-ctl .ctl-label { display: none; }
+/* without its label the button is a square icon button; with the label (wide screens below) it takes its width */
+:root .svc-ctl .btn { width: var(--ctl-h); padding: 0; }
+/* the narrowest phones (360 px): the top bar's icon buttons a little smaller, or the bar is 10 px wider than the screen */
+@media (max-width: 379px) { :root:root .top-in .btn.icon, :root:root .svc-ctl .btn { width: 34px; min-height: 34px; } .svc-ctl { gap: 2px; } }
+@media (min-width: 1100px) { .svc-ctl { display: none; } #refresh-top { display: none; } }
+/* меню «Применить» с пояснениями */
+.menu-list.wide { width: min(460px, 92vw); }
+.menu-list .opt { display: grid; gap: 2px; text-align: left; white-space: normal; padding: 8px 10px; }
+.menu-list .opt.dim b { color: var(--muted); }
+@media (max-width: 759px) { .brand small, .https-link { display: none; } .top-in { gap: 4px; } }
+
+/* ---------- обновление ---------- */
+.banner.info { background: var(--accent-soft); color: var(--accent-ink); }
+.banner.info .banner-in span svg { vertical-align: -3px; }
+.release-notes { background: var(--soft); border-radius: 8px; padding: 10px 12px; font-size: var(--fs-sm); max-height: 30vh; overflow: auto; }
+
+/* ---------- подсветка журналов ---------- */
+pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family: var(--mono); font-size: var(--fs-xs); line-height: 1.55; }
+.logv .lg { white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 12px 0 10px; border-left: 3px solid transparent; }
+.logv .lg:hover { background: var(--soft); }
+.logv .lg-err-line { background: var(--bad-soft); border-left-color: var(--bad); }
+.logv .lg-warn-line { background: var(--warn-soft); border-left-color: var(--warn); }
+.lg-time { color: var(--faint); }
+.lg-lvl { color: var(--muted); }
+.lg-proc { color: var(--accent-ink); font-weight: 600; }
+.lg-path, .lg-url { color: var(--tk-key); }
+.lg-file { color: var(--tk-key); font-weight: 600; }
+.lg-opt { color: var(--tk-opt); }
+.lg-ip { color: var(--tk-fn); }
+.lg-err { color: var(--bad); font-weight: 600; }
+.lg-warn { color: var(--warn); font-weight: 600; }
+.lg-ok { color: var(--ok); font-weight: 600; }
+
+
+/* ---------- документы: README, история версий, описание релиза ---------- */
+.md { font-size: var(--fs-md); line-height: 1.6; overflow-wrap: anywhere; }
+.md > :first-child { margin-top: 0; }
+.md h2 { font-size: var(--fs-xl); margin: 4px 0 10px; }
+.md h3 { font-size: var(--fs-lg); margin: 22px 0 8px; padding-top: 12px; border-top: 1px solid var(--line); scroll-margin-top: calc(var(--top-h, 56px) + 12px); }
+.md h4, .md h5 { font-size: var(--fs-md); margin: 16px 0 6px; scroll-margin-top: calc(var(--top-h, 56px) + 12px); }
+.md p { margin: 6px 0; }
+.md ul, .md ol { margin: 6px 0; padding-left: 22px; }
+.md li { margin: 3px 0; }
+.md li > p { margin: 4px 0; }
+.md code { font-family: var(--mono); font-size: .88em; background: var(--soft); border-radius: 4px; padding: 1px 5px; }
+.md pre.box { margin: 8px 0; font-size: var(--fs-sm); }
+/* copy buttons: a tick for 1.5 s after copying; the icon in the corner of a code block; the icon after a command */
+.btn.copied, .btn.copied:hover { color: var(--ok); }
+.copybox { position: relative; min-width: 0; }
+.copybox > pre.box { padding-right: 46px; }
+.copybox > .btn { position: absolute; top: 6px; right: 14px; background: var(--surface); }
+.copybox:has(> pre[hidden]) { display: none; }
+.md .copybox { margin: 8px 0; }
+.md .copybox > pre.box { margin: 0; }
+.codewrap { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; min-width: 0; vertical-align: middle; }
+.codewrap > code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.md blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--warn); background: var(--warn-soft); border-radius: 0 8px 8px 0; }
+.md table { margin: 8px 0; }
+/* phone: a two-column help table keeps its first column readable; long paths in the second one break instead */
+@media (max-width: 599px) {
+  .md table td, .md table th { overflow-wrap: anywhere; }
+  .md table tr > :first-child { width: 40%; }
+}
+.md hr { border: 0; border-top: 1px solid var(--line); margin: 16px 0; }
+.md-toc { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: var(--fs-sm); }
+.release-notes .md { font-size: var(--fs-sm); }
+.release-notes .md h3 { border-top: 0; padding-top: 0; margin-top: 10px; }

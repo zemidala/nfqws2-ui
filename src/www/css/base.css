@@ -1,0 +1,91 @@
+/* Interface styles: colour and size tokens of the four styles, reset, base elements. Loaded by index.html in a fixed order (see the list there) — the order matters. */
+
+/* Интерфейс nfqws2. Четыре стиля (A · Консоль, B · Карточки, C · Схема, K · Keenetic) задаются data-variant на <html>,
+   тема — data-mode (auto | light | dark). Все цвета — через токены. */
+
+:root {
+  --radius: 6px; --gap: 0px; --side-w: 340px; --top-h: 54px;
+  /* one rounding for buttons and every badge, so pills do not look rounder than the buttons beside them */
+  --ctl-r: calc(var(--radius) * .7 + 2px);
+  /* border of buttons, dropdowns and fields: 3:1 against the surface (WCAG 1.4.11); --line is for dividers */
+  --ctl-mix: 48%; --ctl-line: color-mix(in srgb, var(--fg) var(--ctl-mix), var(--surface));
+  --sans: "IBM Plex Sans", "Segoe UI", system-ui, -apple-system, sans-serif;
+  --mono: "IBM Plex Mono", ui-monospace, Consolas, monospace;
+  --bg: #f3f5f8; --surface: #ffffff; --line: #dce1e8; --fg: #151a22; --muted: #5b6576; --faint: #747d8d;
+  --accent: #1f5edb; --accent-ink: var(--accent); --accent-fg: #ffffff; --accent-soft: #e6eefc; --soft: #eef1f5;
+  --ok: #157a3f; --ok-soft: #e3f4ea; --warn: #9a5b00; --warn-soft: #fbf0dc; --bad: #c0262d; --bad-soft: #fbe7e7;
+  --tk-opt: #1f5edb; --tk-fn: #0f7a4a; --tk-key: #8a3ab9; --tk-p: #98a1b0; --tk-var: #9a5b00;
+  --shadow: none;
+  color-scheme: light;
+}
+:root[data-variant="b"] {
+  --radius: 14px; --gap: 14px; --side-w: 360px;
+  --sans: "Onest", "Segoe UI", system-ui, -apple-system, sans-serif; --mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+  --bg: #eef2f1; --surface: #ffffff; --line: #d8e1de; --fg: #16211e; --muted: #56675f; --faint: #6d7e78;
+  --accent: #0e6f67; --accent-soft: #dcefec; --soft: #f1f5f4;
+  --tk-opt: #0e6f67; --tk-fn: #2f6b12; --tk-key: #9b3d7a; --tk-p: #93a39d;
+  --shadow: 0 1px 2px rgba(16, 40, 34, .06);
+}
+:root[data-variant="c"] {
+  --radius: 10px; --gap: 12px; --side-w: 330px;
+  --sans: "Golos Text", "Segoe UI", system-ui, -apple-system, sans-serif; --mono: "Fira Code", ui-monospace, Consolas, monospace;
+  --bg: #f7f7f9; --surface: #ffffff; --line: #e1e1e8; --fg: #1b1a22; --muted: #5f5e6d; --faint: #7a798a;
+  --accent: #b0215f; --accent-soft: #fae6ef; --soft: #f0f0f4;
+  --tk-opt: #3b4fc4; --tk-fn: #0f7a4a; --tk-key: #b0215f; --tk-p: #9d9cab;
+}
+/* Тёмная тема: по системе (если не выбрана светлая) или явно */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-mode="light"]) { --ctl-mix: 39%; --ok: #4fd18b; --ok-soft: #17301f; --warn: #f0b04a; --warn-soft: #33270f; --bad: #ff9c97; --bad-soft: #3a1c1c; --tk-var: #f0b04a; color-scheme: dark;
+    --bg: #0f1217; --surface: #161a21; --line: #262c36; --fg: #e3e7ed; --muted: #b3b9c4; --faint: #abb2bd; --accent: #6c9bff; --accent-fg: #0b1220; --accent-soft: #1b2745; --soft: #1c212a; --tk-opt: #7ea8ff; --tk-fn: #5fd39a; --tk-key: #d59bff; --tk-p: #5d6676; --shadow: none; --accent-ink: #95b7ff; --bad-fg: #2a0b0a; }
+  :root[data-variant="b"]:not([data-mode="light"]) { --bg: #0e1413; --surface: #151d1b; --line: #24302d; --fg: #e1eae7; --muted: #aebcb8; --faint: #a6b6ae; --accent: #3cc7b5; --accent-fg: #06201c; --accent-soft: #143430; --soft: #1a2422; --tk-opt: #5fd6c6; --tk-fn: #9ad96b; --tk-key: #f19ad0; --tk-p: #5f716b; --accent-ink: #46cab9; }
+  :root[data-variant="c"]:not([data-mode="light"]) { --bg: #121216; --surface: #1a1a20; --line: #2b2b34; --fg: #e6e5ee; --muted: #b8b8c2; --faint: #b0b0bb; --accent: #ff6fa6; --accent-fg: #2a0616; --accent-soft: #3a1726; --soft: #22222a; --tk-opt: #93a2ff; --tk-fn: #5fd39a; --tk-key: #ff8fbb; --tk-p: #676675; --accent-ink: #ff97bf; }
+}
+:root[data-mode="dark"] { --ctl-mix: 39%; --ok: #4fd18b; --ok-soft: #17301f; --warn: #f0b04a; --warn-soft: #33270f; --bad: #ff9c97; --bad-soft: #3a1c1c; --tk-var: #f0b04a; color-scheme: dark;
+  --bg: #0f1217; --surface: #161a21; --line: #262c36; --fg: #e3e7ed; --muted: #b3b9c4; --faint: #abb2bd; --accent: #6c9bff; --accent-fg: #0b1220; --accent-soft: #1b2745; --soft: #1c212a; --tk-opt: #7ea8ff; --tk-fn: #5fd39a; --tk-key: #d59bff; --tk-p: #5d6676; --shadow: none; --accent-ink: #95b7ff; --bad-fg: #2a0b0a; }
+:root[data-variant="b"][data-mode="dark"] { --bg: #0e1413; --surface: #151d1b; --line: #24302d; --fg: #e1eae7; --muted: #aebcb8; --faint: #a6b6ae; --accent: #3cc7b5; --accent-fg: #06201c; --accent-soft: #143430; --soft: #1a2422; --tk-opt: #5fd6c6; --tk-fn: #9ad96b; --tk-key: #f19ad0; --tk-p: #5f716b; --accent-ink: #46cab9; }
+:root[data-variant="c"][data-mode="dark"] { --bg: #121216; --surface: #1a1a20; --line: #2b2b34; --fg: #e6e5ee; --muted: #b8b8c2; --faint: #b0b0bb; --accent: #ff6fa6; --accent-fg: #2a0616; --accent-soft: #3a1726; --soft: #22222a; --tk-opt: #93a2ff; --tk-fn: #5fd39a; --tk-key: #ff8fbb; --tk-p: #676675; --accent-ink: #ff97bf; }
+
+* { box-sizing: border-box; }
+[hidden] { display: none !important; }
+html { -webkit-text-size-adjust: 100%; }
+body { margin: 0; background: var(--bg); color: var(--fg); font: var(--fs-md)/1.5 var(--sans); padding-bottom: calc(58px + env(safe-area-inset-bottom)); }
+@media (min-width: 760px) { body { padding-bottom: 0; } }
+a { color: var(--accent-ink); text-decoration: none; }
+h1, h2, h3 { margin: 0; line-height: 1.3; text-wrap: balance; }
+/* Typography (approved mockup local/design/typography.html, variant A): one face — Inter — in every style, the code
+   face stays per style; six sizes instead of 21; line height by size — the smaller the text, the tighter the lines,
+   headings tighter than text. Every font-size in this file takes one of these steps. */
+:root { --fs-xs: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-lg: 17px; --fs-xl: 20px; --fs-2xl: 26px; }
+:root:root:root { --sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif; }   /* over each style's own face */
+h1 { line-height: 1.2; } h2 { line-height: 1.25; } h3 { line-height: 1.3; }
+.sm, small { line-height: 1.45; }
+h1 { font-size: var(--fs-xl); } h2 { font-size: var(--fs-md); } h3 { font-size: var(--fs-md); }
+p { margin: 0; }
+code, pre, .mono { font-family: var(--mono); font-size: var(--fs-sm); }
+button, input, select, textarea { font: inherit; color: inherit; }
+svg { width: 17px; height: 17px; flex: none; }
+.muted { color: var(--muted); } .faint { color: var(--faint); } .sm { font-size: var(--fs-sm); } .num { font-variant-numeric: tabular-nums; }
+.grow { flex: 1; } .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .between { justify-content: space-between; }
+.stack { display: grid; gap: 10px; align-content: start; min-width: 0; }
+/* clip, not hidden, with room around: a line trimmed to its capitals (text-box) must not lose descenders, commas and
+   brackets, while the end still turns into «…» */
+.ellipsis { overflow: clip; overflow-clip-margin: 6px; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.boot { padding: 40vh 16px; text-align: center; color: var(--muted); }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+@media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
+/* animations (Оформление → «Анимации»): a page fades in, menus and dialogs appear; opacity and a 4 px shift only,
+   no transform on pages — fixed children (the full-screen editor) would lose their place */
+@keyframes pg-in { from { opacity: 0; } to { opacity: 1; } }
+@keyframes pop-in { from { opacity: 0; transform: translateY(-4px) scale(.98); } to { opacity: 1; transform: none; } }
+@keyframes sheet-in { from { opacity: 0; transform: translateY(12px); } to { opacity: 1; transform: none; } }
+:root:not([data-noanim]) .pg-in { animation: pg-in 140ms ease-out; }
+/* page switches (route() with View Transitions): the old page's picture stays until the new one is built, then a
+   140 ms cross-fade; .vt-cut — the same page with other data or animations off: a plain cut, no fade */
+::view-transition-old(root), ::view-transition-new(root) { animation-duration: 140ms; animation-timing-function: ease-out; }
+html.vt-cut::view-transition-old(root), html.vt-cut::view-transition-new(root) { animation: none; }
+@media (prefers-reduced-motion: reduce) { ::view-transition-old(root), ::view-transition-new(root) { animation: none; } }
+:root:not([data-noanim]) :is(.more-pop, .menu-list, .dd-pop:not(.sheet)) { animation: pop-in 120ms ease-out; }
+:root:not([data-noanim]) .modal-bg { animation: pg-in 140ms ease-out; }
+:root:not([data-noanim]) :is(.modal, .dd-pop.sheet) { animation: sheet-in 160ms cubic-bezier(.2, .7, .3, 1); }
+:root:not([data-noanim]) .drawer-in { animation: drawer-in 160ms cubic-bezier(.2, .7, .3, 1); }
+@keyframes drawer-in { from { transform: translateX(-24px); opacity: 0; } to { transform: none; opacity: 1; } }
