@@ -66,7 +66,15 @@ feed_hint() {
 	return 0
 }
 
-[ "$(id -u)" = 0 ] || die "запускайте от root"
+# uid, not the user name: on Asuswrt-Merlin the administrator is «admin» (or any name) with uid 0.
+# Some firmwares have no id(1) in PATH — then the uid comes from /proc
+my_uid() {
+	u=$(id -u 2>/dev/null)
+	[ -n "$u" ] || u=$(awk '/^Uid:/ { print $2; exit }' /proc/self/status 2>/dev/null)
+	echo "${u:-?}"
+}
+U=$(my_uid)
+[ "$U" = 0 ] || die "запускайте от пользователя с uid 0 (root, на Asuswrt-Merlin — администратор роутера); сейчас uid $U${USER:+, пользователь $USER}"
 
 # --- где запускаемся ---
 # R — корень пакетов: «/» на OpenWrt, «/opt» в Entware (Keenetic)

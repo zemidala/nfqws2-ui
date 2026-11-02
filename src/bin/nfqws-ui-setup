@@ -478,7 +478,10 @@ onoff() {
 	case "$1" in on) echo true ;; off) echo false ;; *) die "нужно on или off" ;; esac
 }
 
-[ "$(id -u)" = 0 ] || die "запускайте от root"
+# uid, not the user name (Asuswrt-Merlin: «admin» with uid 0); without id(1) in PATH — from /proc
+U=$(id -u 2>/dev/null)
+[ -n "$U" ] || U=$(awk '/^Uid:/ { print $2; exit }' /proc/self/status 2>/dev/null)
+[ "$U" = 0 ] || die "запускайте от пользователя с uid 0 (root, на Asuswrt-Merlin — администратор роутера); сейчас uid ${U:-?}${USER:+, пользователь $USER}"
 load
 cmd=$1
 [ $# -gt 0 ] && shift
