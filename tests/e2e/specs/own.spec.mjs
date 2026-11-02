@@ -61,6 +61,23 @@ test('только своя: галочки сняты — подбор всё �
   expect(sent.own).toEqual([['--lua-desync=multisplit:pos=2']]);
 });
 
+// rangerxxy, #729 п. 12: своя стратегия и в подборе для нескольких сайтов
+test('«Несколько сайтов»: поле есть, свои уходят в multi_start, и одни свои — тоже запуск', async ({ app }) => {
+  let sent = null;
+  await app.mock((b) => { if (b.cmd === 'multi_start') { sent = b; return { ok: true }; } });
+  await app.open('#/tests/pick');
+  await app.page.getByRole('radio', { name: 'Несколько сайтов или список' }).click();
+  await expect(app.page.locator('details.own-st')).toBeVisible();
+  await app.page.locator('details.own-st > summary').click();
+  await app.page.locator('textarea[aria-label="Свои стратегии"]').fill('--lua-desync=multisplit:pos=2');
+  for (const id of ['#t-cfg', '#t-std', '#t-hist', '#t-comm']) await app.page.locator(id).uncheck();
+  await app.page.locator('textarea[aria-label="Сайты, по одному в строке"]').fill('rutracker.org\nnnmclub.to');
+  await app.page.getByRole('button', { name: 'Запустить тест' }).click();
+  await expect.poll(() => sent).not.toBeNull();
+  expect(sent.sets).toEqual([]);
+  expect(sent.own).toEqual([['--lua-desync=multisplit:pos=2']]);
+});
+
 test.describe('телефон', () => {
   test.use({ viewport: { width: 390, height: 844 }, isMobile: true, hasTouch: true });
   test('раскрытое поле с замечаниями помещается на 390 px', async ({ app }) => {
@@ -70,6 +87,14 @@ test.describe('телефон', () => {
     await app.page.locator('#t-host').fill('rutracker.org');
     await app.page.getByRole('button', { name: 'Запустить тест' }).click();
     await expect(app.page.getByText('Стратегия 1 не годится')).toBeVisible();
+    expect(await auditLayout(app.page, { ignore: ['ПРОКРУТКА ВБОК nav.subtabs'] })).toEqual([]);
+    expect(await app.page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
+  });
+  test('«Несколько сайтов» с раскрытым полем помещается на 390 px', async ({ app }) => {
+    await app.open('#/tests/pick');
+    await app.page.getByRole('radio', { name: 'Несколько сайтов или список' }).click();
+    await app.page.locator('details.own-st > summary').click();
+    await app.page.screenshot({ path: test.info().outputPath('multi-own-390.png'), fullPage: true });
     expect(await auditLayout(app.page, { ignore: ['ПРОКРУТКА ВБОК nav.subtabs'] })).toEqual([]);
     expect(await app.page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
   });

@@ -22,6 +22,10 @@ function multiCandidates(array $job, array $hosts, string $proto, array &$status
       $cands[] = $c;
     }
   };
+  // own strategies from the form — first, in the order pasted
+  foreach ($job['own'] ?? [] as $st) {
+    $add(['name' => strategyName($st), 'from' => 'своя стратегия', 'steps' => $st, 'own' => true]);
+  }
   if (in_array('config', $job['sets'], true)) {
     array_map($add, configCandidates($proto));
   }
@@ -119,7 +123,8 @@ function multiJob(array $job, array &$status, ?array &$nfq, string $iface, array
   $status['parallel'] = $slots;
   $status['parallel_max'] = PAR_SLOTS;
   $status['candidates'] = count($cands);
-  $status['total'] = $status['done'] + count($blocked) * count($chunks) + min(MULTI_CONFIRM, count($cands));
+  $nOwn = count(array_filter($cands, fn($c) => !empty($c['own'])));
+  $status['total'] = $status['done'] + count($blocked) * count($chunks) + min(MULTI_CONFIRM, count($cands) - $nOwn) + $nOwn;
   $scan = array_fill(0, count($cands), []);
   testRules('queue', $iface, PAR_SLOTS);
   foreach ($blocked as $h) {
@@ -144,11 +149,14 @@ function multiJob(array $job, array &$status, ?array &$nfq, string $iface, array
   $status['phase'] = 'confirm';
   testRules('queue', $iface);
   $results = [];
-  foreach ($order as $n => $i) {
+  $rank = 0;   // place among the others: own strategies are re-checked whatever the batches said, the rest — the best MULTI_CONFIRM
+  foreach ($order as $i) {
     $c = $cands[$i];
     $e = ['name' => $c['name'], 'from' => $c['from'], 'steps' => $c['steps'], 'profile' => array_merge($filter, $c['steps']),
-      'scan' => $opened($i), 'scan_sites' => array_keys(array_filter($scan[$i]))] + (isset($c['hist']) ? ['hist' => $c['hist']] : []);
-    if ($n < MULTI_CONFIRM && $e['scan'] > 0 && $status['state'] === 'running' && !$stop()) {
+      'scan' => $opened($i), 'scan_sites' => array_keys(array_filter($scan[$i]))] + (isset($c['hist']) ? ['hist' => $c['hist']] : [])
+      + (!empty($c['own']) ? ['own' => true] : []);
+    $check = !empty($c['own']) || $rank++ < MULTI_CONFIRM && $e['scan'] > 0;
+    if ($check && $status['state'] === 'running' && !$stop()) {
       $status['current'] = 'перепроверка: ' . $c['name'];
       testSaveStatus($status);
       $per = [];

@@ -395,6 +395,7 @@ return array (
       0 => 'tests',
       1 => 'parallel',
       2 => 'auto',
+      3 => 'report',
     ),
     'nfq_update_check' => array (
       0 => 'service',

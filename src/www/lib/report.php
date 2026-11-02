@@ -119,6 +119,19 @@ function profileCheck(array $tokens): array
 // списки, --payload) в проверке не участвуют: подбор сам ставит фильтр под сайт и протокол.
 const OWN_MAX = 10;     // стратегий за один запуск
 const OWN_STEPS = 20;   // шагов в одной стратегии
+
+// own strategies from a pick request («own»: [[steps], …]) — only --lua-desync steps, at most OWN_MAX × OWN_STEPS
+function ownFromRequest($own): array
+{
+  $list = [];
+  foreach (array_slice(is_array($own) ? $own : [], 0, OWN_MAX) as $o) {
+    $st = array_values(array_filter(is_array($o) ? $o : [], fn($t) => is_string($t) && preg_match('/^--lua-desync=[^\s"`$\\\\]+$/', $t)));
+    if ($st) {
+      $list[] = array_slice($st, 0, OWN_STEPS);
+    }
+  }
+  return $list;
+}
 function strategyCheck(array $items, string $proto): array
 {
   $opts = helpInfo()['options'];

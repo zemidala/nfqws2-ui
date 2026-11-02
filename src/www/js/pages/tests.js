@@ -402,14 +402,14 @@ async function viewTests(main, r, bare = false) {
   }
   const multiRow = h('div', { class: 'frow', hidden: true }, h('span', { class: 'lbl', text: 'Сайты' }),
     h('div', { class: 'stack', style: 'gap:6px' }, h('div', { class: 'row' }, mList, btn('Другие случайные', () => fillMulti(), 'small', 'refresh')), mHosts, mNote,
-      h('span', { class: 'sm muted', text: 'Сначала каждый сайт открывается без обхода: что открывается и так или закрыто по IP, в подборе не участвует. Потом каждая стратегия проверяется на всех оставшихся сайтах; пять лучших — перепроверяются по одной. Каталог zapret2 и уточнение здесь не участвуют — на десяти сайтах это заняло бы часы. Обычно 3–8 минут.' })));
+      h('span', { class: 'sm muted', text: 'Сначала каждый сайт открывается без обхода: что открывается и так или закрыто по IP, в подборе не участвует. Потом каждая стратегия проверяется на всех оставшихся сайтах; пять лучших и все свои — перепроверяются по одной. Каталог zapret2 и уточнение здесь не участвуют — на десяти сайтах это заняло бы часы. Обычно 3–8 минут.' })));
   const hostLbl = h('label', { class: 'lbl', for: 't-host', text: 'Сайт' });
   function drawMode() {
     const multi = mode.value === 'multi';
     hostLbl.textContent = multi ? 'Протокол' : 'Сайт';
     host.hidden = multi;
     multiRow.hidden = !multi;
-    ownRow.hidden = multi;
+    ownRow.hidden = multi && isQuic();
     oneRows.forEach((el) => { el.hidden = multi || isQuic(); });
     quicNote.hidden = !isQuic() || multi;
     if (multi && !mHosts.value) fillMulti();
@@ -424,11 +424,15 @@ async function viewTests(main, r, bare = false) {
     const cmd = tab === 'trace' ? 'trace_start' : 'test_start';
     const sets = [setCfg.checked && 'config', setStd.checked && 'std', setHist.checked && 'hist', setHist.checked && 'other', setComm.checked && 'community', catSel.value].filter(Boolean);
     const single = tab === 'pick' && mode.value !== 'multi';
-    if (tab !== 'trace' && !sets.length && !(single && ownTa.value.trim())) { toast('Выберите, что пробовать', { err: true }); return; }
+    if (tab !== 'trace' && !sets.length && !(tab === 'pick' && ownTa.value.trim())) { toast('Выберите, что пробовать', { err: true }); return; }
     if (tab === 'pick' && mode.value === 'multi') {
       if (isQuic()) { toast('Подбор для QUIC — пока только для одного сайта', { err: true }); return; }
       const hosts = mHosts.value.split(/[\s,]+/).filter(Boolean);
-      if (!await guarded(() => api('multi_start', { hosts, list: mList.value, proto: proto.value, sets: sets.filter((x) => ['config', 'std', 'hist', 'community'].includes(x)), repeats: Number(repeats.value) }))) return;
+      const mOwn = await ownStrategies();
+      if (!mOwn) return;
+      const mSets = sets.filter((x) => ['config', 'std', 'hist', 'community'].includes(x));
+      if (!mSets.length && !mOwn.length) { toast('Выберите, что пробовать: каталог zapret2 в подборе для нескольких сайтов не участвует', { err: true }); return; }
+      if (!await guarded(() => api('multi_start', { hosts, list: mList.value, proto: proto.value, sets: mSets, own: mOwn, repeats: Number(repeats.value) }))) return;
       poll();
       return;
     }

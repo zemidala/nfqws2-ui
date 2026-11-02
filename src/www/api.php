@@ -787,13 +787,7 @@ switch ($cmd) {
     $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : ['config', 'std'], ['config', 'std', 'hist', 'other', 'community', 'ext', 'full']));
     $own = array_values(array_filter(is_array($in['steps'] ?? null) ? $in['steps'] : [], fn($t) => is_string($t) && preg_match('/^--lua-desync=[^\s"`$\\\\]+$/', $t)));
     // свои стратегии из формы подбора: до OWN_MAX штук, у каждой — только шаги --lua-desync
-    $ownList = [];
-    foreach (array_slice(is_array($in['own'] ?? null) && $cmd === 'test_start' ? $in['own'] : [], 0, OWN_MAX) as $o) {
-      $st = array_values(array_filter(is_array($o) ? $o : [], fn($t) => is_string($t) && preg_match('/^--lua-desync=[^\s"`$\\\\]+$/', $t)));
-      if ($st) {
-        $ownList[] = array_slice($st, 0, OWN_STEPS);
-      }
-    }
+    $ownList = $cmd === 'test_start' ? ownFromRequest($in['own'] ?? null) : [];
     curlRequire();
     testLaunch(['type' => $cmd === 'trace_start' ? 'trace' : 'pick', 'host' => $host,
       'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : (($in['proto'] ?? '') === 'quic' && $cmd === 'test_start' ? 'quic' : 'https'),
@@ -829,9 +823,11 @@ switch ($cmd) {
       $list = ['name' => basename($path), 'path' => $path];
     }
     $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : [], ['config', 'std', 'hist', 'community']));
+    $ownList = ownFromRequest($in['own'] ?? null);   // own strategies alone are a valid run
     curlRequire();
     testLaunch(['type' => 'multi', 'host' => $list ? $list['name'] : 'сайтов: ' . count($hosts), 'hosts' => $hosts, 'list' => $list,
-      'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https', 'sets' => $sets ?: ['config', 'std'], 'repeats' => (int)($in['repeats'] ?? 3)]);
+      'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https', 'sets' => $ownList ? $sets : ($sets ?: ['config', 'std']), 'own' => $ownList,
+      'repeats' => (int)($in['repeats'] ?? 3)]);
     respond(['ok' => true]);
 
   case 'wide_start':
