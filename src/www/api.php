@@ -167,6 +167,7 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
   seenInfo();   // первым — как и в state()
   pendingExpire(60);   // задание проверки после перезапуска могло погибнуть — откат не должен потеряться
   devicesEnsure();     // nfqws2 restarted outside the interface or the router rebooted
+  interceptCron();     // jumps into the nfqws2 chains lost after a firewall rebuild — put back even with the page closed
   historyScan('auto');
   nfqLogsTrim();
   monitorRun(false);

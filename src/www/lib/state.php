@@ -76,6 +76,16 @@ function interceptInfo(bool $full = false): array
     // off — цепочки не подключены дольше INTERCEPT_OFF_GRACE; refs остаются сырыми, для отчёта
     $memo['off'] = $off && time() - $since >= INTERCEPT_OFF_GRACE;
     $memo['off_since'] = $since ?: null;
+    // the init script puts the jumps back only from the firmware hook, and that hook gives up after five failed
+    // attempts or when the PID file is gone — then nothing returns them until the next rebuild. Ask it ourselves
+    if ($memo['off'] && interceptHeal()) {
+      @unlink(INTERCEPT_OFF_FILE);
+      $memo = interceptRead(mangleRules(true)) + ['off' => false, 'off_since' => null];
+    }
+    $h = interceptHealState();
+    // healed — the jumps were put back in the last 24 h (a note for the owner: why the bypass stopped for a while)
+    $memo['healed'] = $h['last'] && time() - $h['last'] < 86400 ? ['count' => $h['count'], 'last' => $h['last']] : null;
+    $memo['heal_failed'] = $memo['off'] && $h['tried'] >= $since;
   }
   $r = $memo;
   unset($r['broken'], $r['unhooked']);
@@ -83,6 +93,46 @@ function interceptInfo(bool $full = false): array
     unset($r['rules']);
   }
   return $r;
+}
+
+// Putting the jumps back: «<init script> firewall_iptables» — the same the firmware hook calls; it rebuilds the
+// chains and adds a missing jump, safe to repeat. Not more often than once a minute; only while nfqws2 runs.
+// The file: «how many times it helped, when it last helped, when it was last tried»
+define('INTERCEPT_FIX_FILE', '/tmp/nfqws-ui-intercept-fixed');
+
+function interceptHealState(): array
+{
+  [$count, $last, $tried] = array_map('intval', explode(' ', (string)@file_get_contents(INTERCEPT_FIX_FILE) . ' 0 0 0'));
+  return ['count' => $count, 'last' => $last, 'tried' => $tried];
+}
+
+function interceptHeal(): bool
+{
+  $h = interceptHealState();
+  if (time() - $h['tried'] < 60 || !findPid()) {
+    return false;
+  }
+  exec(INIT_SCRIPT . ' firewall_iptables >/dev/null 2>&1');
+  $ok = !interceptRead(mangleRules(true))['unhooked'];
+  @file_put_contents(INTERCEPT_FIX_FILE, ($h['count'] + ($ok ? 1 : 0)) . ' ' . ($ok ? time() : $h['last']) . ' ' . time());
+  return $ok;
+}
+
+// cron pass: one reading could hit a rebuild, so the jumps must stay missing for INTERCEPT_OFF_GRACE first
+function interceptCron(): void
+{
+  if (!findPid()) {
+    return;
+  }
+  for ($i = 0; $i * 6 < INTERCEPT_OFF_GRACE; $i++) {
+    if (!interceptRead(mangleRules(true))['unhooked']) {
+      return;
+    }
+    sleep(6);
+  }
+  if (interceptRead(mangleRules(true))['unhooked'] && interceptHeal()) {
+    @unlink(INTERCEPT_OFF_FILE);
+  }
 }
 
 function interceptRead(array $all): array

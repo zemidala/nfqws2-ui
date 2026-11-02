@@ -231,8 +231,14 @@ function problemItems() {
   const pol = policyOnly();
   if (pol && st.running) items.push({ level: 'warning', title: `Только политика «${pol.name}»`, text: policyText(pol), href: PAGES.raw[0] });
   // off — переходов нет дольше 20 с; одно чтение посреди перестройки правил (Keenetic) ошибкой не считается
+  // the router puts the jumps back by itself (once a minute at most); the error stays only when that did not help
   if (st.running && st.intercept?.off) {
-    items.push({ level: 'error', title: 'Правила перехвата не подключены', text: 'Цепочки nfqws2 в iptables есть, но переходов в них из POSTROUTING / PREROUTING нет — пакеты до nfqws2 не доходят, обход не работает. Перезапустите nfqws2; если повторяется — пришлите «Отчёт для помощи».', href: PAGES.log[0] });
+    items.push({ level: 'error', title: 'Правила перехвата не подключены', text: 'Цепочки nfqws2 в iptables есть, но переходов в них из POSTROUTING / PREROUTING нет — пакеты до nfqws2 не доходят, обход не работает. '
+      + (st.intercept.heal_failed ? 'Подключить их заново не получилось. ' : '') + 'Перезапустите nfqws2; если повторяется — пришлите «Отчёт для помощи».', href: PAGES.log[0] });
+  } else if (st.running && st.intercept?.healed) {
+    const hd = st.intercept.healed;
+    items.push({ level: 'info', title: 'Правила перехвата пропадали', text: `Переходы в цепочки nfqws2 исчезали, и обход на это время не работал. Интерфейс подключил их заново: ${plural(hd.count, 'раз', 'раза', 'раз')}, последний — ${fmtDate(hd.last)}. `
+      + 'Обычно так бывает, когда роутер перестраивает межсетевой экран (например, при переподключении PPPoE), а скрипт запуска nfqws2 не вернул правила.', href: PAGES.log[0] });
   }
   if (st.running && st.devices === false) {
     items.push({ level: 'warning', title: 'Выбор устройств не действует', text: 'Правила для устройств поставить не удалось — все устройства идут через nfqws2.', href: PAGES.dev[0] });

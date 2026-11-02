@@ -253,6 +253,9 @@ function reportText(array $sites, bool $hide, string $build): string
       ? "есть, но к $hook НЕ подключена — пакеты в неё не попадают (уже " . (time() - $ic['off_since']) . ' с)'
       : "есть, но к $hook в момент чтения не подключена — вероятно, правила перестраивались")));
   }
+  $hs = interceptHealState();
+  $L[] = 'переходы в цепочки nfqws2 подключались заново: ' . ($hs['count'] ? 'сколько раз: ' . $hs['count'] . ', последний — ' . ldate('d.m H:i', $hs['last']) : 'нет')
+    . ($ic['heal_failed'] ? ' (последняя попытка не помогла)' : '');
   if (ROOT === '') {
     // counts only: names and MACs of home devices do not belong in a report people post in chats
     $dv = devicesConf();
