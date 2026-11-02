@@ -28,6 +28,32 @@ function confValues(string $file = CONF_FILE): array
   return $r;
 }
 
+// Names the profiles pass as values (blob=…, seqovl_pattern=…) — to tell a declared blob that nothing uses.
+// From the values the shell gives (several assignments and $VAR inside are joined, comments outside the quotes are gone);
+// a comment inside the quotes — from «#» to the end of its line — does not count
+function blobsUsed(): array
+{
+  $exp = confValues();
+  $used = [];
+  foreach (ARG_VARS as $v) {
+    if ($v === 'NFQWS_BASE_ARGS') {
+      continue;
+    }
+    foreach (explode("\n", $exp[$v] ?? '') as $line) {
+      foreach (tokens($line) as $t) {
+        if ($t[0] === '#') {
+          break;
+        }
+        preg_match_all('/=([A-Za-z0-9_.-]+)/', $t, $m);
+        foreach ($m[1] as $name) {
+          $used[$name] = true;
+        }
+      }
+    }
+  }
+  return array_map('strval', array_keys($used));   // PHP turns numeric keys into numbers
+}
+
 // Сырые (не раскрытые) значения из текста конфига: NAME="..." (многострочно) или NAME=value
 function confRawVars(string $text): array
 {

@@ -127,9 +127,10 @@ async function paneBase(content) {
     const blobNames = blobToks.map((t) => t.slice(7).split(':')[0]);
     const blobFiles = blobToks.map((t) => base(t.replace(/^[^@]*@/, '')));
     chipsLua.replaceChildren(...(luaOn.length ? luaOn.map((f) => chip(f, 'mono')) : [h('span', { class: 'sm muted', text: 'не подключены — стратегии --lua-desync работать не будут' })]));
-    // a blob is used if any other variable passes its name as a value (blob=, seqovl_pattern=, …)
-    const rest = Object.entries(S.conf.vars).filter(([k]) => k !== 'NFQWS_BASE_ARGS').map(([, v]) => v).join('\n');
-    const usedBlob = (n) => new RegExp('=' + n.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '(?=$|[\\s:,"\'])', 'm').test(rest);
+    // a blob is used if a profile passes its name as a value (blob=, seqovl_pattern=, …): the router counts it from the
+    // config as the init script reads it (commented lines do not count, several assignments of a variable do)
+    const usedSet = new Set(S.conf.blobs_used || []);
+    const usedBlob = (n) => usedSet.has(n);
     chipsBlob.replaceChildren(...(blobToks.length ? blobToks.map((t, i) => h('div', { class: 'blob-row' }, chip(t.slice(7).replace(/:@.*\//, ' → '), 'mono'),
       usedBlob(blobNames[i]) ? null : h('span', { class: 'sm muted', text: 'не используется в стратегиях' }))) : [h('span', { class: 'sm muted', text: 'нет' })]));
     if (!sys) { adders.replaceChildren(); return; }

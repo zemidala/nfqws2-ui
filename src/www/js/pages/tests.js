@@ -393,7 +393,9 @@ async function viewTests(main, r, bare = false) {
     const chk = await guarded(() => api('strategy_check', { items: items.slice(0, 10), proto: proto.value }));
     if (!chk) return null;
     const skipped = [...new Set(chk.items.flatMap((x) => x.skipped))];
+    const notes = [...new Set(chk.items.flatMap((x) => x.notes || []))];
     ownOut.replaceChildren(
+      notes.length ? notice('info', 'Блоб взят из папки blobs', notes.join('; ') + '. В конфиг он не добавляется; если стратегия подойдёт, проверка конфига предложит объявить его.') : null,
       items.length > chk.max ? notice('info', `Взяты первые ${chk.max} из ${items.length} стратегий`, 'Остальные проверьте следующим запуском.') : null,
       chk.items.map((x, i) => x.errors.length ? notice('bad', `Стратегия ${i + 1} не годится`, x.errors.join('; ')) : null),
       skipped.length ? notice('info', 'В проверке участвуют только шаги --lua-desync', 'Не взято: ' + skipped.join(' ')) : null);

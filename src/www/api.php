@@ -583,7 +583,7 @@ switch ($cmd) {
     foreach (CONF_VARS as $n) {
       $vars[$n] = $raw[$n] ?? '';
     }
-    respond(['content' => $text, 'vars' => $vars, 'mtime' => filemtime(CONF_FILE)]);
+    respond(['content' => $text, 'vars' => $vars, 'mtime' => filemtime(CONF_FILE), 'blobs_used' => blobsUsed()]);
 
   case 'conf_save_vars':
     [$text, $raw] = candidateFromVars(is_array($in['vars'] ?? null) ? $in['vars'] : []);

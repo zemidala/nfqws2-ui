@@ -582,8 +582,9 @@ return array (
     'strategy_check' => array (
       0 => 'conf',
       1 => 'adapt',
-      2 => 'refine',
-      3 => 'report',
+      2 => 'parallel',
+      3 => 'refine',
+      4 => 'report',
     ),
     'sub_run' => array (
       0 => 'service',

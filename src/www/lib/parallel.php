@@ -129,10 +129,50 @@ function parTry(array $chunk, ?array &$nfq, array $baseArgs, array $filter, int 
   return $res;
 }
 
+// A blob the strategy names but the config does not declare, while the blobs folder has a file for it (the name itself
+// or name.bin) — the test nfqws2 gets «--blob=name:@file», so a strategy can be tried before the blob goes into the config
+function blobFileFor(string $name): ?string
+{
+  if (!preg_match('/^[A-Za-z0-9_.-]{1,64}$/', $name)) {
+    return null;
+  }
+  foreach ([$name, "$name.bin"] as $f) {
+    if (is_file(CONF_DIR . "/blobs/$f")) {
+      return CONF_DIR . "/blobs/$f";
+    }
+  }
+  return null;
+}
+
+function blobAutoArgs(array $args): array
+{
+  $declared = [];
+  foreach ($args as $a) {
+    if (preg_match('/^--blob=([^:]+):/', $a, $m)) {
+      $declared[$m[1]] = true;
+    }
+  }
+  $add = [];
+  foreach ($args as $a) {
+    if (!str_starts_with($a, '--lua-desync=')) {
+      continue;
+    }
+    preg_match_all('/:(?:blob|seqovl_pattern|pattern)=([A-Za-z0-9_.-]+)/', $a, $m);
+    foreach ($m[1] as $name) {
+      // built-in blobs (fake_default_tls…) stay built-in even when a file of that name lies in the folder
+      if (!isset($declared[$name]) && !in_array($name, BUILTIN_BLOBS, true) && ($f = blobFileFor($name))) {
+        $declared[$name] = true;
+        $add[] = "--blob=$name:@$f";
+      }
+    }
+  }
+  return $add;
+}
+
 // Запускает отдельный nfqws2 на тестовой очереди; возвращает процесс или null
 function testNfqwsStart(array $args, ?string $debugFile = null): ?array
 {
-  $argv = array_merge([NFQWS_BIN, '--qnum=' . TEST_QNUM, '--user=nobody'], $debugFile ? ['--debug=@' . $debugFile] : [], $args);
+  $argv = array_merge([NFQWS_BIN, '--qnum=' . TEST_QNUM, '--user=nobody'], $debugFile ? ['--debug=@' . $debugFile] : [], blobAutoArgs($args), $args);
   $p = proc_open(implode(' ', array_map('escapeshellarg', $argv)) . ' >' . TEST_DIR . '/nfqws.out 2>&1', [], $pipes);
   if (!is_resource($p)) {
     return null;

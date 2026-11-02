@@ -144,6 +144,7 @@ function strategyCheck(array $items, string $proto): array
     $steps = [];
     $errors = [];
     $skipped = [];
+    $notes = [];
     foreach (array_slice(is_array($tokens) ? $tokens : [], 0, 200) as $t) {
       if (!is_string($t) || !preg_match('/^--([a-z0-9-]+)(=[^"`$\\\\\s]*)?$/', $t, $m)) {
         $errors[] = (is_string($t) ? $t : '?') . ' — не параметр nfqws2';
@@ -162,7 +163,12 @@ function strategyCheck(array $items, string $proto): array
       foreach (['blob', 'seqovl_pattern', 'pattern'] as $k) {
         $v = $s['p'][$k] ?? null;
         if (is_string($v) && $v !== '' && !str_starts_with($v, '0x') && !isset($blobs[$v])) {
-          $errors[] = $t . ' — блоб «' . $v . '» в вашем конфиге не объявлен (у автора стратегии он задан параметром --blob)';
+          // not in the config, but the blobs folder has its file — the test nfqws2 declares it itself (blobAutoArgs)
+          if (blobFileFor($v)) {
+            $notes[] = "блоб «{$v}» в конфиге не объявлен — для проверки взят файл " . basename(blobFileFor($v)) . ' из папки blobs';
+            continue;
+          }
+          $errors[] = $t . ' — блоб «' . $v . '» в вашем конфиге не объявлен, и файла ' . $v . ' или ' . $v . '.bin в папке blobs нет (у автора стратегии он задан параметром --blob)';
           continue 2;
         }
       }
@@ -173,7 +179,7 @@ function strategyCheck(array $items, string $proto): array
     if (!$steps && !$errors) {
       $errors[] = 'нет ни одного шага --lua-desync';
     }
-    $out[] = ['steps' => $steps, 'name' => $steps ? strategyName($steps) : '', 'errors' => $errors, 'skipped' => $skipped];
+    $out[] = ['steps' => $steps, 'name' => $steps ? strategyName($steps) : '', 'errors' => $errors, 'skipped' => $skipped, 'notes' => array_values(array_unique($notes))];
   }
   // принимает ли nfqws2 сами шаги: сначала все разом, при отказе — по одной, чтобы назвать виноватую
   $filter = $proto === 'quic' ? ['--filter-udp=443', '--filter-l7=quic'] : ($proto === 'http' ? ['--filter-tcp=80', '--filter-l7=http'] : ['--filter-tcp=443', '--filter-l7=tls']);
@@ -181,6 +187,9 @@ function strategyCheck(array $items, string $proto): array
     $exp = confValues();
     $mine = implode(' --new ', array_map(fn($st) => implode(' ', array_merge($filter, $st)), $list));
     $exp['NFQWS_ARGS_CUSTOM'] = $mine . (trim($exp['NFQWS_ARGS_CUSTOM']) !== '' ? ' --new ' . $exp['NFQWS_ARGS_CUSTOM'] : '');
+    // blobs taken from the folder for the test only — declared here too, or nfqws2 refuses the strategy
+    $auto = blobAutoArgs(array_merge(tokens($exp['NFQWS_BASE_ARGS']), array_merge(...array_values($list))));
+    $exp['NFQWS_BASE_ARGS'] = trim($exp['NFQWS_BASE_ARGS'] . ' ' . implode(' ', $auto));
     return dryRun($exp);
   };
   $good = array_keys(array_filter($out, fn($x) => $x['steps'] && !$x['errors']));
