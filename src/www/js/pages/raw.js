@@ -41,10 +41,12 @@ async function paneRaw(content) {
     },
   });
   const locate = (x) => {
-    const rg = confVarRanges(ed.ta.value)[x.var];
+    // a whole-config note (no var) may carry «at» — the place it is about (the first comment in quotes)
+    const at = x.var ? x : x.at;
+    const rg = at && confVarRanges(ed.ta.value)[at.var];
     if (!rg) return null;
-    if (x.tok == null) return { start: rg.start, end: rg.start };
-    const t = tokenize(ed.ta.value.slice(rg.start, rg.end))[x.tok];
+    if (at.tok == null) return { start: rg.start, end: rg.start };
+    const t = tokenize(ed.ta.value.slice(rg.start, rg.end))[at.tok];
     return t ? { start: rg.start + t.start, end: rg.start + t.end } : null;
   };
   function drawOutline() {
@@ -66,7 +68,7 @@ async function paneRaw(content) {
     drawDrawer();
     const e = issues.filter((x) => x.level === 'error').length;
     const w = issues.filter((x) => x.level === 'warning').length;
-    const notes = issues.filter((x) => x.level === 'info' && x.var);
+    const notes = issues.filter((x) => x.level === 'info' && (x.var || x.at));
     const hidN = Object.keys(S.state.lint?.hidden || {}).length;
     // замечание «к сведению» подчёркнуто в тексте — по метке курсор встаёт на место, справка под редактором показывает текст
     let ni = 0;

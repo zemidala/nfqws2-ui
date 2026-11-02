@@ -213,13 +213,15 @@ function adaptConf(string $text): array
 function lintConf(array $raw, string $text): array
 {
   $issues = [];
-  $add = function (?string $var, ?int $tok, string $level, string $msg, ?array $fix = null) use (&$issues) {
+  // $at — where a whole-config note points in the text ({var, tok}): the note itself stays without var, so its
+  // «don't show» key does not change, but a click in the list still puts the cursor there
+  $add = function (?string $var, ?int $tok, string $level, string $msg, ?array $fix = null, ?array $at = null) use (&$issues) {
     foreach ($issues as $x) {
       if ($x['var'] === $var && $x['tok'] === $tok && $x['msg'] === $msg) {
         return;
       }
     }
-    $issues[] = ['var' => $var, 'tok' => $tok, 'level' => $level, 'msg' => $msg] + ($fix ? ['fix' => $fix] : []);
+    $issues[] = ['var' => $var, 'tok' => $tok, 'level' => $level, 'msg' => $msg] + ($fix ? ['fix' => $fix] : []) + ($at ? ['at' => $at] : []);
   };
 
   $tmp = tempnam('/tmp', 'nfqlint');
@@ -283,19 +285,23 @@ function lintConf(array $raw, string $text): array
   }
 
   $comments = 0;
+  $commentAt = null;   // the first comment — the single note points there
   foreach (ARG_VARS as $var) {
     $toks = tokens($raw[$var] ?? '');
     // Комментарий внутри кавычек (так написан стандартный конфиг Keenetic): от «#» до конца строки.
     // nfqws2 получает эти слова как лишние аргументы и пропускает их — одно замечание на весь конфиг
     $comment = commentTokens($raw[$var] ?? '');
     $comments += count(array_filter($comment));
+    if (!$commentAt && $comment) {
+      $commentAt = ['var' => $var, 'tok' => array_key_first($comment)];
+    }
     $pic = false;   // в этом профиле уже был per_instance_condition — у следующих шагов законны cond / cond_neg
     foreach ($toks as $i => $t) {
       if (isset($comment[$i])) {
         continue;
       }
       if (str_starts_with($t, '--dpi-desync')) {
-        $add(null, null, 'error', 'Похоже, это стратегии nfqws первой версии (--dpi-desync…) — nfqws2 их не понимает, их нужно переписать на --lua-desync');
+        $add(null, null, 'error', 'Похоже, это стратегии nfqws первой версии (--dpi-desync…) — nfqws2 их не понимает, их нужно переписать на --lua-desync', null, ['var' => $var, 'tok' => $i]);
       }
       if (preg_match('/^\$\{?' . $var . '\}?$/', $t)) {
         continue;   // VAR="$VAR …" — об этом отдельное замечание «присвоена несколько раз»
@@ -398,7 +404,7 @@ function lintConf(array $raw, string $text): array
   }
   if ($comments) {
     $add(null, null, 'info', ($comments === 1 ? 'Комментарий' : "Комментарии ($comments)") . ' внутри кавычек — nfqws2 получает их слова как лишние аргументы и пропускает. '
-      . 'На работу это не влияет (так написан стандартный конфиг Keenetic), но надёжнее держать комментарии над переменной', ['op' => 'remove_comments', 'label' => $comments === 1 ? 'Удалить комментарий' : 'Удалить все']);
+      . 'На работу это не влияет (так написан стандартный конфиг Keenetic), но надёжнее держать комментарии над переменной', ['op' => 'remove_comments', 'label' => $comments === 1 ? 'Удалить комментарий' : 'Удалить все'], $commentAt);
   }
 
   // Проверки на уровне профилей

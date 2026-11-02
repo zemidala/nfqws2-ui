@@ -212,7 +212,7 @@ function codeEditor({ value, mode, onInput, onCaret, rows = 4, maxHeight = 520, 
     setIssues(list) { issues = list || []; paint(); },
     setFind(f) { find = (f || '').toLowerCase(); paint(); },
     setValue(v) { ta.value = v; paint(); fit(); },
-    select(start, end) { ta.focus({ preventScroll: true }); ta.setSelectionRange(start, end); const ln = ta.value.slice(0, start).split('\n').length; ta.scrollTop = Math.max(0, (ln - 5) * 20.6); sync(); el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); caret(); },
+    select(start, end) { ta.focus({ preventScroll: true }); ta.setSelectionRange(start, end); const ln = ta.value.slice(0, start).split('\n').length; ta.scrollTop = Math.max(0, (ln - 5) * (parseFloat(getComputedStyle(ta).lineHeight) || 20.6)); sync(); el.scrollIntoView({ behavior: 'smooth', block: 'nearest' }); caret(); },
     repaint: paint,
   };
 }
