@@ -1417,11 +1417,21 @@ switch ($cmd) {
     respond(connData());
 
   case 'dns_start':
+    // own servers come with the start and are kept for the next checks (an empty list clears them)
+    if (is_array($in['own'] ?? null)) {
+      $own = dnsOwnParse($in['own']);
+      if (is_string($own)) {
+        fail($own);
+      }
+      $s = uiSettings();
+      $s['dns_own'] = array_values(array_filter(array_map(fn($v) => trim((string)$v), array_slice($in['own'], 0, DNS_OWN_MAX)), 'strlen'));
+      saveUiSettings($s);
+    }
     dnsStart();
     respond(dnsData());
 
   case 'dns_get':
-    respond(dnsData());
+    respond(dnsData() + ['own_servers' => uiSettings()['dns_own']]);
 
   case 'dnsx_start':
     dnsxStart();

@@ -14,15 +14,21 @@ async function viewDns(main) {
   const startBtn = btn('Проверить', start, 'primary');
   const when = h('span');
   const out = h('div', { class: 'stack', style: 'gap:14px' }, skel(1, 4));
+  // own servers: checked with the public ones and kept on the router for the next checks
+  const ownIn = h('input', { class: 'input mono grow', placeholder: '1.2.3.4, dns.example.com, https://dns.example.com/dns-query', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Свои DNS-серверы' });
   main.append(
     h('div', { class: 'vh' }, h('h1', { text: 'DNS-серверы' }), h('span', { class: 'grow' }), startBtn),
     h('p', { class: 'muted dns-lead' }, 'Какие DNS-серверы отвечают с этого роутера, не перехватывает ли провайдер обычный DNS и не подменяет ли адреса закрытых сайтов. ', when,
       'Настройки DNS роутера страница не меняет — только показывает и советует.'),
+    h('div', { class: 'frow dns-own' }, h('span', { class: 'lbl', text: 'Свои серверы' }),
+      h('div', { class: 'stack', style: 'gap:6px' }, h('div', { class: 'row' }, ownIn, newTag('dns:own')),
+        h('span', { class: 'sm muted', text: 'Необязательно, через запятую, до пяти. Адрес — проверяется обычный DNS (порт 53), имя — DoT, ссылка https://… — DoH. Проверяются вместе с публичными и стоят в таблице первыми; список запоминается.' }))),
     out);
   let q = {}, x = {}, sort = { key: 'best', dir: 1 }, all = false;
   const busy = () => !!(q.running || x.running);
   async function start() {
-    const s = await guarded(() => api('dns_start'));
+    const own = ownIn.value.split(/[\s,;]+/).map((v) => v.trim()).filter(Boolean);
+    const s = await guarded(() => api('dns_start', { own }));
     if (!s) return;
     q = s; x = await api('dnsx_get').catch(() => ({})); all = false; sort = { key: 'best', dir: 1 };
     draw(); poll();
@@ -88,7 +94,8 @@ async function viewDns(main) {
     // while the check runs the rows keep the list order (a row does not jump as its numbers come), unless the reader
     // sorted by a column; when it ends — the best first
     const ordered = !busy() || sort.user;
-    const pub = ordered ? [...(x.servers || [])].sort((a, b) => { const k = KEYS[sort.key]; const va = k(a), vb = k(b); return (typeof va === 'string' ? va.localeCompare(vb) : va - vb) * sort.dir || a.name.localeCompare(b.name); }) : [...(x.servers || [])];
+    // own servers (r.mine) stay on top of the public ones whatever the sort
+    const pub = ordered ? [...(x.servers || [])].sort((a, b) => { const k = KEYS[sort.key]; const va = k(a), vb = k(b); return !!b.mine - !!a.mine || (typeof va === 'string' ? va.localeCompare(vb) : va - vb) * sort.dir || a.name.localeCompare(b.name); }) : [...(x.servers || [])];
     const top = busy() ? null : pub.find(clean);
     const shown = all ? pub : pub.slice(0, SHOW);
     const th = (key, text, cls = '') => h('th', { class: cls, 'aria-sort': ordered && sort.key === key ? (sort.dir > 0 ? 'ascending' : 'descending') : null },
@@ -249,7 +256,7 @@ async function viewDns(main) {
     }
     const died = q.died || x.died;
     const run = busy() ? progress() : null;
-    const count = (x.servers || []).length;
+    const count = (x.servers || []).filter((r) => !r.mine).length;
     // every block has a key: one that comes or goes (a notice, the sites) does not shift the others onto each other
     const key = keyed;
     morphKids(out, [
@@ -269,6 +276,7 @@ async function viewDns(main) {
 
   const [a0, b0] = [await api('dns_get').catch(() => ({})), await api('dnsx_get').catch(() => ({}))];
   q = a0; x = b0;
+  ownIn.value = (a0.own_servers || []).join(', ');
   draw();
   if (busy()) poll();
 }

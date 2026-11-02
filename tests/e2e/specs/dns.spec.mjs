@@ -176,6 +176,8 @@ test('настоящая проверка: запуск и остановка н
   await expect(prog).toBeVisible({ timeout: 15_000 });
   await expect(prog.locator('.dnsx-tbl')).toBeVisible();
   await expect(page.locator('main .vh .btn.primary')).toBeDisabled();
+  // stop stops the quick part too: wait for its first public server, or the tiles have nothing to show (a race, not a bug)
+  await expect.poll(async () => ((await app.api('dns_get')).servers || []).some((s) => s.kind === 'public'), { timeout: 30_000 }).toBe(true);
   // the block's own «Остановить» — the one in the top bar stops nfqws2
   await prog.getByRole('button', { name: 'Остановить' }).click();
   await expect.poll(async () => (await app.api('dns_get')).running || (await app.api('dnsx_get')).running, { timeout: 90_000 }).toBe(false);

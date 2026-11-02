@@ -163,16 +163,20 @@ return array (
       0 => 'dns',
     ),
     'dns_start' => array (
-      0 => 'dns',
-      1 => 'dnsx',
+      0 => 'check',
+      1 => 'diag',
+      2 => 'dns',
+      3 => 'dnsx',
     ),
     'dnsx_get' => array (
       0 => 'dns',
       1 => 'dnsx',
     ),
     'dnsx_start' => array (
-      0 => 'dns',
-      1 => 'dnsx',
+      0 => 'check',
+      1 => 'diag',
+      2 => 'dns',
+      3 => 'dnsx',
     ),
     'dnsx_stop' => array (
       0 => 'dns',

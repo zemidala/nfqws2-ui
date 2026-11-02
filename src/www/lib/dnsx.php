@@ -72,6 +72,45 @@ const DNSX = [
   ['НСДИ #2', '195.208.5.1', '', ''],
 ];
 
+const DNS_OWN_MAX = 5;
+
+// Own servers from the DNS page: «1.2.3.4» — plain DNS on UDP 53, «dns.example.com» — DoT on 853,
+// «https://…» — DoH. Returns rows like DNSX ([name, ip, dot, doh] + 'own') or an error text for the first bad entry
+function dnsOwnParse(array $items)
+{
+  $rows = [];
+  foreach (array_slice($items, 0, DNS_OWN_MAX) as $v) {
+    $v = trim((string)$v);
+    if ($v === '') {
+      continue;
+    }
+    if (isIp4($v)) {
+      if (ipReserved($v)) {
+        return "$v: внутренний адрес — его проверяет строка «DNS роутера»";
+      }
+      $rows[] = ["Свой: $v", $v, '', ''];
+    } elseif (preg_match('#^https://[a-z0-9.-]+(:\d+)?(/[^\s"\'`$\\\\]*)?$#i', $v)) {
+      $rows[] = ['Свой: ' . parse_url($v, PHP_URL_HOST), '', '', $v];
+    } elseif (validHost(strtolower($v)) && str_contains($v, '.')) {
+      $rows[] = ["Свой: $v", '', strtolower($v), ''];
+    } else {
+      return "«{$v}» — нужен IPv4-адрес (обычный DNS), имя сервера (DoT) или ссылка https://… (DoH)";
+    }
+  }
+  return $rows;
+}
+
+// the servers of the extended check: own ones (saved on the DNS page) first, then the public list
+function dnsxList(): array
+{
+  static $list = null;
+  if ($list === null) {
+    $own = dnsOwnParse(uiSettings()['dns_own']);
+    $list = array_merge(is_array($own) ? array_map(fn($r) => $r + ['own' => true], $own) : [], DNSX);
+  }
+  return $list;
+}
+
 function dnsxData(): array
 {
   $d = json_decode((string)@file_get_contents(DNSX_FILE), true);
@@ -87,13 +126,13 @@ function dnsxData(): array
 function dnsxPending(): array
 {
   return array_map(fn($s) => ['name' => $s[0], 'ip' => $s[1], 'dot' => null, 'doh' => null, 'udp' => null, 'sub' => null,
-    'wait' => array_filter(['udp' => true, 'dot' => $s[2] !== '', 'doh' => $s[3] !== ''])], DNSX);   // udp: not reached yet
+    'wait' => array_filter(['udp' => $s[1] !== '', 'dot' => $s[2] !== '', 'doh' => $s[3] !== ''])] + (empty($s['own']) ? [] : ['mine' => true]), dnsxList());   // udp: not reached yet
 }
 
 // A fresh state of the extended check, before the job writes anything
 function dnsxQueued(bool $queued): array
 {
-  return ['running' => true, 'queued' => $queued, 'started' => time(), 'total' => count(DNSX), 'done' => 0, 'step' => 'udp', 'servers' => dnsxPending()];
+  return ['running' => true, 'queued' => $queued, 'started' => time(), 'total' => count(dnsxList()), 'done' => 0, 'step' => 'udp', 'servers' => dnsxPending()];
 }
 
 function dnsxStart(): void
@@ -287,12 +326,13 @@ function dnsxJob(): void
     $ref[$host] = array_values(array_unique(array_filter($r, fn($ip) => isIp4($ip) && !ipReserved($ip))));
   }
   // UDP 53: best of three, who answered, and the five sites
-  foreach (DNSX as $i => [$name, $ip, $dot, $doh]) {
+  $list = dnsxList();
+  foreach ($list as $i => [$name, $ip, $dot, $doh]) {
     if ($stopped()) {
       break;
     }
     $row = ['name' => $name, 'ip' => $ip, 'dot' => null, 'doh' => null, 'udp' => null, 'sub' => null,
-      'wait' => array_filter(['dot' => $dot !== '', 'doh' => $doh !== ''])];
+      'wait' => array_filter(['dot' => $dot !== '', 'doh' => $doh !== ''])] + (empty($list[$i]['own']) ? [] : ['mine' => true]);
     if ($ip !== '') {
       $best = null;
       for ($k = 0; $k < 3; $k++) {
@@ -332,7 +372,7 @@ function dnsxJob(): void
     $save();
     $ips = [];   // host → address, found over DoH (the router's own DNS may hand out stubs)
     $jobs = [];
-    foreach (DNSX as $i => [, , $dot, $doh]) {
+    foreach ($list as $i => [, , $dot, $doh]) {
       foreach (['dot' => $dot, 'doh' => $doh] as $kind => $t) {
         if ($t === '') {
           continue;
@@ -344,7 +384,7 @@ function dnsxJob(): void
         }
         // first the server's own address (routers set DoT/DoH by address + name, and the name's address may be another
         // one the provider treats differently); if that fails, the name's address in the second round
-        $own = DNSX[$i][1];
+        $own = $list[$i][1];
         if ($own === '' && $ips[$host] === null) {
           $d['servers'][$i][$kind] = ['ok' => false, 'why' => 'name'];
           unset($d['servers'][$i]['wait'][$kind]);
@@ -387,7 +427,7 @@ function dnsxJob(): void
       if ($stopped() || empty($row['dot']['ok'])) {
         continue;
       }
-      $q = dotQuery(DNSX[$i][2], DNSX[$i][1] !== '' ? DNSX[$i][1] : ($ips[DNSX[$i][2]] ?? ''));
+      $q = dotQuery($list[$i][2], $list[$i][1] !== '' ? $list[$i][1] : ($ips[$list[$i][2]] ?? ''));
       if ($q === null) {
         break;   // no openssl here: the handshake time stays for all
       }

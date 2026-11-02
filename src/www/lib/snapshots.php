@@ -26,6 +26,7 @@ function uiSettings(): array
     'asn' => [],
     'subs' => [],
     'lint_hide' => [],     // config notes hidden by «don't show»: key => text, see lintMark()
+    'dns_own' => [],       // own DNS servers for the DNS page: an address, a DoT name or a DoH link, see dnsOwnParse()
   ];
   $s = json_decode((string)@file_get_contents(UI_SETTINGS), true);
   $s = is_array($s) ? $s : [];
@@ -39,6 +40,9 @@ function uiSettings(): array
   }
   if (isset($s['asn'])) {
     $r['asn'] = array_values($s['asn']);
+  }
+  if (isset($s['dns_own'])) {
+    $r['dns_own'] = array_values($s['dns_own']);
   }
   return $r;
 }
