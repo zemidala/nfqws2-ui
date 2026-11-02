@@ -14,6 +14,16 @@ const CONN_MAX = 300;      // rows kept
 const CONN_KEEP = 3000;    // connections tracked in memory at most (a browser or a torrent opens hundreds)
 const CONN_STALL = 6;      // s: the device keeps sending, nothing comes back — the connection stalled
 const CONN_LOCK = '/tmp/nfqws-ui-conns.lock';
+const CONN_STOP = '/tmp/nfqws-ui-conns.stop';   // «Остановить»: recording ends early, what was recorded is annotated
+
+function connStop(): array
+{
+  $d = connData();
+  if (!empty($d['running']) && ($d['step'] ?? '') !== 'annotate') {
+    file_put_contents(CONN_STOP, (string)($d['id'] ?? ''));
+  }
+  return $d;
+}
 
 // One line of nf_conntrack → [proto, src, dst, sport, dport, packets, bytes, rpackets, rbytes, state].
 // The counters are there only with accounting on (nf_conntrack_acct); IPv6 lines are not read — the device is
@@ -181,7 +191,13 @@ function connJob(): void
     $d['flows'] = array_values($rows);
     file_put_contents(CONN_FILE, json_encode($d, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
   };
+  @unlink(CONN_STOP);
   while (time() - $t0 < $secs) {
+    if (@file_get_contents(CONN_STOP) === $id) {
+      @unlink(CONN_STOP);
+      $d['stopped'] = true;
+      break;
+    }
     $now = time();
     foreach (connTable() as $c) {
       if ($c['src'] !== $ip || !ipOutside($c['dst'])) {

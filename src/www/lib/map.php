@@ -129,6 +129,9 @@ return array (
       1 => 'diag',
       2 => 'conns',
     ),
+    'conns_stop' => array (
+      0 => 'conns',
+    ),
     'curl_install' => array (
     ),
     'devices_get' => array (

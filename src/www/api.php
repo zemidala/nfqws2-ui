@@ -1416,6 +1416,9 @@ switch ($cmd) {
   case 'conns_get':
     respond(connData());
 
+  case 'conns_stop':
+    respond(connStop());
+
   case 'dns_start':
     // own servers come with the start and are kept for the next checks (an empty list clears them)
     if (is_array($in['own'] ?? null)) {

@@ -6,22 +6,42 @@
 
 async function viewConns(main) {
   const out = h('div', { class: 'stack', style: 'gap:14px' });
+  // the chosen length and device order are kept in this browser: a page switch or a reload does not reset them
+  const KEY = 'nfqws-ui-conns';
+  let prefs = {};
+  try { prefs = JSON.parse(localStorage.getItem(KEY) || '{}') || {}; } catch { /* no storage */ }
+  const keep = (k, v) => { prefs[k] = v; try { localStorage.setItem(KEY, JSON.stringify(prefs)); } catch { /* no storage */ } };
+  const SORTS = [['flows-desc', 'Соединения ↓'], ['flows-asc', 'Соединения ↑'], ['ip-asc', 'IP ↑'], ['ip-desc', 'IP ↓'], ['name', 'Имя']];
+  const sortSel = h('select', { class: 'select', 'aria-label': 'Порядок устройств', onchange: () => { keep('sort', sortSel.value); fillDevices(devSel.value); } },
+    SORTS.map(([v, t]) => h('option', { value: v, text: '⇅ ' + t, selected: v === (prefs.sort || 'flows-desc') })));
   const devSel = h('select', { class: 'select', 'aria-label': 'Устройство' });
-  const secSel = h('select', { class: 'select', 'aria-label': 'Сколько записывать' }, [[30, '30 секунд'], [60, '1 минута'], [120, '2 минуты']].map(([v, t]) => h('option', { value: v, text: t, selected: v === 60 })));
-  const startBtn = btn('Записать', start, 'primary');
-  let onlyBad = false;
+  const secSel = h('select', { class: 'select', 'aria-label': 'Сколько записывать', onchange: () => keep('secs', Number(secSel.value)) },
+    [[30, '30 секунд'], [60, '1 минута'], [120, '2 минуты']].map(([v, t]) => h('option', { value: v, text: t, selected: v === (prefs.secs || 60) })));
+  // «Записать» turns into «Остановить» while recording: what was recorded so far is then annotated as usual
+  const startBtn = btn('Записать', () => (rec ? stop() : start()), 'primary');
+  let onlyBad = false, rec = false, devices = [];
   main.append(
     h('div', { class: 'vh' }, h('h1', { text: 'Соединения устройства' })),
     h('p', { class: 'muted dns-lead', text: 'Куда ходит программа на устройстве вашей сети и приходят ли ответы. Нужно, когда сайт открывается, а приложение работает плохо: голос в Discord обрывается, игра не входит в мир. Запись только читает таблицу соединений роутера и ничего не меняет.' }),
     panel(null, null,
-      h('div', { class: 'conn-form' }, devSel, secSel, startBtn),
-      h('p', { class: 'sm muted', text: 'Пока идёт запись, пользуйтесь программой на этом устройстве: позвоните в Discord, зайдите в игру — и дождитесь обрыва, если он есть.' })),
+      h('div', { class: 'conn-form' }, sortSel, devSel, secSel, startBtn),
+      h('p', { class: 'sm muted' }, 'Пока идёт запись, пользуйтесь программой на этом устройстве: позвоните в Discord, зайдите в игру — и дождитесь обрыва, если он есть. Если нужное уже случилось, нажмите «Остановить запись» — записанное разберётся сразу.', newTag('conns:stop'))),
     out);
 
-  async function loadDevices(keep) {
+  async function loadDevices(sel) {
     const r = await api('conns_devices').catch(() => ({ items: [] }));
     if (r.noacct) out.before(notice('warn', 'Счётчики соединений выключены', 'В системе выключен учёт трафика соединений (nf_conntrack_acct = 0) — запись ничего не покажет. Включить: sysctl -w net.netfilter.nf_conntrack_acct=1 (до перезагрузки роутера).'));
-    devSel.replaceChildren(...(r.items.length ? r.items.map((d) => h('option', { value: d.ip, selected: d.ip === keep,
+    devices = r.items;
+    fillDevices(sel);
+  }
+  const ipNum = (ip) => ip.split('.').reduce((a, x) => a * 256 + Number(x), 0);
+  function fillDevices(sel) {
+    const by = {
+      'flows-desc': (a, b) => (b.flows || 0) - (a.flows || 0), 'flows-asc': (a, b) => (a.flows || 0) - (b.flows || 0),
+      'ip-asc': (a, b) => ipNum(a.ip) - ipNum(b.ip), 'ip-desc': (a, b) => ipNum(b.ip) - ipNum(a.ip),
+      name: (a, b) => (a.name || '￿' + a.ip).localeCompare(b.name || '￿' + b.ip),
+    }[sortSel.value] || (() => 0);
+    devSel.replaceChildren(...(devices.length ? [...devices].sort((a, b) => by(a, b) || ipNum(a.ip) - ipNum(b.ip)).map((d) => h('option', { value: d.ip, selected: d.ip === sel,
       text: (d.name ? `${d.name} — ${d.ip}` : d.ip) + (d.flows ? ` · ${plural(d.flows, 'соединение', 'соединения', 'соединений')}` : '') }))
       : [h('option', { value: '', text: 'Устройств с соединениями нет' })]));
     devSel.dispatchEvent(new Event('change'));
@@ -29,6 +49,10 @@ async function viewConns(main) {
   async function start() {
     const s = await guarded(() => api('conns_start', { ip: devSel.value, secs: Number(secSel.value) }));
     if (s) { draw(s); poll(); }
+  }
+  async function stop() {
+    startBtn.disabled = true;   // until the job answers: annotating is not stoppable
+    await guarded(() => api('conns_stop'));
   }
   function poll() {
     pollTest(async () => {
@@ -56,7 +80,13 @@ async function viewConns(main) {
   }
 
   function draw(s) {
-    startBtn.disabled = !!s.running;
+    // recording — the button stops it; annotating — it waits; done — it starts a new recording
+    rec = !!s.running && s.step !== 'annotate';
+    startBtn.disabled = !!s.running && !rec;
+    startBtn.className = 'btn ' + (rec ? 'danger' : 'primary');
+    // «Остановить запись», not just «Остановить»: the top bar has an «Остановить» that stops nfqws2
+    startBtn.querySelector('btn-l').textContent = rec ? 'Остановить запись' : 'Записать';
+    [sortSel, devSel, secSel].forEach((x) => { x.disabled = !!s.running; });
     if (!s.started) {
       morphKids(out, []);
       return;
@@ -103,7 +133,7 @@ async function viewConns(main) {
         : notice('info', `Записываю… ${s.elapsed || 0} из ${s.secs} с`, 'Пользуйтесь программой на устройстве.', h('span', { class: 'spin' })))
         : s.died ? notice('warn', 'Запись прервалась', 'Запустите ещё раз.') : null, 'run'),
       ...hints,
-      keyed(panel(s.running ? 'Соединения' : `Соединения ${s.ip}`, s.finished ? h('span', { class: 'sm muted', text: fmtDate(s.finished) }) : null, sum, keyed(flows.length ? tbl : null, 'tbl')), 'flows')]);
+      keyed(panel(s.running ? 'Соединения' : `Соединения ${s.ip}`, s.finished ? h('span', { class: 'sm muted', text: fmtDate(s.finished) + (s.stopped ? ` · остановлена на ${s.elapsed || 0} с` : '') }) : null, sum, keyed(flows.length ? tbl : null, 'tbl')), 'flows')]);
   }
 
   const s0 = await api('conns_get').catch(() => ({}));

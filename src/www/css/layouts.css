@@ -137,8 +137,12 @@ a.over-row:hover { background: var(--soft); }
 .tint:hover { border-color: var(--accent); }
 .tint.on { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); background: var(--accent-soft); }
 /* device connections page */
-.conn-form { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; }
-@media (max-width: 599px) { .conn-form { grid-template-columns: minmax(0, 1fr); } }
+/* order · device · length · button; the button keeps one width for «Записать» and «Остановить» */
+.conn-form { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 2fr) minmax(0, 1fr) auto; gap: 8px; align-items: center; }
+.conn-form > .btn { min-width: 12em; }
+/* narrower: the device (the longest names) gets a row of its own; own dropdowns put their button next to the hidden select */
+@media (max-width: 899px) { .conn-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .conn-form > [aria-label="Устройство"] { grid-column: 1 / -1; grid-row: 1; } }
+@media (max-width: 599px) { .conn-form { grid-template-columns: minmax(0, 1fr); } .conn-form > [aria-label="Устройство"] { grid-row: auto; } }
 .conn-sum { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }   /* the panel's gap is the step to the table */
 .conn-tbl td { vertical-align: top; }
 .conn-tbl td.nowrap { white-space: nowrap; }
