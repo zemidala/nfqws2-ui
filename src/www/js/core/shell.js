@@ -333,9 +333,9 @@ function updateChrome() {
   const busy = pendingActive();
   document.getElementById('svc-ctl').replaceChildren(
     st.running
-      ? [btn(h('span', { class: 'ctl-label', text: 'Перезапустить' }), safeRestart, 'small', 'power', { title: 'Перезапустить nfqws2 с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, изменения откатятся сами', 'aria-label': 'Перезапустить', disabled: busy }),
-        btn(h('span', { class: 'ctl-label', text: 'Остановить' }), () => service('stop'), 'small danger', 'stop', { title: 'Остановить nfqws2 — обход блокировок перестанет работать', 'aria-label': 'Остановить', disabled: busy })]
-      : btn(h('span', { class: 'ctl-label', text: 'Запустить' }), () => service('start'), 'small primary', 'play', { title: 'Запустить nfqws2', 'aria-label': 'Запустить' }));
+      ? [svcBtn(h('span', { class: 'ctl-label', text: 'Перезапустить' }), 'restart', safeRestart, 'small', 'power', { title: 'Перезапустить nfqws2 с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, изменения откатятся сами', 'aria-label': 'Перезапустить', disabled: busy }),
+        svcBtn(h('span', { class: 'ctl-label', text: 'Остановить' }), 'stop', () => service('stop'), 'small danger', 'stop', { title: 'Остановить nfqws2 — обход блокировок перестанет работать', 'aria-label': 'Остановить', disabled: busy })]
+      : svcBtn(h('span', { class: 'ctl-label', text: 'Запустить' }), 'start', () => service('start'), 'small primary', 'play', { title: 'Запустить nfqws2', 'aria-label': 'Запустить' }));
   document.getElementById('ver').textContent = st.version ? 'v' + st.version : '';
   drawLoad();
   // вышла новая версия nfqws2 — метка за номером версии (на узком экране — значок с точкой)
@@ -402,11 +402,30 @@ async function undoLast(confirmIt = true) {
   route(true);
 }
 
+// A service action in flight (restart / stop / start): its button spins, all service buttons wait
+async function svcBusy(action, fn) {
+  S.svcAction = action;
+  updateChrome();
+  updateSide();
+  try { return await fn(); } finally {
+    S.svcAction = null;
+    updateChrome();
+    updateSide();
+  }
+}
+// a service button: while its action runs — a spinning arrow instead of the icon (same size, the label stays)
+function svcBtn(label, action, onclick, cls, ic, attrs = {}) {
+  const on = S.svcAction === action;
+  return btn(label, onclick, cls + (on ? ' busy' : ''), on ? 'refresh' : ic, { ...attrs, disabled: attrs.disabled || !!S.svcAction, 'aria-busy': on ? 'true' : null });
+}
+
 async function safeRestart() {
-  const r = await guarded(() => api('safe_restart', { minutes: 3 }));
-  if (!r) return;
-  toast(r.fixed ? `nfqws2 перезапущен (${r.fixed}). Проверяю сайты…` : 'nfqws2 перезапущен. Проверяю сайты…', r.fixed ? { long: true } : undefined);
-  await loadState().catch(() => {});
+  await svcBusy('restart', async () => {
+    const r = await guarded(() => api('safe_restart', { minutes: 3 }));
+    if (!r) return;
+    toast(r.fixed ? `nfqws2 перезапущен (${r.fixed}). Проверяю сайты…` : 'nfqws2 перезапущен. Проверяю сайты…', r.fixed ? { long: true } : undefined);
+    await loadState().catch(() => {});
+  });
 }
 
 async function rollbackToWorking() {
@@ -519,10 +538,13 @@ async function service(action) {
   const names = { restart: 'Перезапуск', stop: 'Остановка', start: 'Запуск' };
   if (action === 'stop' && !await ask('Остановить nfqws2? Заблокированные сайты перестанут открываться.', 'Остановить', 'danger')) return;
   toast(names[action] + '…');
-  const r = await guarded(() => api('service', { action }));
+  const r = await svcBusy(action, async () => {
+    const res = await guarded(() => api('service', { action }));
+    if (res) await loadState().catch(() => {});
+    return res;
+  });
   if (!r) return;
   if (!r.ok) modal('Не получилось: ' + action, h('div', { class: 'stack modal-b' }, h('p', { class: 'sm muted', text: 'Вот что ответил скрипт запуска:' }), copyBox(h('pre', { class: 'box', text: r.output || 'без вывода' }))));
-  await loadState().catch(() => {});
   if (r.fixed) toast('Исправлено: ' + r.fixed, { long: true });
   else if (r.ok) toast(S.state?.running ? 'nfqws2 работает' : 'nfqws2 остановлен');
   route();

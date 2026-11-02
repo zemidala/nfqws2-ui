@@ -141,9 +141,9 @@ function renderSideService(el) {
     // restart / stop live in the top bar; here only where the bar has none of them — «Вкладки» on a wide screen
     layout() !== 'tabs' || !isWide() ? null : h('div', { class: 'svc-buttons' },
       st.running
-        ? [btn('Перезапустить', safeRestart, 'small', 'power', { title: 'Перезапуск с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, изменения откатятся сами', disabled: pendingActive() }),
-          btn('Остановить', () => service('stop'), 'small danger', 'stop', { title: 'Остановить nfqws2 — обход блокировок перестанет работать', disabled: pendingActive() })]
-        : btn('Запустить', () => service('start'), 'small primary', 'play')),
+        ? [svcBtn('Перезапустить', 'restart', safeRestart, 'small', 'power', { title: 'Перезапуск с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, изменения откатятся сами', disabled: pendingActive() }),
+          svcBtn('Остановить', 'stop', () => service('stop'), 'small danger', 'stop', { title: 'Остановить nfqws2 — обход блокировок перестанет работать', disabled: pendingActive() })]
+        : svcBtn('Запустить', 'start', () => service('start'), 'small primary', 'play')),
     h('p', { class: 'muted sm num', text: [st.version && 'nfqws2 v' + st.version, st.running && st.process.started && 'запущен ' + fmtAgo(st.now - st.process.started), st.running && st.process.rss_kb && (st.process.rss_kb / 1024).toFixed(1).replace('.', ',') + ' МБ'].filter(Boolean).join(' · ') }),
     !st.running && st.stop ? stopNote(st.stop) : null,
     need && !pendingActive() ? notice('warn', 'Нужен перезапуск', 'Конфиг изменён после запуска nfqws2. После перезапуска интерфейс проверит сайты и откатит изменения, если вы их не подтвердите.'

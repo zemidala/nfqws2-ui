@@ -157,6 +157,9 @@ button.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
 .frow > .lbl { font-size: var(--fs-sm); color: var(--muted); padding-top: 5px; }
 .frow > .hint { grid-column: 2; font-size: var(--fs-xs); color: var(--faint); margin-top: -4px; }
 @media (max-width: 759px) { .frow { grid-template-columns: minmax(0, 1fr); } .frow > .hint { grid-column: 1; } .frow > .lbl { padding-top: 0; } }
+/* a service button while its action runs: the icon turns, the button does not fade like a plain disabled one */
+.btn.busy > svg { animation: spin .8s linear infinite; }
+.btn.busy:disabled { opacity: 1; cursor: progress; }
 .spin { width: 15px; height: 15px; border: 2px solid currentColor; border-right-color: transparent; border-radius: 50%; animation: spin .7s linear infinite; display: inline-block; flex: none; }
 @keyframes spin { to { transform: rotate(360deg); } }
 .skeleton { color: var(--muted); display: flex; gap: 10px; align-items: center; }
