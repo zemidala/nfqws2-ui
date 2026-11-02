@@ -893,7 +893,9 @@ switch ($cmd) {
     if (diagBusy()) {
       fail('Сейчас идёт диагноз сайта — он использует те же проверочные правила. Повторите через несколько секунд.');
     }
-    $cfgs = [['name' => 'мой (сейчас)', 'text' => (string)file_get_contents(CONF_FILE), 'mine' => true]];
+    // the current config for comparison — unless the form unticked it (saves one config's time, no «better/worse»)
+    $withMine = !array_key_exists('mine', $in) || !empty($in['mine']);
+    $cfgs = $withMine ? [['name' => 'мой (сейчас)', 'text' => (string)file_get_contents(CONF_FILE), 'mine' => true]] : [];
     foreach (array_slice(is_array($in['configs'] ?? null) ? $in['configs'] : [], 0, CFG_MAX) as $n => $c) {
       $t = is_array($c) && is_string($c['text'] ?? null) ? $c['text'] : '';
       if (trim($t) === '') {
@@ -905,7 +907,7 @@ switch ($cmd) {
       $name = trim(preg_replace('/[\x00-\x1f"`$\\\\]/', '', (string)($c['name'] ?? '')));
       $cfgs[] = ['name' => cutText($name !== '' ? $name : 'Конфиг ' . ($n + 1), 40), 'text' => $t];
     }
-    if (count($cfgs) < 2) {
+    if (count($cfgs) < ($withMine ? 2 : 1)) {
       fail('Добавьте хотя бы один конфиг для проверки');
     }
     $hosts = [];
@@ -920,7 +922,7 @@ switch ($cmd) {
       fail('Укажите хотя бы один сайт для проверки');
     }
     curlRequire();
-    testLaunch(['type' => 'cfg', 'host' => 'конфигов: ' . (count($cfgs) - 1), 'configs' => $cfgs, 'hosts' => $hosts, 'repeats' => (int)($in['repeats'] ?? 3)]);
+    testLaunch(['type' => 'cfg', 'host' => 'конфигов: ' . (count($cfgs) - ($withMine ? 1 : 0)),'configs' => $cfgs, 'hosts' => $hosts, 'repeats' => (int)($in['repeats'] ?? 3)]);
     respond(['ok' => true]);
 
   case 'cfg_get':

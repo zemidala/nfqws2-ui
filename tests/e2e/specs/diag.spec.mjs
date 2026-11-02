@@ -8,10 +8,18 @@ const run = async (app, host) => {
 };
 const verdict = (app) => app.page.locator('main .notice').filter({ hasText: /./ }).first();
 
-test('настоящий диагноз: сайт доходит до итога', async ({ app }) => {
+test('настоящий диагноз: сайт доходит до итога, «с роутера открывается» и что проверить на устройстве', async ({ app }) => {
   await app.open('#/diag');
   await run(app, 'ya.ru');
-  await expect(verdict(app)).toContainText('блокировки нет', { timeout: 60_000 });
+  await expect(verdict(app)).toContainText('С роутера сайт открывается', { timeout: 60_000 });
+  // the verdict says what was checked; the next steps for a device that still fails sit under it
+  const next = app.page.locator('main .diag-next');
+  await expect(next).toContainText('Если на устройстве всё равно не открывается');
+  await expect(next.getByRole('link', { name: /TLS 1\.2/ })).toHaveAttribute('href', /tls12=1/);
+  await next.scrollIntoViewIfNeeded();
+  await app.page.screenshot({ path: test.info().outputPath('diag-next.png') });
+  await next.getByRole('link', { name: /TLS 1\.2/ }).click();
+  await expect(app.page.locator('#t-tls12')).toBeChecked();
 });
 
 test('адрес закрыт, другие DNS не помогли → «Заблокирован адрес»', async ({ app }) => {

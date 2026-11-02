@@ -13,6 +13,7 @@ async function viewCfg(main) {
   const chips = h('div', { class: 'row' });
   const out = h('div', { class: 'stack', style: 'gap:14px' }, skel(1, 4));
   const startBtn = btn('Проверить', start, 'primary', 'play');
+  const withMine = h('input', { type: 'checkbox', id: 'cfg-mine', checked: true });
   let last = null;
   let detail = false;
 
@@ -61,13 +62,16 @@ async function viewCfg(main) {
   main.append(
     h('div', { class: 'vh' }, h('h1', { text: 'Чужой конфиг' })),
     panel(null, null,
-      h('p', { text: 'Проверьте конфиг из чата раньше, чем ставить его вместо своего. Роутер запустит каждый отдельным nfqws2 на проверочных соединениях, откроет одни и те же сайты и сравнит с вашим текущим конфигом. Ваш конфиг и трафик при этом не меняются.' }),
+      h('p', { text: 'Проверьте конфиг из чата раньше, чем ставить его вместо своего. Роутер запустит каждый отдельным nfqws2 на проверочных соединениях, откроет одни и те же сайты и сравнит с вашим текущим конфигом (если галочка «Сравнение» стоит). Ваш конфиг и трафик при этом не меняются.' }),
       h('div', { class: 'row cfg-add' }, h('b', { class: 'grow', text: 'Конфиги для проверки' }), newTag('cfg:file'),
         h('span', { class: 'cfg-btns' }, btn('Текстом', addText, 'small', 'plus'), btn('По ссылке', addUrl, 'small', 'plus'),
           btn('Из файла', () => fileInput.click(), 'small', 'upload', { title: 'Файл .conf или .txt с компьютера или телефона, можно несколько' })), fileInput),
       chips,
       h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Сайты' }), sites),
-      h('div', { class: 'row' }, startBtn, h('span', { class: 'sm muted grow note-wide', text: 'Каждый сайт — до трёх раз. Обычно 1–3 минуты на конфиг. Ваш конфиг проверяется тоже — для сравнения.' }))),
+      h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Сравнение' }), h('div', { class: 'stack', style: 'gap:2px' },
+        h('label', { class: 'chk' }, withMine, 'проверить и текущий конфиг', newTag('cfg:mine')),
+        h('span', { class: 'sm muted', text: 'Чтобы видеть, лучше или хуже ваш. Без него проверка короче на один конфиг, но сравнения не будет.' }))),
+      h('div', { class: 'row' }, startBtn, h('span', { class: 'sm muted grow note-wide', text: 'Каждый сайт — до трёх раз. Обычно 1–3 минуты на конфиг.' }))),
     out);
   drawChips();
 
@@ -75,7 +79,7 @@ async function viewCfg(main) {
     if (!CFG_DRAFT.length) { toast('Добавьте хотя бы один конфиг', { err: true }); return; }
     const hosts = sites.value.split(/[\s,;]+/).map((x) => x.trim().replace(/^[a-z]+:\/\//i, '').replace(/[/?#].*$/, '')).filter(Boolean);
     if (!hosts.length) { toast('Укажите сайты для проверки', { err: true }); return; }
-    if (!await guarded(() => api('cfg_start', { configs: CFG_DRAFT, hosts }))) return;
+    if (!await guarded(() => api('cfg_start', { configs: CFG_DRAFT, hosts, mine: withMine.checked }))) return;
     poll();
   }
   function poll() {

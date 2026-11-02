@@ -39,6 +39,9 @@
 .input, .select, .textarea { min-width: 0; min-height: var(--ctl-h); border: 1px solid var(--ctl-line); border-radius: calc(var(--radius) * .7 + 2px); background: var(--bg); color: var(--fg); padding: 5px 10px; outline: none; }
 .input:focus, .select:focus, .textarea:focus { border-color: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 .input.mono { font-family: var(--mono); font-size: var(--fs-sm); }
+/* number fields without the browser's own up/down arrows (a system control among our own) — the number is typed */
+input[type="number"].input { appearance: textfield; -moz-appearance: textfield; }
+input[type="number"].input::-webkit-inner-spin-button, input[type="number"].input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 .textarea { font-family: var(--mono); font-size: var(--fs-sm); line-height: 1.55; resize: vertical; min-height: 80px; width: 100%; }
 @media (max-width: 759px) { .input, .select { font-size: var(--fs-md); } }   /* 16 px keeps phones from zooming into the field */
 /* Own dropdowns (app.js, «dropdowns»): the button takes the select's classes, the native select stays hidden */

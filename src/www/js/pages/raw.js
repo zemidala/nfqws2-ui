@@ -7,7 +7,9 @@
 async function paneRaw(content) {
   setFocus(overviewCol());   // конфигу нужна ширина: колонка обзора сворачивается
   const conf = S.conf;
-  let issues = S.state.lint.issues;
+  // «Оформление» → without warnings: only errors are listed and underlined (nfqws2 will not start or works wrong with them)
+  const shown = (list) => getLook().rawNoWarn ? list.filter((x) => x.level === 'error') : list;
+  let issues = shown(S.state.lint.issues);
   let dry = S.state.lint.dry_run;
   let findText = '';
   let findIdx = 0;
@@ -76,6 +78,7 @@ async function paneRaw(content) {
     counts.replaceChildren(e ? chip(plural(e, 'ошибка', 'ошибки', 'ошибок'), 'bad') : null, w ? chip(plural(w, 'предупреждение', 'предупреждения', 'предупреждений'), 'warn') : null, !e && !w ? chip('ошибок нет', 'ok') : null,
       notes.length ? h('button', { type: 'button', class: 'chip', title: 'Не ошибка, а пояснение. Нажмите — курсор встанет на место, текст появится под редактором', onclick: toNote }, plural(notes.length, 'замечание', 'замечания', 'замечаний')) : null,
       hidN ? h('button', { type: 'button', class: 'chip', title: 'Замечания, скрытые кнопкой «Не показывать». Нажмите — список, вернуть любое', onclick: hiddenNotesDialog }, `Скрыто: ${hidN}`) : null,
+      getLook().rawNoWarn ? h('a', { class: 'chip', href: '#/settings/look', title: 'Показаны только ошибки. Включить предупреждения — «Оформление»' }, 'предупреждения выключены') : null,
       e || w ? btn('К ошибке ↓', () => { const x = issues.find((i) => i.level === 'error') || issues.find((i) => i.level === 'warning'); const p = x && locate(x); if (p) ed.select(p.start, p.end); }, 'small') : null);
   }
   function drawStatus() {
@@ -109,7 +112,7 @@ async function paneRaw(content) {
   const relint = debounce(async (val) => {
     const r = await api('lint_raw', { content: val }).catch(() => null);
     if (!r) return;
-    issues = r.issues;
+    issues = shown(r.issues);
     dry = r.dry_run;
     ed.setIssues(issues);
     drawOutline(); drawCounts(); drawStatus(); drawExtra();
@@ -145,7 +148,7 @@ async function paneRaw(content) {
       route();
     } catch (e) {
       if (e.data?.issues) {
-        issues = e.data.issues; dry = e.data.dry_run;
+        issues = shown(e.data.issues); dry = e.data.dry_run;
         ed.setIssues(issues); drawOutline(); drawCounts(); drawStatus(); drawExtra();
         if (e.data.fatal) toast('Не сохранено: nfqws2 с таким конфигом не запустится', { err: true });
         else if (await ask('Сохранить конфиг с ошибками?\n\nОни подсвечены в тексте. nfqws2 запустится, но эти места будут работать неправильно.', 'Сохранить всё равно', 'danger')) save(true);

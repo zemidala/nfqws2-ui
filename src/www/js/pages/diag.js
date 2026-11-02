@@ -30,8 +30,10 @@ function diagVerdictText(R) {
   const p = v.profile ? `профиль #${v.profile}` : null;
   const how = R.direct && !R.direct.ok ? DIAG_KIND[R.direct.kind] || 'не открывается' : 'не открывается';
   return {
-    ok: ['ok', 'Сайт открывается, блокировки нет', p ? `Открывается и мимо nfqws2, и через него (${p}).` : 'nfqws2 его не обрабатывает — и не нужно.'],
-    fixed: ['ok', 'Заблокирован, но nfqws2 справляется', `Мимо nfqws2: ${how}. Через ${p || 'nfqws2'} сайт открывается — менять ничего не нужно.`],
+    // checked from the router and for this one name: a device can still fail (other addresses of the service, QUIC,
+    // TLS 1.2, its own DNS) — the verdict says what was checked, the block under it — what to check next
+    ok: ['ok', 'С роутера сайт открывается', (p ? `Страница ${R.host || 'сайта'} открывается и мимо nfqws2, и через него (${p}).` : `Страница ${R.host || 'сайта'} открывается без обхода — nfqws2 её не обрабатывает.`)],
+    fixed: ['ok', 'Заблокирован, но nfqws2 справляется', `Мимо nfqws2: ${how}. Через ${p || 'nfqws2'} страница сайта открывается с роутера.`],
     broken_by_nfqws: ['warn', 'Сайт не заблокирован — его ломает nfqws2', `Мимо nfqws2 сайт открывается, а через ${p || 'nfqws2'} — нет. Исключите сайт из этого профиля или подберите для него другую стратегию.`],
     nxdomain: ['warn', 'Имя сайта не находится', 'Такого имени нет ни у роутера, ни у защищённого DNS. Проверьте написание — подбор стратегии тут не поможет.'],
     dns_noanswer: ['bad', 'Роутер не получает адрес сайта', 'Защищённый DNS адрес знает, а резолвер роутера — нет. Дело в DNS, а не в nfqws2: стратегии и списки тут не помогут.'],
@@ -48,6 +50,22 @@ function diagVerdictText(R) {
     site_error: ['warn', 'Сервер сайта отказал в соединении', 'Отказ пришёл от самого сервера, а не от провайдера — похоже на неполадку сайта.'],
     unknown: ['warn', 'Причину определить не удалось', 'Сайт не открывается, но ни под один известный вид блокировки это не подходит. Можно попробовать подбор стратегии.'],
   }[v.code] || ['warn', 'Причину определить не удалось', ''];
+}
+
+// The site opens from the router, but not on a device — what is worth checking next. The diagnosis checks one name over
+// TLS 1.3 from the router itself: a service's video and pictures come from other names, a browser may go over QUIC,
+// a TV may speak only TLS 1.2, a device may use its own DNS
+function deviceNext(host, R) {
+  const q = encodeURIComponent(host);
+  const quicBad = R.quic?.blocked;
+  return h('div', { class: 'notice info diag-next' }, icon('info'), h('div', { class: 'grow' },
+    h('b', { text: 'Если на устройстве всё равно не открывается' }),
+    h('ul', { class: 't sm' },
+      h('li', {}, 'Сервис может брать видео и картинки с других адресов (у YouTube — googlevideo.com, ytimg.com). ', h('a', { href: '#/tests/conns', text: 'Соединения устройства' }), ' покажут, куда оно ходит и где нет ответа.'),
+      h('li', {}, quicBad ? 'По QUIC (HTTP/3) сайт не отвечает — браузер ждёт и только потом уходит на обычное соединение. ' : 'Браузер мог пойти по QUIC (HTTP/3). ',
+        h('a', { href: `#/tests?host=${q}&proto=quic`, text: 'Подбор для QUIC' }), '.'),
+      h('li', {}, 'Смарт-ТВ и приставки часто умеют только TLS 1.2. ', h('a', { href: `#/tests?host=${q}&tls12=1`, text: 'Подбор как для старых устройств (TLS 1.2)' }), '.'),
+      h('li', { text: 'У устройства может быть свой DNS (защищённый DNS в браузере) или IPv6 — тогда оно ходит другими адресами, чем роутер.' }))));
 }
 
 async function viewDiag(main, r, bare = false) {
@@ -71,7 +89,7 @@ async function viewDiag(main, r, bare = false) {
     panelEl.hidden = false;
     verdictBox.replaceChildren();
     DIAG_STEPS.forEach(([id]) => set(id, 'skip', 'ожидает'));
-    const R = {};
+    const R = { host };   // the name — for the verdict text («Страница … открывается»)
     const step = async (id, data) => {
       set(id, 'run', 'проверяю…');
       const res = await api('diag', { step: id, host, ...data });
@@ -163,7 +181,8 @@ async function viewDiag(main, r, bare = false) {
         R.verdict.pick ?btn('Подобрать стратегию', () => go(pickHref(host)), 'small primary', 'tests') : null,
         R.quic?.blocked ? btn('Подобрать для QUIC', () => go('#/tests?host=' + encodeURIComponent(host) + '&proto=quic'), 'small', 'tests', { title: 'По QUIC (HTTP/3) сайт не отвечает ни без обхода, ни через nfqws2 — подобрать стратегию для UDP 443' }) : null,
         prof && ['broken_by_nfqws', 'sni_block', 'tls_block', 'fixed'].includes(R.verdict.code) ? h('a', { class: 'btn small', href: `#/settings/p${prof}`, text: `Профиль #${prof}` }) : null,
-        btn('Ещё раз', () => run(host), 'small ghost', 'refresh'))));
+        btn('Ещё раз', () => run(host), 'small ghost', 'refresh'))),
+        ['ok', 'fixed', 'podkop_ok'].includes(R.verdict.code) ? deviceNext(host, R) : null);
       try { localStorage.setItem(KEY, JSON.stringify([host, ...recentGet().filter((x) => x !== host)].slice(0, 8))); } catch { /* нет хранилища */ }
     } catch (e) {
       if (e.message === 'cancelled' || my !== seq) return;

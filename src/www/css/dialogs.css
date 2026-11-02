@@ -106,6 +106,8 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .ch-wmini { text-align: right; font-size: var(--fs-sm); font-weight: 600; } .ch-wmini.ok { color: var(--ok); } .ch-wmini.bad { color: var(--bad); }
 /* Monitoring: three equal summary tiles, the switch row, the table and the timeline */
 .mon-ctrls { align-items: center; }
+.mon-own { gap: 8px; flex-wrap: nowrap; }
+.mon-own .mon-ivl { width: 5em; }
 .mon-sw { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-md); cursor: pointer; }
 .mon-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .mon-tile { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; background: var(--soft); min-width: 0; }

@@ -9,13 +9,27 @@ async function viewMonitor(main) {
   const cfg = m.settings;
   let sites = [...cfg.sites];
   const add = h('input', { class: 'input mono grow', id: 'mon-add', placeholder: 'добавить сайт, например rutracker.org', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Добавить сайт' });
-  const interval = h('select', { class: 'select', 'aria-label': 'Как часто' }, [10, 30, 60, 180, 720].map((n) => h('option', { value: n, text: n < 60 ? `каждые ${n} мин` : `каждые ${n / 60} ч`, selected: n === cfg.interval })));
+  // the interval: presets or «свой…» — a number in minutes or hours. The cron pass runs every 10 minutes, so an own
+  // interval is rounded to 10 minutes, from 10 minutes to 24 hours (the router clamps it the same way)
+  const PRESETS = [10, 30, 60, 180, 720];
+  const isPreset = PRESETS.includes(cfg.interval);
+  const interval = h('select', { class: 'select', 'aria-label': 'Как часто' }, PRESETS.map((n) => h('option', { value: n, text: n < 60 ? `каждые ${n} мин` : `каждые ${n / 60} ч`, selected: n === cfg.interval })),
+    h('option', { value: 'own', text: 'свой…', selected: !isPreset }));
+  const ownHours = !isPreset && cfg.interval % 60 === 0;
+  const ownNum = h('input', { class: 'input num mon-ivl', type: 'number', min: 1, max: 1440, step: 1, value: isPreset ? 45 : ownHours ? cfg.interval / 60 : cfg.interval, 'aria-label': 'Свой интервал' });
+  const ownUnit = h('select', { class: 'select', 'aria-label': 'Единица интервала' }, h('option', { value: 'm', text: 'мин', selected: !ownHours }), h('option', { value: 'h', text: 'ч', selected: ownHours }));
+  const ownBox = h('span', { class: 'row mon-own', hidden: isPreset }, ownNum, ownUnit, newTag('mon:ivl'));
+  const ivl = () => {
+    if (interval.value !== 'own') return Number(interval.value);
+    const raw = Math.max(1, Number(ownNum.value) || 0) * (ownUnit.value === 'h' ? 60 : 1);
+    return Math.min(1440, Math.max(10, Math.round(raw / 10) * 10));
+  };
   let on = !!cfg.enabled;
   const enabled = h('button', { class: 'sw', type: 'button', id: 'mon-on', role: 'switch', 'aria-checked': String(on), 'aria-label': 'Проверять по расписанию',
     onclick: () => { on = !on; enabled.setAttribute('aria-checked', String(on)); save(); draw(); } });
   const listBox = h('div', { class: 'mon-box' });
   const checking = new Set();
-  const save = async (extra = {}) => guarded(() => api('monitor_set', { sites, interval: Number(interval.value), enabled: on, ...extra }));
+  const save = async (extra = {}) => guarded(() => api('monitor_set', { sites, interval: ivl(), enabled: on, ...extra }));
   // Проверка отдельных сайтов сразу — результат попадает в историю мониторинга
   const checkNow = async (hosts) => {
     hosts.forEach((x) => checking.add(x));
@@ -55,7 +69,7 @@ async function viewMonitor(main) {
     btn('', () => checkHost(host), 'small icon mon-more', 'search', { title: 'Подробно: какой профиль обрабатывает сайт', 'aria-label': 'Подробно о ' + host }),
     btn('', () => remove(host), 'small icon', 'x', { title: 'Убрать из мониторинга', 'aria-label': 'Убрать ' + host }));
   // how long the 96 checks of the history cover at the current interval: «48 часов», «4 дня»
-  const spanText = () => { const hrs = Math.round(96 * Number(interval.value) / 60); return hrs <= 72 ? plural(hrs, 'час', 'часа', 'часов') : plural(Math.round(hrs / 24), 'день', 'дня', 'дней'); };
+  const spanText = () => { const hrs = Math.round(96 * ivl() / 60); return hrs <= 72 ? plural(hrs, 'час', 'часа', 'часов') : plural(Math.round(hrs / 24), 'день', 'дня', 'дней'); };
   const item = (x) => x && { ok: !!x[1], ms: x[2], tip: cellTitle(x), t: x[0], when: fmtDate(x[0]) };
   // the last 96 checks in the chosen look, the oldest on the left; fewer — empty on the left, so all rows end at «now»
   const histBar = (hist) => {
@@ -66,10 +80,10 @@ async function viewMonitor(main) {
     // ticks and columns carry their time axis under them, as in the mockup
     return h('div', { class: 'ch-wrap' }, k === 'cols' ? chCols(chBuckets(items, 2)) : chTicks(chBuckets(items, 2)), axisRow());
   };
-  const axisRow = () => { const hrs = Math.round(96 * Number(interval.value) / 60), half = Math.round(hrs / 2);
+  const axisRow = () => { const hrs = Math.round(96 * ivl() / 60), half = Math.round(hrs / 2);
     const t = (n) => n <= 72 ? n + ' ч' : Math.round(n / 24) + ' дн';
     return h('div', { class: 'ch-axis' }, h('span', { text: t(hrs) + ' назад' }), h('span', { text: t(half) }), h('span', { text: 'сейчас' })); };
-  const colHead = () => { const hourly = Number(interval.value) === 30;
+  const colHead = () => { const hourly = ivl() === 30;
     return { ticks: hourly ? 'По часам' : spanText(), hours: 'По часам, 00 → 23', cols: hourly ? 'Время ответа по часам' : 'Время ответа', words: 'За ' + spanText() }[monChart()]; };
   const tblLegend = () => monChart() === 'hours' ? [['cell', 'всё хорошо'], ['slow', 'медленно'], ['bad', 'не открывался']]
     : monChart() === 'cols' ? [['ln', 'время ответа'], ['slow', 'медленно'], ['bad', 'не открывался']] : null;
@@ -86,7 +100,7 @@ async function viewMonitor(main) {
     lasts.forEach((x) => n[kindOf(x)]++);
     const pcts = sites.map((s) => pctOf(histOf(s))).filter((x) => x !== null);
     const avg = pcts.length ? Math.round(pcts.reduce((a, b) => a + b, 0) / pcts.length) : null;
-    const now = nowS(), mins = Math.max(0, Math.round(((m.data.last || 0) + Number(interval.value) * 60 - now) / 60));
+    const now = nowS(), mins = Math.max(0, Math.round(((m.data.last || 0) + ivl() * 60 - now) / 60));
     const t3 = !on ? tile('выкл.', 'автоматические проверки выключены — сайты проверяются только кнопками')
       : tile(mins <= 1 ? '≈ 10 мин' : mins + ' мин', 'до следующей проверки' + (m.data.last ? ' · последняя ' + fmtAgo(now - m.data.last) : ''));
     t3.dataset.tip = on ? 'Плюс-минус 10 минут: расписание проверяется раз в 10 минут.' : '';
@@ -128,7 +142,7 @@ async function viewMonitor(main) {
     // a longer history than 96 intervals (interval changed, manual checks only) widens the slot instead of piling up in slot 0
     const now = nowS();
     const first = Math.min(...sites.map((s) => histOf(s)[0]?.[0] || now));
-    const step = Math.max(Number(interval.value) * 60, Math.ceil((now - first) / 95));
+    const step = Math.max(ivl() * 60, Math.ceil((now - first) / 95));
     const N = Math.max(12, Math.min(96, Math.ceil((now - first) / step) + 1));
     const span = N * step;
     const slotOf = (t) => Math.min(N - 1, Math.max(0, Math.floor((t - (now - span)) / span * N)));
@@ -201,14 +215,26 @@ async function viewMonitor(main) {
   main.append(
     policyNote(), policyProbeHint(),
     panel('Сайты', h('div', { class: 'row mon-ctrls' },
-      h('label', { class: 'mon-sw', for: 'mon-on' }, enabled, h('span', { text: 'Проверять' })), interval,
+      h('label', { class: 'mon-sw', for: 'mon-on' }, enabled, h('span', { text: 'Проверять' })), interval, ownBox,
       btn('Проверить все', async () => { toast('Проверяю…'); const r = await guarded(() => api('monitor_run')); if (r) { m.data = r.data; draw(); await loadState(); } }, 'small', 'refresh')),
       h('p', { class: 'sm muted', text: 'Сайты открываются с самого роутера через основной nfqws2. История — последние 96 проверок: красное — сайт не открылся, жёлтое — ответ дольше 5 секунд. При смене «открывается ↔ нет» может прийти сообщение в Telegram — см. «Уведомления».' }),
       sumBox,
       h('div', { class: 'row' }, add, btn('Добавить', addSite, 'primary', 'plus')), addNote,
       h('div', { class: 'row mon-viewrow' }, viewSeg, newTag('mon:view'), chartSeg, newTag('mon:chart')), listBox));
   drawSeg();
-  interval.addEventListener('change', () => { save(); draw(); });
+  interval.addEventListener('change', () => { ownBox.hidden = interval.value !== 'own'; save(); draw(); });
+  // own interval: saved once the number settles; the field shows what was actually set (rounded to 10 minutes)
+  let ownSync = false;   // the page itself switches hours → minutes (1.5 h → 90 min): that change is not the reader's
+  const ownSave = debounce(async () => {
+    const v = ivl();
+    if (ownUnit.value === 'h' && v % 60 === 0) ownNum.value = v / 60;
+    else if (ownUnit.value === 'm') ownNum.value = v;
+    else { ownSync = true; ownUnit.value = 'm'; ownUnit.dispatchEvent(new Event('change')); ownSync = false; ownNum.value = v; }
+    await save();
+    draw();
+  }, 700);
+  ownNum.addEventListener('input', ownSave);
+  ownUnit.addEventListener('change', () => { if (!ownSync) ownSave(); });
 }
 
 // Уведомления в Telegram о сайтах из мониторинга
@@ -355,7 +381,7 @@ async function viewTests(main, r, bare = false) {
   const refine = h('input', { type: 'checkbox', id: 't-refine' });
   // «as old devices»: smart TVs and set-top boxes often speak only TLS 1.2, and a strategy found over TLS 1.3 may not open
   // the site for them — every probe of the pick then goes over TLS 1.2 (HTTPS only)
-  const tls12 = h('input', { type: 'checkbox', id: 't-tls12' });
+  const tls12 = h('input', { type: 'checkbox', id: 't-tls12', checked: r.q.get('tls12') === '1' });   // from the diagnosis: ?tls12=1
   const tlsRow = h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Устройства' }), h('div', { class: 'stack', style: 'gap:2px' },
     h('label', { class: 'chk' }, tls12, 'проверять как старые устройства (TLS 1.2)', newTag('pick:tls12')),
     h('span', { class: 'sm muted', text: 'Для смарт-ТВ и приставок, у которых сайт не открывается, хотя на телефоне и компьютере всё работает: многие из них умеют только TLS 1.2, а провайдер разбирает такое приветствие иначе. Тогда и подбор проверяет сайт по TLS 1.2.' })));
