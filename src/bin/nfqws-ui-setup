@@ -7,7 +7,7 @@
 # (lighttpd -tt); если проверка не прошла, прежний файл возвращается на место.
 # На Keenetic (Entware) всё то же лежит под /opt.
 
-VERSION=1.29.0
+VERSION=1.30.0
 
 # Is a program on PATH ($2 — another PATH). Not «command -v»: some firmwares' shells (Asuswrt-Merlin) lack «command»
 have() {
