@@ -353,6 +353,12 @@ async function viewTests(main, r, bare = false) {
   proto.addEventListener('change', () => { if (isQuic()) drawMode(); else { catCounts(); drawMode(); } });
   const repeats = h('select', { class: 'select', 'aria-label': 'Повторов' }, [1, 2, 3, 5].map((n) => h('option', { value: n, text: plural(n, 'повтор', 'повтора', 'повторов'), selected: n === 3 })));
   const refine = h('input', { type: 'checkbox', id: 't-refine' });
+  // «as old devices»: smart TVs and set-top boxes often speak only TLS 1.2, and a strategy found over TLS 1.3 may not open
+  // the site for them — every probe of the pick then goes over TLS 1.2 (HTTPS only)
+  const tls12 = h('input', { type: 'checkbox', id: 't-tls12' });
+  const tlsRow = h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Устройства' }), h('div', { class: 'stack', style: 'gap:2px' },
+    h('label', { class: 'chk' }, tls12, 'проверять как старые устройства (TLS 1.2)', newTag('pick:tls12')),
+    h('span', { class: 'sm muted', text: 'Для смарт-ТВ и приставок, у которых сайт не открывается, хотя на телефоне и компьютере всё работает: многие из них умеют только TLS 1.2, а провайдер разбирает такое приветствие иначе. Тогда и подбор проверяет сайт по TLS 1.2.' })));
   // Подбор одной стратегии для нескольких сайтов (списка): поле «Сайт» меняется на список и сайты из него
   const hostLists = S.state.lists.filter((l) => l.kind === 'host' && l.exists && l.entries > 0);
   let modeVal = 'one';
@@ -412,6 +418,7 @@ async function viewTests(main, r, bare = false) {
     host.hidden = multi;
     multiRow.hidden = !multi;
     ownRow.hidden = multi && isQuic();
+    tlsRow.hidden = proto.value !== 'https';
     oneRows.forEach((el) => { el.hidden = multi || isQuic(); });
     quicNote.hidden = !isQuic() || multi;
     if (multi && !mHosts.value) fillMulti();
@@ -434,13 +441,13 @@ async function viewTests(main, r, bare = false) {
       if (!mOwn) return;
       const mSets = sets.filter((x) => ['config', 'std', 'hist', 'community'].includes(x));
       if (!mSets.length && !mOwn.length) { toast('Выберите, что пробовать: каталог zapret2 в подборе для нескольких сайтов не участвует', { err: true }); return; }
-      if (!await guarded(() => api('multi_start', { hosts, list: mList.value, proto: proto.value, sets: mSets, own: mOwn, repeats: Number(repeats.value) }))) return;
+      if (!await guarded(() => api('multi_start', { hosts, list: mList.value, proto: proto.value, sets: mSets, own: mOwn, repeats: Number(repeats.value), tls12: proto.value === 'https' && tls12.checked }))) return;
       poll();
       return;
     }
     const own = single ? await ownStrategies() : [];
     if (!own) return;
-    if (!await guarded(() => api(cmd, { host: host.value, proto: proto.value, sets: isQuic() ? sets.filter((x) => !['ext', 'full'].includes(x)) : sets, own, repeats: Number(repeats.value), refine: !isQuic() && refine.checked }))) return;
+    if (!await guarded(() => api(cmd, { host: host.value, proto: proto.value, sets: isQuic() ? sets.filter((x) => !['ext', 'full'].includes(x)) : sets, own, repeats: Number(repeats.value), refine: !isQuic() && refine.checked, tls12: tab === 'pick' && proto.value === 'https' && tls12.checked }))) return;
     poll();
   }
   function poll() {
@@ -528,7 +535,7 @@ async function viewTests(main, r, bare = false) {
         + Object.entries(s.failed).sort((a, b) => b[1] - a[1]).map(([w, n]) => `${w} — ${n}`).join(', ') + '. В таблице — только то, что открыло сайт хоть раз.') : null,
       s.parallel && !running ? h('p', { class: 'sm muted', text: `Большой набор проверялся параллельно, по ${plural(s.parallel, 'стратегии', 'стратегии', 'стратегий')} сразу`
         + (s.parallel_max && s.parallel < s.parallel_max ? ` (а не по ${s.parallel_max}: пачка подстраивается под память роутера, чтобы он не начал тормозить)` : '') + '. Когда к одному сайту идёт много разных соединений одновременно, оборудование провайдера иногда путается, и такой итог может разойтись с проверкой по одной. Поэтому находки перепроверяются по одной, начиная с быстрых, пока не наберётся 8 подтверждённых (отметка «перепроверена»). Рабочими считаются только они; открывшие сайт лишь в пачке показаны в таблице, но применить их отсюда нельзя.' }) : null,
-      panel(`Результаты для ${s.host}` + (s.proto === 'quic' ? ' · QUIC' : ''), h('span', { class: 'sm muted num', text: `${res.length} стратегий · ${rep} повт.` + (s.finished ? ` · ${Math.round((s.finished - s.started))} с` : '') }),
+      panel(`Результаты для ${s.host}` + (s.proto === 'quic' ? ' · QUIC' : '') + (s.tls12 ? ' · TLS 1.2' : ''),h('span', { class: 'sm muted num', text: `${res.length} стратегий · ${rep} повт.` + (s.finished ? ` · ${Math.round((s.finished - s.started))} с` : '') }),
         h('div', { class: 'scroll' }, h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, h('th'), h('th', { text: 'Стратегия' }), h('th', { text: 'Откуда' }), h('th', { text: 'Результат' }), h('th', { class: 'num', text: 'Время' }), h('th'))), h('tbody', {}, rows))))].map((el, i) => keyed(el, NAMES[i])));
   }
 
@@ -643,7 +650,7 @@ async function viewTests(main, r, bare = false) {
     const M = hosts.length;
     const skipped = (s.sites || []).filter((r) => r.skip);
     const sitesBox = (s.sites || []).length ? h('div', { class: 'stack', style: 'gap:4px' },
-      h('div', { class: 'sm' }, h('b', { text: `Подбор для ${plural(M, 'сайта', 'сайтов', 'сайтов')}: ` }), h('span', { class: 'mono', style: 'white-space:normal;overflow-wrap:anywhere', text: hosts.join(', ') || '—' }), s.list ? h('span', { class: 'muted', text: ` (из ${s.list.name})` }) : null),
+      h('div', { class: 'sm' }, h('b', { text: `Подбор для ${plural(M, 'сайта', 'сайтов', 'сайтов')}: ` }), h('span', { class: 'mono', style: 'white-space:normal;overflow-wrap:anywhere', text: hosts.join(', ') || '—' }), s.list ? h('span', { class: 'muted', text: ` (из ${s.list.name})` }) : null, s.tls12 ? h('span', { class: 'muted', text: ' · по TLS 1.2' }) : null),
       skipped.length ? h('div', { class: 'sm muted' }, 'Не участвуют: ', skipped.map((r, i) => [i ? '; ' : '', h('span', { class: 'mono', text: r.host }), ' — ' + r.skip])) : null) : null;
     if (running || s.state === 'error') return panel(null, null, sitesBox);
     const res = s.results || [];
@@ -894,6 +901,7 @@ async function viewTests(main, r, bare = false) {
           h('div', { class: 'row', style: 'min-width:0' }, catSel, newTag('pick:catalog')),
           h('span', { class: 'sm muted', text: 'Те же функции, позиции разреза и способы испортить фейк, что перебирает blockcheck2 из zapret2. Большой набор проверяется параллельно, до 15 стратегий сразу (на роутере со 128 МБ — по 5, чтобы он не тормозил); лучшие находки потом перепроверяются по одной.' })))),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Повторов' }), h('div', { class: 'row' }, repeats, h('span', { class: 'sm muted', text: 'Стратегия засчитывается, если сайт открылся каждый раз.' }))),
+        tlsRow,
         oneRow(h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Уточнение' }), h('div', { class: 'stack', style: 'gap:2px' },
           h('label', { class: 'chk' }, refine, 'искать вариант полегче, даже если рабочая стратегия найдена'),
           h('span', { class: 'sm muted', text: 'Если рабочих стратегий нет, подбор сам пробует довести лучшую: меняет число фейков (до 20), способ их порчи и имя в фейке. Это ещё 2–5 минут.' }))))] :

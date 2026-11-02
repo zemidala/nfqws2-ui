@@ -254,6 +254,13 @@ function testRules(string $mode, string $iface, int $slots = 0): void
   }
 }
 
+// A pick «as old devices» (smart TVs that speak only TLS 1.2): every probe of the job is limited to TLS 1.2 — DPI often
+// treats a TLS 1.2 greeting differently, and a strategy found over TLS 1.3 may not open the site for them
+function probeTlsOpt(): string
+{
+  return !empty($GLOBALS['PROBE_TLS12']) ? ' --tlsv1.2 --tls-max 1.2' : '';
+}
+
 function curlProbe(string $host, bool $http, string $path = '/'): array
 {
   $url = ($http ? 'http://' : 'https://') . $host . $path;
@@ -261,7 +268,7 @@ function curlProbe(string $host, bool $http, string $path = '/'): array
   // порта к тому же серверу — на следующее может повлиять остаток прошлого (conntrack, состояние у провайдера).
   $curl = function () {
     [$lo, $hi] = array_map('intval', explode(':', TEST_PORTS));
-    return 'curl -4 -sk -o /dev/null --local-port ' . mt_rand($lo, $hi - 50) . '-' . $hi
+    return 'curl -4 -sk' . probeTlsOpt() . ' -o /dev/null --local-port ' . mt_rand($lo, $hi - 50) . '-' . $hi
       . ' --connect-timeout 4 -A ' . escapeshellarg('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130 Safari/537.36');
   };
   $out = [];

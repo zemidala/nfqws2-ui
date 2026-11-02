@@ -43,6 +43,7 @@ function picksAdd(array $status, int $repeats): void
     // после параллельного прогона в results только то, что хоть раз открыло сайт, — сколько проверено, считаем по done
     'ok' => count($full), 'total' => !empty($status['parallel']) ? max(count($status['results']), $status['done'] - 1) : count($status['results']), 'best' => $full ? $full[0]['name'] : null,
     'dur' => time() - $status['started'], 'state' => $status['state'], 'repeats' => $repeats, 'auto' => !empty($status['auto']),
+    'tls12' => !empty($status['tls12']),   // checked the way old devices connect (TLS 1.2)
     // параметры храним только у того, что открыло сайт хоть раз: остальное заново не понадобится
     'results' => array_map(fn($r) => array_filter(['name' => $r['name'], 'from' => $r['from'], 'ok' => $r['ok'], 'tries' => $r['tries'], 'ms' => $r['ms'],
       'reason' => $r['ok'] === $r['tries'] ? null : ($r['reason'] ?? null), 'steps' => $r['ok'] > 0 ? $r['steps'] : null, 'refined' => $r['refined'] ?? null],

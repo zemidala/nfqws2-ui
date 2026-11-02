@@ -792,7 +792,7 @@ switch ($cmd) {
     testLaunch(['type' => $cmd === 'trace_start' ? 'trace' : 'pick', 'host' => $host,
       'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : (($in['proto'] ?? '') === 'quic' ? 'quic' : 'https'),
       'sets' => $own || $ownList ? $sets : ($sets ?: ['config', 'std']), 'steps' => $own, 'own' => $ownList,
-      'repeats' => (int)($in['repeats'] ?? 3), 'refine' => !empty($in['refine'])]);
+      'repeats' => (int)($in['repeats'] ?? 3), 'refine' => !empty($in['refine']), 'tls12' => !empty($in['tls12'])]);
     respond(['ok' => true]);
 
   case 'multi_start':
@@ -827,7 +827,7 @@ switch ($cmd) {
     curlRequire();
     testLaunch(['type' => 'multi', 'host' => $list ? $list['name'] : 'сайтов: ' . count($hosts), 'hosts' => $hosts, 'list' => $list,
       'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https', 'sets' => $ownList ? $sets : ($sets ?: ['config', 'std']), 'own' => $ownList,
-      'repeats' => (int)($in['repeats'] ?? 3)]);
+      'repeats' => (int)($in['repeats'] ?? 3), 'tls12' => !empty($in['tls12'])]);
     respond(['ok' => true]);
 
   case 'wide_start':
