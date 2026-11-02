@@ -30,7 +30,7 @@ async function paneAbout(content) {
     S.authEnabled ? panel('Вход', newTag('about:session'),
       row('Не выходить', h('select', { class: 'select', 'aria-label': 'Сколько не выходить без действий', onchange: async (e) => {
         if (await guarded(() => api('settings_set', { session: Number(e.target.value) }), 'Сохранено')) S.state.ui.session = Number(e.target.value);
-      } }, [[3600, '1 час'], [86400, '1 день'], [604800, '7 дней'], [2592000, '30 дней']].map(([v, t]) => h('option', { value: v, text: t, selected: (st.ui?.session || 604800) === v })))),
+      } }, [[3600, '1 час'], [86400, '1 день'], [604800, '7 дней'], [2592000, '30 дней'], [31536000, '1 год']].map(([v, t]) => h('option', { value: v, text: t, selected: (st.ui?.session || 604800) === v })))),
       h('p', { class: 'sm muted', text: 'Сколько интерфейс помнит вход, если им не пользоваться. Пока вкладка открыта или вы заходите хотя бы раз за этот срок, входить заново не нужно. После перезагрузки роутера вход нужен всегда.' })) : null,
     panel('Обновления', null,
       u.available

@@ -50,7 +50,7 @@ function authEnabled(): bool
 }
 
 // Сколько держать вход без действий (выбор в «О программе»)
-define('SESSION_LIVES', [3600, 86400, 604800, 2592000]);
+define('SESSION_LIVES', [3600, 86400, 604800, 2592000, 31536000]);
 define('SESS_DIR', '/tmp/nfqws-ui-sess');
 
 function sessionLife(): int
