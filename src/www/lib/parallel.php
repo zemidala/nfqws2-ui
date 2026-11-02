@@ -230,6 +230,24 @@ function testJob(): void
     }
     $log = TEST_DIR . '/trace.log';
     @unlink($log);
+    // QUIC: the same probe as the pick — the first QUIC packet (made by nfqws2 itself) to one address of the site
+    $qip = $pkt = null;
+    if ($quic) {
+      $dns = diagDns($job['host']);
+      $qip = $dns['ips'][0] ?? null;
+      $why = $dns['status'] === 'nxdomain' ? 'имя сайта не находится' : ($dns['status'] === 'podkop' ? 'сайт идёт через podkop — QUIC уходит в туннель, мимо nfqws2'
+        : ($qip === null ? 'у сайта нет адреса IPv4 — зонд QUIC работает по IPv4' : null));
+      $pkt = $why === null ? quicPacket($job['host']) : null;
+      if ($why === null && $pkt === null) {
+        $why = 'не удалось собрать пакет QUIC (nfqws2 не выполнил сценарий)';
+      }
+      if ($why !== null) {
+        $status['state'] = 'error';
+        $status['error'] = 'Трассировка QUIC не запущена: ' . $why;
+        testSaveStatus($status);
+        return;
+      }
+    }
     testRules('queue', $iface);
     $nfq = testNfqwsStart($args, $log);
     if (!$nfq) {
@@ -238,7 +256,7 @@ function testJob(): void
       testSaveStatus($status);
       return;
     }
-    $r = curlProbe($job['host'], $http);
+    $r = $quic ? quicProbe($job['host'], $qip, true, $pkt) + ['code' => 0] : curlProbe($job['host'], $http);
     usleep(300000);
     testNfqwsStop($nfq);
     $nfq = null;

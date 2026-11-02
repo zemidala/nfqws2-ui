@@ -330,7 +330,7 @@ async function viewTests(main, r, bare = false) {
   host.addEventListener('input', () => { host.dataset.edited = '1'; });
   if (r.q.get('host')) host.dataset.edited = '1';
   const proto = h('select', { class: 'select', 'aria-label': 'Протокол' }, h('option', { value: 'https', text: 'HTTPS (TLS, TCP 443)' }), h('option', { value: 'http', text: 'HTTP (TCP 80)' }),
-    tab === 'pick' ? h('option', { value: 'quic', text: 'QUIC (HTTP/3, UDP 443)', selected: r.q.get('proto') === 'quic' }) : null);
+    h('option', { value: 'quic', text: 'QUIC (HTTP/3, UDP 443)', selected: r.q.get('proto') === 'quic' }));
   const isQuic = () => proto.value === 'quic';
   // через какой профиль сайт идёт по этому протоколу и какие порты профиля смотреть
   const routeKey = (s) => s.proto === 'http' ? 'http' : s.proto === 'quic' ? 'quic' : 'https';
@@ -586,7 +586,9 @@ async function viewTests(main, r, bare = false) {
     const draw = () => drawLog(pre, work.filter((l) => !q || l.toLowerCase().includes(q)));
     draw();
     return h('div', { class: 'stack', style: 'gap:14px' },
-      s.result.ok ? notice('ok', `Открылся через текущую конфигурацию: HTTP ${s.result.code}, ${s.result.ms} мс`) : notice('bad', 'Не открылся через текущую конфигурацию: ' + s.result.reason),
+      s.proto === 'quic'
+        ? (s.result.ok ? notice('ok', `Ответил по QUIC через текущую конфигурацию: ${s.result.ms} мс`) : notice('bad', 'Не ответил по QUIC через текущую конфигурацию: ' + s.result.reason, 'Сам сайт при этом может открываться: браузер ждёт ответа по QUIC и потом переходит на обычное соединение.'))
+        : s.result.ok ? notice('ok', `Открылся через текущую конфигурацию: HTTP ${s.result.code}, ${s.result.ms} мс`) : notice('bad', 'Не открылся через текущую конфигурацию: ' + s.result.reason),
       panel('Что произошло', null,
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Имя сайта' }), h('span', { class: 'mono', text: hostname || 'не определено (нет SNI/Host)' })),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Профиль' }), profile ? h('a', { href: `#/settings/p${profile}`, text: `#${profile} ${p ? profName(p) : ''}` }) : h('span', { text: 'ни один — соединение прошло без обработки' })),
@@ -879,7 +881,7 @@ async function viewTests(main, r, bare = false) {
     bare ? null : h('div', { class: 'vh' }, h('h1', { text: tab === 'trace' ? 'Трассировка' : 'Подбор стратегии' })),
     panel(null, null,
       tab === 'pick' ? h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Подбирать' }), h('div', { class: 'row' }, modeSeg, newTag('pick:multi'))) : null,
-      h('div', { class: 'frow' }, hostLbl, h('div', { class: 'row' }, host, proto, tab === 'pick' ? newTag('pick:quic') : null)),
+      h('div', { class: 'frow' }, hostLbl, h('div', { class: 'row' }, host, proto, tab === 'pick' ? newTag('pick:quic') : newTag('trace:quic'))),
       tab === 'pick' ? [multiRow, quicNote,
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Что пробовать' }), h('div', { class: 'row' },
           h('label', { class: 'chk' }, setCfg, 'стратегии из вашего конфига'), h('label', { class: 'chk' }, setStd, 'стандартный набор'),

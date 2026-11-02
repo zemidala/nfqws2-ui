@@ -790,7 +790,7 @@ switch ($cmd) {
     $ownList = $cmd === 'test_start' ? ownFromRequest($in['own'] ?? null) : [];
     curlRequire();
     testLaunch(['type' => $cmd === 'trace_start' ? 'trace' : 'pick', 'host' => $host,
-      'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : (($in['proto'] ?? '') === 'quic' && $cmd === 'test_start' ? 'quic' : 'https'),
+      'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : (($in['proto'] ?? '') === 'quic' ? 'quic' : 'https'),
       'sets' => $own || $ownList ? $sets : ($sets ?: ['config', 'std']), 'steps' => $own, 'own' => $ownList,
       'repeats' => (int)($in['repeats'] ?? 3), 'refine' => !empty($in['refine'])]);
     respond(['ok' => true]);
