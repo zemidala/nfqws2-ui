@@ -250,9 +250,11 @@ return array (
       12 => 'report',
     ),
     'freeze_start' => array (
-      0 => 'tests',
-      1 => 'parallel',
-      2 => 'auto',
+      0 => 'check',
+      1 => 'tests',
+      2 => 'parallel',
+      3 => 'auto',
+      4 => 'diag',
     ),
     'history' => array (
     ),

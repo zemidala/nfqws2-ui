@@ -62,16 +62,27 @@ function freezeJob(array $job, array &$status, ?array &$nfq, string $iface, arra
   foreach ($job['extra'] ?? [] as $h) {
     array_unshift($refs, ['label' => $h, 'host' => $h, 'path' => '/']);
   }
+  // own addresses (a VPS, a game server): the same probe as the reference addresses; the network — by RIPEstat
+  foreach (array_reverse($job['ips'] ?? []) as $a) {
+    $label = $a['ip'] . ($a['port'] !== 443 ? ':' . $a['port'] : '');
+    array_unshift($refs, ['label' => $label, 'host' => $a['ip'], 'path' => null, 'pad' => ['ip' => $a['ip'], 'port' => $a['port'], 'sni' => FREEZE_SNI], 'asn' => null, 'own' => true]);
+  }
+  // one row per address: an own address equal to a reference one stays as own (rows are keyed by host)
+  $seenHost = [];
+  $refs = array_values(array_filter($refs, function ($r) use (&$seenHost) {
+    $k = $r['host'] . ':' . ($r['pad']['port'] ?? 443);
+    return !isset($seenHost[$k]) && ($seenHost[$k] = true);
+  }));
   $probeNet = fn(array $n): array => isset($n['pad']) ? padProbe($n['pad']['ip'], $n['pad']['port'], $n['pad']['sni']) : curlProbe($n['host'], false, $n['path']);
   $funcs = luaCatalog()['functions'];
   $templates = array_values(array_filter(FREEZE_TEMPLATES, fn($t) => isset($funcs[explode(':', substr($t[0], 13))[0]])));
-  $filter = ['--filter-tcp=443', '--filter-l7=tls', '--payload=tls_client_hello'];
+  $filterOf = fn(array $n): array => ['--filter-tcp=' . ($n['pad']['port'] ?? 443), '--filter-l7=tls', '--payload=tls_client_hello'];
   $status['nets'] = [];
   $status['total'] = count($refs);
   $status['phase'] = 'baseline';
   testSaveStatus($status);
-  $try = function (array $n, array $steps) use (&$nfq, $baseArgs, $filter, $probeNet): array {
-    $nfq = testNfqwsStart(array_merge($baseArgs, $filter, $steps));
+  $try = function (array $n, array $steps) use (&$nfq, $baseArgs, $filterOf, $probeNet): array {
+    $nfq = testNfqwsStart(array_merge($baseArgs, $filterOf($n), $steps));
     if (!$nfq) {
       return ['ok' => 0, 'tries' => 0, 'ms' => null, 'reason' => 'nfqws2 не принял параметры'];
     }
@@ -110,7 +121,7 @@ function freezeJob(array $job, array &$status, ?array &$nfq, string $iface, arra
     testSaveStatus($status);
     if (isset($ref['pad'])) {
       $ip = $ref['pad']['ip'];
-      $asn = $ref['asn'];
+      $asn = $ref['asn'] ?? (int)(ripe('network-info', $ip)['asns'][0] ?? 0);
     } else {
       $ip = diagDns($ref['host'])['ips'][0] ?? null;
       $asn = $ip && !(isIp4($ip) && ipReserved($ip)) ? (int)(ripe('network-info', $ip)['asns'][0] ?? 0) : 0;
@@ -118,7 +129,10 @@ function freezeJob(array $job, array &$status, ?array &$nfq, string $iface, arra
     $b = $ip ? $probeNet($ref) : ['ok' => false, 'code' => 0, 'ms' => 0, 'reason' => 'имя не разрешается'];
     // замирает и раньше, до ответа сервера (у Hetzner так): соединение с адресом есть, дальше тишина — лечится тем же
     $stall = !$b['ok'] && $b['reason'] === 'тайм-аут' && array_filter(diagTcp([$ip], $ref['pad']['port'] ?? 443), fn($x) => $x['ok']);
-    $status['nets'][] = $ref + ['ip' => $ip, 'asn' => $asn ?: null, 'baseline' => $b,
+    // own address that does not even connect: closed by IP — no strategy helps, say so instead of «не проверить»
+    $noTcp = !empty($ref['own']) && !$b['ok'] && !$stall && !array_filter(diagTcp([$ip], $ref['pad']['port']), fn($x) => $x['ok']);
+    // array_merge, not «+»: an own address comes with 'asn' => null, the found one must replace it
+    $status['nets'][] = array_merge($ref, ['ip' => $ip, 'asn' => $asn ?: null]) + ['baseline' => $b, 'no_tcp' => $noTcp,
       'freeze' => (!$b['ok'] && $b['reason'] === REASON_FREEZE) || $stall, 'stall' => (bool)$stall, 'found' => null, 'tried' => []];
     $status['done']++;
     testSaveStatus($status);

@@ -6,7 +6,7 @@
 // Где провайдер замораживает соединение после ~16–20 КБ и какое имя в фейке это снимает — для сети целиком.
 
 async function viewFreeze(main) {
-  const sites = h('input', { class: 'input mono grow', placeholder: 'свои сайты через запятую, например king.hr (необязательно)', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Свои сайты' });
+  const sites = h('input', { class: 'input mono grow', placeholder: 'king.hr, 203.0.113.5:8443 — через запятую, до трёх (необязательно)', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Свои сайты и адреса' });
   const out = h('div', { class: 'stack', style: 'gap:14px' }, skel(1, 4));
   const startBtn = btn('Запустить пробу', start, 'primary', 'play');
   main.append(
@@ -14,7 +14,9 @@ async function viewFreeze(main) {
     panel(null, null,
       h('p', { text: 'Многие провайдеры пропускают начало соединения с зарубежными хостингами (Hetzner, OVH, Linode и др.) и замораживают его после 16–20 КБ: сайт начинает открываться и зависает. Обычные стратегии тут не помогают. Помогает фейк с именем сайта, который провайдер не трогает, — и подходящее имя обычно одно для всей сети хостинга, а не для отдельного сайта.' }),
       h('p', { class: 'sm muted', text: 'Проба по очереди открывает опорные адреса в крупных сетях без обхода, а где есть обрыв — подбирает имя для фейка. Найденное ставится одним профилем на все адреса сети (список по ASN обновляется сам раз в сутки).' }),
-      h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Свои сайты' }), sites),
+      h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Свои сайты и адреса' }),
+        h('div', { class: 'stack', style: 'gap:6px' }, h('div', { class: 'row' }, sites, newTag('frz:ip')),
+          h('span', { class: 'sm muted', text: 'Адрес — IPv4, можно с портом (по умолчанию 443): например, свой VPS. Проба покажет, соединяется ли он вообще и замирает ли на объёме.' }))),
       h('div', { class: 'row' }, startBtn, h('span', { class: 'sm muted grow note-wide', text: 'Занимает 2–10 минут. Работает отдельный nfqws2 на проверочных соединениях роутера — ваш трафик не затрагивается.' }))),
     out);
 
@@ -35,6 +37,7 @@ async function viewFreeze(main) {
 
   function verdict(n) {
     if (n.baseline?.ok) return [levelIcon('ok'), h('span', { text: 'обрыва нет' })];
+    if (n.no_tcp) return [levelIcon('error'), h('span', {}, 'нет соединения с адресом', h('div', { class: 'sm muted', text: 'Закрыт по IP или не отвечает на этом порту — стратегия nfqws2 тут не поможет, нужен туннель.' }))];
     if (!n.freeze) return [levelIcon('info'), h('span', { class: 'muted', text: 'не проверить: ' + (n.baseline?.reason || 'нет ответа') })];
     const what = n.stall ? 'замирает ещё до ответа' : 'обрыв есть';
     // the probe goes WITHOUT bypass; «Диагноз» checks through nfqws2 — both can be true at once, say it
@@ -83,12 +86,13 @@ async function viewFreeze(main) {
         : notice('ok', 'Обрыва на 16 КБ не видно', 'Ни одна из проверенных сетей не замораживает соединение — значит, у вашего провайдера сейчас этого ограничения нет (или оно касается других сетей).')) : null, 'verdict'),
       keyed(!running && s.state === 'time' ? notice('warn', 'Проба остановлена по времени', 'На подбор имён отведено 10 минут; ниже — что успели проверить.') : null, 'time'),
       keyed(nets.length ? panel('Сети', h('span', { class: 'sm muted', text: s.finished ? fmtDate(s.finished) : '' }), h('div', { class: 'frz' },
-        nets.map((n) => h('div', { class: 'frz-row', 'data-key': n.host },
+        nets.map((n) => h('div', { class: 'frz-row', 'data-key': n.host + ':' + (n.pad?.port ?? 443) },
           h('div', {}, h('div', { text: n.label }), h('div', { class: 'sm muted mono', text: n.host })),
           h('div', { class: 'mono sm', text: n.asn ? 'AS' + n.asn : '—' }),
           h('div', { class: 'row', style: 'gap:6px;flex-wrap:nowrap;align-items:flex-start' }, ...verdict(n)),
           // кнопки — один раз на сеть: у адреса, где имя нашлось
-          h('div', { class: 'row frz-act' }, n.found && n.asn && !n.found.via ? [
+          // own address on another port: «apply for the network» makes a TLS-on-443 profile — it would not cover it
+          h('div', { class: 'row frz-act' }, n.found && n.asn && !n.found.via && (n.pad?.port ?? 443) !== 443 ? h('span', { class: 'sm muted', text: `Найдено для порта ${n.pad.port}: профилем на сеть ставится только 443 — добавьте порт в профиль вручную` }) : n.found && n.asn && !n.found.via ? [
             inConfWorks(n) || !n.in_conf?.join ? null : [btn(`В профиль #${n.in_conf.join}`, () => joinNet(n), 'small primary', 'ok', { title: `Список адресов AS${n.asn} — строкой --ipset в профиль ${profLabel(n.in_conf.join)} с той же стратегией, без нового профиля` }), newTag('frz:join')],
             inConfWorks(n) ? null : btn(n.in_conf?.join ? 'Отдельным профилем' : 'Применить для сети', () => applyNet(n), n.in_conf?.join ? 'small' : 'small primary', n.in_conf?.join ? null : 'ok', { title: `Список адресов AS${n.asn} и профиль с найденным именем — для всех сайтов этой сети` }),
             shareBtn({ steps: n.found.steps, ok: 3, tries: 3, name: n.found.strategy }, { host: '', proto: 'https', asn: n.asn })] : null))))) : null, 'nets')]);

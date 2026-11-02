@@ -941,15 +941,25 @@ switch ($cmd) {
     if (diagBusy()) {
       fail('Сейчас идёт диагноз сайта — он использует те же проверочные правила. Повторите через несколько секунд.');
     }
+    // свои сайты и адреса (IPv4, можно с портом — например, свой VPS): до трёх
     $extra = [];
+    $ips = [];
     foreach (array_slice(is_array($in['hosts'] ?? null) ? $in['hosts'] : [], 0, 3) as $h) {
+      if (preg_match('/^(\d{1,3}(?:\.\d{1,3}){3})(?::(\d{1,5}))?$/', trim((string)$h), $m)) {
+        $port = (int)($m[2] ?? 443);
+        if (!isIp4($m[1]) || ipReserved($m[1]) || $port < 1 || $port > 65535) {
+          fail("Адрес {$m[0]}: нужен внешний IPv4-адрес, порт — от 1 до 65535");
+        }
+        $ips[] = ['ip' => $m[1], 'port' => $port];
+        continue;
+      }
       $h = cleanHost((string)$h);
       if (validHost($h) && !isIp($h)) {
         $extra[] = $h;
       }
     }
     curlRequire();
-    testLaunch(['type' => 'freeze', 'host' => 'опорные сети', 'sets' => [], 'extra' => $extra]);
+    testLaunch(['type' => 'freeze', 'host' => 'опорные сети', 'sets' => [], 'extra' => $extra, 'ips' => $ips]);
     respond(['ok' => true]);
 
   case 'freeze_get':
