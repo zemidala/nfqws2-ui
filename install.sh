@@ -12,8 +12,22 @@ VERSION=latest
 say() { printf '%s\n' "$*"; }
 die() { printf '\nОшибка: %s\n' "$*" >&2; exit 1; }
 
+# Is a program on PATH. Not «command -v»: some firmwares' shells (Asuswrt-Merlin) lack «command»
+have() {
+	_o=$IFS
+	IFS=:
+	for _d in $PATH; do
+		if [ -x "$_d/$1" ] && [ ! -d "$_d/$1" ]; then
+			IFS=$_o
+			return 0
+		fi
+	done
+	IFS=$_o
+	return 1
+}
+
 fetch() { # url [файл]
-	if command -v wget >/dev/null 2>&1; then
+	if have wget; then
 		wget -q -O "${2:--}" "$1"
 	else
 		curl -fsSL -o "${2:--}" "$1"
@@ -88,7 +102,11 @@ elif [ -x /opt/bin/opkg ]; then
 	export PATH
 	# uname на mipsel отвечает «mips» — архитектуру пакетов знает opkg (строка с наибольшим приоритетом)
 	ARCH=$(opkg print-architecture 2>/dev/null | awk '$1 == "arch" && $2 != "all" && $2 != "noarch" && $3 + 0 >= p { p = $3 + 0; a = $2 } END { print a }')
-	say "Система: Keenetic / Entware (${ARCH:-$(uname -m)})"
+	# Entware is not only on Keenetic (Asuswrt-Merlin, Padavan…): ndmc is Keenetic's own command line
+	if [ -x /bin/ndmc ] || [ -x /usr/bin/ndmc ]; then SYS=Keenetic; else SYS=Entware; fi
+	say "Система: ${SYS} / Entware (${ARCH:-$(uname -m)})"
+	# the package is «all»; opkg of some Entware builds lists no «all» architecture and calls it incompatible
+	opkg print-architecture 2>/dev/null | grep -q '^arch all ' || ADD_ARCH=--add-arch=all:100
 else
 	die "нужен OpenWrt или Keenetic с Entware (не найдены /etc/openwrt_release и /opt/bin/opkg)"
 fi
@@ -99,9 +117,9 @@ fi
 
 if [ -n "$R" ]; then
 	PM=opkg
-elif command -v opkg >/dev/null 2>&1; then
+elif have opkg; then
 	PM=opkg
-elif command -v apk >/dev/null 2>&1; then
+elif have apk; then
 	PM=apk
 else
 	die "не найден менеджер пакетов opkg или apk"
@@ -162,10 +180,21 @@ if [ "$PM" = opkg ]; then
 		say "  (ненужный источник можно убрать из ${R:-}/etc/opkg/ или /etc/opkg/customfeeds.conf)"
 		grep -q 'bin\.entware\.net' "$TMP/opkg-update.log" && ENTWARE_DEAD=1 ;;
 	esac
+	# nfqws2 is here (checked above), but not as the nfqws2-keenetic package (installed by hand, or under another
+	# name on Asuswrt-Merlin): opkg would refuse the dependency. Then the other dependencies first, the package
+	# itself without the dependency check
+	NODEPS=
+	if [ -n "$R" ] && ! opkg status nfqws2-keenetic 2>/dev/null | grep -q '^Status:.*installed'; then
+		say "nfqws2 стоит не пакетом nfqws2-keenetic — ставлю остальные зависимости отдельно…"
+		rc=0
+		pm_limited 600 - install $ADD_ARCH lighttpd lighttpd-mod-cgi lighttpd-mod-rewrite lighttpd-mod-setenv php8-cgi php8-mod-session php8-mod-curl curl cron || rc=$?
+		[ $rc = 0 ] || { feed_hint; die "не удалось поставить зависимости (lighttpd, php8, curl, cron) — см. выше"; }
+		NODEPS=--nodeps
+	fi
 	say "Ставлю nfqws2-ui и зависимости (lighttpd, php8)…"
 	# NFQWS_UI_FORCE=1 (nfqws-ui update --force) — поставить заново ту же версию
 	rc=0
-	pm_limited 600 - install ${NFQWS_UI_FORCE:+--force-reinstall} "$TMP/$FILE" || rc=$?
+	pm_limited 600 - install $ADD_ARCH $NODEPS ${NFQWS_UI_FORCE:+--force-reinstall} "$TMP/$FILE" || rc=$?
 	case $rc in
 	0) ;;
 	124)

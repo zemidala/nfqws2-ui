@@ -9,6 +9,20 @@
 
 VERSION=1.29.0
 
+# Is a program on PATH ($2 — another PATH). Not «command -v»: some firmwares' shells (Asuswrt-Merlin) lack «command»
+have() {
+	_o=$IFS
+	IFS=:
+	for _d in ${2:-$PATH}; do
+		if [ -x "$_d/$1" ] && [ ! -d "$_d/$1" ]; then
+			IFS=$_o
+			return 0
+		fi
+	done
+	IFS=$_o
+	return 1
+}
+
 # Система: OpenWrt — корень «/», Keenetic (Entware) — «/opt»
 if [ ! -f /etc/openwrt_release ] && [ -x /opt/bin/opkg ]; then
 	R=/opt
@@ -153,7 +167,7 @@ tls_module() {
 }
 
 pkg_install() {
-	if [ -z "$R" ] && command -v apk >/dev/null 2>&1; then
+	if [ -z "$R" ] && have apk; then
 		apk update >/dev/null && apk add "$@"
 	else
 		# один недоступный источник пакетов не должен мешать установке (см. install.sh)
@@ -307,10 +321,10 @@ https_on() {
 		[ -f "$CERT_FILE" ] && [ -f "$KEY_FILE" ] || die "нужны оба файла: --cert и --key"
 		cp "$CERT_FILE" "$CRT" && cp "$KEY_FILE" "$KEY"
 	elif [ ! -s "$CRT" ] || [ ! -s "$KEY" ]; then
-		command -v px5g >/dev/null 2>&1 || command -v openssl >/dev/null 2>&1 || pkg_install $CERT_PKG || die "нечем выпустить сертификат: установите $CERT_PKG"
+		have px5g || have openssl || pkg_install $CERT_PKG || die "нечем выпустить сертификат: установите $CERT_PKG"
 		cn=$(uci -q get system.@system[0].hostname 2>/dev/null || hostname 2>/dev/null || echo router)
 		say "Выпускаю самоподписанный сертификат для $cn…"
-		if command -v px5g >/dev/null 2>&1; then
+		if have px5g; then
 			px5g selfsigned -days 3650 -newkey ec -pkeyopt ec_paramgen_curve:P-256 \
 				-keyout "$KEY" -out "$CRT" -subj "/CN=$cn/O=nfqws2-ui" >/dev/null 2>&1
 		else
@@ -370,7 +384,7 @@ status() {
 
 # Наши порты, которые lighttpd не слушает (пусто — всё в порядке или netstat нет)
 deaf_ports() {
-	command -v netstat >/dev/null 2>&1 || return 0
+	have netstat || return 0
 	l=$(netstat -ltn 2>/dev/null | awk '{ print $4 }')
 	[ -n "$l" ] || return 0
 	out=
@@ -385,7 +399,7 @@ deaf_ports() {
 REPO=zemidala/nfqws2-ui
 
 fetch() { # url [файл]
-	if command -v wget >/dev/null 2>&1; then
+	if have wget; then
 		wget -q -T 20 -O "${2:--}" "$1"
 	else
 		curl -fsSL -m 20 -o "${2:--}" "$1"
@@ -565,7 +579,7 @@ apply)
 		say "ВНИМАНИЕ: программа curl не запускается — без неё не работают подбор стратегий и проверки сайтов."
 		[ -n "$curl_err" ] && say "Система ответила: $(echo "$curl_err" | head -n 2)"
 		# пакет стоит, а программа не запускается — «install» ответит «up to date», нужна переустановка вместе с библиотекой
-		if command -v apk >/dev/null 2>&1 && ! command -v opkg >/dev/null 2>&1; then
+		if have apk && ! have opkg; then
 			if apk info -e curl >/dev/null 2>&1; then hint='apk fix curl libcurl'; else hint='apk update && apk add curl'; fi
 		# --force-reinstall removes the package before downloading: download first, reinstall from /tmp
 		elif opkg list-installed 2>/dev/null | grep -q '^curl '; then hint='opkg update && cd /tmp && opkg download curl libcurl && opkg --cache /tmp install --force-reinstall curl libcurl'
@@ -575,10 +589,10 @@ apply)
 	fi
 	# Модуль curl для PHP: пакет в зависимостях, но мог не встать или не загружаться (другая версия PHP, нет библиотеки).
 	# Без него интерфейс открывается, а диагноз, подбор и мониторинг падают. opkg здесь не вызвать — apply идёт и из postinst
-	if PATH=$JOB_PATH command -v php-cgi >/dev/null 2>&1 && ! env -i PATH="$JOB_PATH" php-cgi -m 2>/dev/null | grep -qix curl; then
+	if have php-cgi "$JOB_PATH" &&! env -i PATH="$JOB_PATH" php-cgi -m 2>/dev/null | grep -qix curl; then
 		say ""
 		say "ВНИМАНИЕ: в PHP нет модуля curl — без него не работают диагноз, подбор стратегий и мониторинг."
-		if command -v apk >/dev/null 2>&1 && ! command -v opkg >/dev/null 2>&1; then hint='apk add php8-mod-curl'
+		if have apk && ! have opkg; then hint='apk add php8-mod-curl'
 		else hint='cd /tmp && opkg download php8-mod-curl libcurl && opkg --cache /tmp install --force-reinstall php8-mod-curl libcurl'; fi
 		say "Поставьте его: $hint (или кнопкой «Установить модуль curl» в «Проблемах» на «Обзоре»)"
 		say ""
@@ -606,7 +620,7 @@ remove)
 	iptables -w -t mangle -X nfqws_ui_out 2>/dev/null
 	# bypass only for chosen devices (OpenWrt; set up by api.php)
 	for ipt in iptables ip6tables; do
-		command -v $ipt >/dev/null 2>&1 || continue
+		have $ipt || continue
 		for ch in nfqws_post nfqws_pre; do
 			while $ipt -w -t mangle -D $ch -m connmark --mark 0x800000/0x800000 -j RETURN 2>/dev/null; do :; done
 		done
@@ -632,10 +646,10 @@ remove)
 	;;
 uninstall)
 	# Для установки без пакета (файлами из архива); пакет удаляется менеджером пакетов
-	if [ ! -f "$CONF_DIR/.manual" ] && command -v opkg >/dev/null 2>&1 && opkg status nfqws2-ui 2>/dev/null | grep -q '^Status:.*installed'; then
+	if [ ! -f "$CONF_DIR/.manual" ] && have opkg && opkg status nfqws2-ui 2>/dev/null | grep -q '^Status:.*installed'; then
 		die "интерфейс установлен пакетом, удаляйте так: opkg remove nfqws2-ui"
 	fi
-	if [ -z "$R" ] && command -v apk >/dev/null 2>&1 && apk info -e nfqws2-ui >/dev/null 2>&1; then
+	if [ -z "$R" ] && have apk && apk info -e nfqws2-ui >/dev/null 2>&1; then
 		die "интерфейс установлен пакетом, удаляйте так: apk del nfqws2-ui"
 	fi
 	"$0" remove
