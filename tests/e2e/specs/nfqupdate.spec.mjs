@@ -2,6 +2,9 @@
 // установка, журнал и итог — подменённые. nfq_update_run и nfq_update_check до роутера не доходят никогда.
 import { test, expect } from '../fixtures.mjs';
 
+// a poll answered through the router can still be in flight when the test ends — let it go quietly
+test.afterEach(async ({ page }) => { await page.unrouteAll({ behavior: 'ignoreErrors' }); });
+
 const NEW = '9.9.9';
 const OLD = '1.3.1';
 const RESULT_OK = { from: OLD, to: NEW, rollback: false, ts: 0, running: true, snap: 'x', checks: [{ host: 'a.example', ok: true, was_ok: 1 }, { host: 'b.example', ok: true, was_ok: 1 }], worse: [], leftovers: 2 };
