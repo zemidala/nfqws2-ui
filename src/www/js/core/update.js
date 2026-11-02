@@ -108,7 +108,7 @@ function openUpdate(u, run = false) {
     timer = setTimeout(poll, 2000);
   };
   async function start() {
-    if (!confirm(`Обновить nfqws2-ui до ${u.latest}?\n\nВеб-сервер интерфейса перезапустится — страница на несколько секунд перестанет отвечать. nfqws2 и интернет это не затрагивает.`)) return;
+    if (!await ask(`Обновить nfqws2-ui до ${u.latest}?\n\nВеб-сервер интерфейса перезапустится — страница на несколько секунд перестанет отвечать. nfqws2 и интернет это не затрагивает.`, 'Обновить')) return;
     go.disabled = true;
     const r = await guarded(() => api('update_run', { version: u.latest }));
     if (!r) { go.disabled = false; return; }
@@ -199,7 +199,7 @@ async function openNfqUpdate() {
     const q = rollback
       ? `Вернуть nfqws2 ${ver}?\n\nВстанет прежний пакет, конфиг и списки вернутся из снимка перед обновлением. nfqws2 перезапустится — на несколько секунд обход прервётся.`
       : `Обновить nfqws2 до ${ver}?\n\nПеред этим делается снимок. nfqws2 перезапустится — на несколько секунд обход прервётся.`;
-    if (!confirm(q)) return;
+    if (!await ask(q, rollback ? 'Вернуть' : 'Обновить')) return;
     go.disabled = back.disabled = true;
     const r = await guarded(() => api('nfq_update_run', { version: ver, rollback }));
     if (!r) { go.disabled = back.disabled = false; return; }
@@ -236,7 +236,7 @@ async function openHistory(name, onRestored) {
     diffBox.replaceChildren(h('p', { class: 'sm muted', text: same ? 'Эта версия совпадает с текущей.' : 'Красным — как было в выбранной версии, зелёным — как сейчас.' }), same ? null : renderDiff(diffLines(v.content, cur.content)));
     restoreBtn.disabled = same;
     restoreBtn.onclick = async () => {
-      if (!confirm('Заменить файл выбранной версией? Текущая версия останется в истории.')) return;
+      if (!await ask('Заменить файл выбранной версией? Текущая версия останется в истории.', 'Заменить')) return;
       try {
         await (isConf ? api('conf_save_raw', { content: v.content, force: true, note: 'восстановлена версия от ' + fmtDate(item.mtime) }) : api('list_save', { name, content: v.content, note: 'восстановлена версия от ' + fmtDate(item.mtime) }));
         toast('Версия восстановлена');
@@ -257,7 +257,7 @@ async function openHistory(name, onRestored) {
   const leftover = (it) => it.kind === 'template' && /(-opkg|\.apk-new)$/.test(it.name) ? (isConf ? '' : 'lists/') + it.name : null;
   const delBtn = btn('Удалить шаблон', async () => {
     const path = selected && leftover(selected);
-    if (!path || !confirm(`Удалить ${selected.name}? Это новая стандартная версия файла из пакета nfqws2 — ваш ${name} не изменится.`)) return;
+    if (!path || !await ask(`Удалить ${selected.name}? Это новая стандартная версия файла из пакета nfqws2 — ваш ${name} не изменится.`, 'Удалить', 'danger', 'trash')) return;
     const r = await guarded(() => api('leftovers_delete', { names: [path] }));
     if (!r) return;
     toast('Шаблон удалён');
@@ -298,7 +298,7 @@ async function openLeftovers() {
     if (!r) return;
     allBtn.disabled = !r.items.length;
     if (!r.items.length) { body.replaceChildren(h('p', { class: 'muted', text: 'Таких файлов больше нет.' })); return; }
-    allBtn.onclick = () => { if (confirm(`Удалить ${plural(r.items.length, 'файл', 'файла', 'файлов')}? Ваши конфиг и списки не изменятся.`)) del(r.items.map((x) => x.name)); };
+    allBtn.onclick = async () => { if (await ask(`Удалить ${plural(r.items.length, 'файл', 'файла', 'файлов')}? Ваши конфиг и списки не изменятся.`, 'Удалить', 'danger', 'trash')) del(r.items.map((x) => x.name)); };
     body.replaceChildren(
       h('p', { class: 'sm muted', text: 'Когда вы меняли конфиг или список, менеджер пакетов при обновлении nfqws2 его не трогает, а кладёт рядом новую стандартную версию с припиской -opkg (на OpenWrt 25 — .apk-new). nfqws2 эти файлы не читает. Если они не нужны для сравнения, их можно удалить; при следующем обновлении пакет может положить их снова.' }),
       h('div', {}, r.items.map(row)));

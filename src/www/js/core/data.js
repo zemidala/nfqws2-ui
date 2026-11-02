@@ -97,7 +97,7 @@ async function saveVars(vars, note, force = false) {
     if (e.data?.issues) {
       const errs = e.data.issues.filter((x) => x.level === 'error').map((x) => '• ' + x.msg).slice(0, 6).join('\n');
       if (e.data.fatal) { toast('Не сохранено: nfqws2 с таким конфигом не запустится. ' + (e.data.dry_run?.message || ''), { err: true }); return null; }
-      if (confirm('В конфиге есть ошибки:\n' + errs + '\n\nnfqws2 запустится, но эти места будут работать неправильно. Сохранить всё равно?')) return saveVars(vars, note, true);
+      if (await ask('Сохранить конфиг с ошибками?\n\n' + errs + '\n\nnfqws2 запустится, но эти места будут работать неправильно.', 'Сохранить всё равно', 'danger')) return saveVars(vars, note, true);
       return null;
     }
     toast(e.message, { err: true });

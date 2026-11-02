@@ -38,7 +38,7 @@ async function viewPickHist(main, r, bare = false) {
       h('td', { class: 'num', text: g.runs }),
       h('td', {}, h('div', { class: 'row acts-row' },
         g.works ? btn('Проверить снова', () => pickAgain(g.host, g.last.proto), 'small', 'play', { title: 'Быстрый подбор только по тому, что для этого сайта уже работало' }) : null,
-        btn('', async () => { if (confirm(`Удалить историю подборов для ${g.host}?`) && await guarded(() => api('picks_delete', { host: g.host }), 'Удалено')) route(true); }, 'small ghost', 'trash', { 'aria-label': 'Удалить историю сайта', title: 'Удалить историю сайта' }))))));
+        btn('', async () => { if (await ask(`Удалить историю подборов для ${g.host}?`, 'Удалить', 'danger', 'trash') && await guarded(() => api('picks_delete', { host: g.host }), 'Удалено')) route(true); }, 'small ghost', 'trash', { 'aria-label': 'Удалить историю сайта', title: 'Удалить историю сайта' }))))));
     if (!rows.length) body.append(h('tr', {}, h('td', { colspan: 6, class: 'muted', text: 'Ничего не найдено.' })));
   }
   draw();
@@ -48,7 +48,7 @@ async function viewPickHist(main, r, bare = false) {
       h('div', { class: 'row' }, h('a', { class: 'btn primary', href: PAGES.pick[0] }, 'Подобрать стратегию')))
     : panel(null, null,
       h('div', { class: 'row' }, search, h('span', { class: 'grow' }), h('span', { class: 'sm muted num', text: `${plural(sites.size, 'сайт', 'сайта', 'сайтов')} · ${plural(all.length, 'подбор', 'подбора', 'подборов')}` }),
-        btn('Очистить всё', async () => { if (confirm('Удалить всю историю подборов? На профили и конфиг это не влияет.') && await guarded(() => api('picks_delete', {}), 'История очищена')) route(true); }, 'small danger', 'trash')),
+        btn('Очистить всё', async () => { if (await ask('Удалить всю историю подборов? На профили и конфиг это не влияет.', 'Удалить всё', 'danger', 'trash') && await guarded(() => api('picks_delete', {}), 'История очищена')) route(true); }, 'small danger', 'trash')),
       h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
         h('thead', {}, h('tr', {}, h('th'), h('th', { text: 'Сайт' }), h('th', { text: 'Последний подбор' }), h('th', { class: 'wide', text: 'Итог' }), h('th', { class: 'num', text: 'Запусков' }), h('th'))), body)),
       h('p', { class: 'sm faint', text: 'Хранится до 100 подборов, не больше 10 на сайт. Работавшие стратегии подбор пробует первыми — галочка «что работало раньше».' })));
@@ -77,7 +77,7 @@ async function viewPickHistSite(main, host, bare) {
       panel(null, null, h('div', { class: 'row' },
         list.some((g) => g.full) ? btn('Проверить снова', () => pickAgain(host, proto), 'primary', 'play') : null,
         h('a', { class: 'btn', href: pickHref(host) }, 'Полный подбор'), h('a', { class: 'btn', href: diagHref(host) }, 'Диагноз'), h('span', { class: 'grow' }),
-        btn('Удалить историю', async () => { if (confirm(`Удалить историю подборов для ${host}?`) && await guarded(() => api('picks_delete', { host }), 'Удалено')) { if (bare) route(true); else go(PAGES.phist[0]); } }, 'small danger', 'trash')),
+        btn('Удалить историю', async () => { if (await ask(`Удалить историю подборов для ${host}?`, 'Удалить', 'danger', 'trash') && await guarded(() => api('picks_delete', { host }), 'Удалено')) { if (bare) route(true); else go(PAGES.phist[0]); } }, 'small danger', 'trash')),
         h('p', { class: 'sm muted', text: '«Проверить снова» пробует только то, что для этого сайта уже работало, — это секунды, а не минуты. Применить стратегию можно из результатов проверки.' }),
         applied ? h('p', { class: 'sm' }, 'Применена ', h('b', { text: fmtDate(applied.ts) }), ': ', h('span', { class: 'mono', text: applied.name }), applied.target ? ` — ${applied.target}` : '') : null),
       panel('Что работало', h('span', { class: 'row', style: 'gap:8px' }, newTag('phist:share'), h('span', { class: 'sm muted num', text: plural(list.length, 'стратегия', 'стратегии', 'стратегий') })),

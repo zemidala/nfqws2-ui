@@ -140,7 +140,7 @@ async function viewProfile(content, index, r) {
     if (await saveVars({ NFQWS_ARGS_CUSTOM: joinParts(parts) }, `копия своего профиля ${s.part}`)) go('#/settings/p' + (index + 1));
   }
   async function delCustom() {
-    if (!confirm(`Удалить свой профиль ${s.part}? Перед удалением делается снимок.`)) return;
+    if (!await ask(`Удалить свой профиль ${s.part}? Перед удалением делается снимок.`, 'Удалить', 'danger', 'trash')) return;
     const parts = customParts.filter((_, i) => i !== s.part - 1);
     if (await saveVars({ NFQWS_ARGS_CUSTOM: parts.length ? joinParts(parts) : '' }, `удалён свой профиль ${s.part}`)) go('#/settings');
   }

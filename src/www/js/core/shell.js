@@ -389,9 +389,9 @@ async function pollPending() {
   await loadState();
 }
 
-async function undoLast(ask = true) {
+async function undoLast(confirmIt = true) {
   const u = S.state?.undo;
-  if (ask && u && !confirm(`Отменить последнее изменение?\n\n${u.note || 'изменение'}\nФайлы: ${u.files.join(', ')}\n\nФайлы вернутся к состоянию до него. Саму отмену тоже можно отменить через «Историю изменений».`)) return;
+  if (confirmIt && u && !await ask(`Отменить последнее изменение?\n\n${u.note || 'изменение'}\nФайлы: ${u.files.join(', ')}\n\nФайлы вернутся к состоянию до него. Саму отмену тоже можно отменить через «Историю изменений».`, 'Вернуть как было')) return;
   const r = await guarded(() => api('undo_last'));
   if (!r) return;
   toast(`Отменено: ${r.note || r.files.join(', ')}` + (r.conf ? '. Перезапустите nfqws2, чтобы применить.' : ''));
@@ -411,7 +411,7 @@ async function safeRestart() {
 async function rollbackToWorking() {
   const rb = S.state?.rollback;
   if (!rb?.files.length) return;
-  if (!confirm(`Вернуть рабочее состояние на ${fmtDate(rb.since)}?\n\nФайлы: ${rb.files.join(', ')}\n\nПосле этого nfqws2 перезапустится. Текущее состояние сохранится в историю и снимок.`)) return;
+  if (!await ask(`Вернуть рабочее состояние на ${fmtDate(rb.since)}?\n\nФайлы: ${rb.files.join(', ')}\n\nПосле этого nfqws2 перезапустится. Текущее состояние сохранится в историю и снимок.`, 'Вернуть')) return;
   const r = await guarded(() => api('safe_rollback'));
   if (!r) return;
   toast(`Возвращено: ${r.files.join(', ') || 'без изменений'}`);
@@ -516,7 +516,7 @@ function fixButton(x, disabledReason = null) {
 
 async function service(action) {
   const names = { restart: 'Перезапуск', stop: 'Остановка', start: 'Запуск' };
-  if (action === 'stop' && !confirm('Остановить nfqws2? Заблокированные сайты перестанут открываться.')) return;
+  if (action === 'stop' && !await ask('Остановить nfqws2? Заблокированные сайты перестанут открываться.', 'Остановить', 'danger')) return;
   toast(names[action] + '…');
   const r = await guarded(() => api('service', { action }));
   if (!r) return;

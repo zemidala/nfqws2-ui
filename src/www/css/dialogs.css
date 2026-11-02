@@ -8,6 +8,8 @@
 .modal-h { display: flex; align-items: center; gap: 10px; padding: 14px 16px; border-bottom: 1px solid var(--line); }
 .modal-h h2 { flex: 1; }
 .modal-b { padding: 16px; overflow: auto; flex: 1; }
+.modal.ask { max-width: 560px; }
+.ask-b p { white-space: pre-line; margin: 0; }
 .modal-f { display: flex; gap: 8px; justify-content: flex-end; padding: 12px 16px calc(12px + env(safe-area-inset-bottom)); border-top: 1px solid var(--line); flex-wrap: wrap; }
 .hist { display: grid; gap: 14px; }
 @media (min-width: 760px) { .hist { grid-template-columns: 260px 1fr; } }

@@ -24,9 +24,9 @@ async function setup(app, status) {
     }
     return route.continue();
   });
-  app.page.on('dialog', (d) => d.accept());   // «Обновить nfqws2-ui до …?»
   await app.open('#/');
   await app.page.locator('#upd-banner').getByRole('button', { name: 'Обновить' }).click();
+  await app.yes();   // «Обновить nfqws2-ui до …?»
 }
 const dlg = (app) => app.page.locator('.modal').last();
 

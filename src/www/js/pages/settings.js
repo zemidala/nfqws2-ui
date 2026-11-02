@@ -102,7 +102,7 @@ function pasteProfile(text) {
   const add = async () => {
     await loadConf();
     const cur = S.conf.vars.NFQWS_ARGS_CUSTOM.trim() ? splitParts(tokensOf(S.conf.vars.NFQWS_ARGS_CUSTOM)) : [];
-    if (!confirm('Добавить профиль первым в «свои профили»?\n\nОн будет проверяться раньше остальных; порядок потом можно поменять перетаскиванием. После сохранения nfqws2 перезапустится с проверкой и откатит изменения, если вы их не подтвердите.')) return;
+    if (!await ask('Добавить профиль первым в «свои профили»?\n\nОн будет проверяться раньше остальных; порядок потом можно поменять перетаскиванием. После сохранения nfqws2 перезапустится с проверкой и откатит изменения, если вы их не подтвердите.', 'Добавить профиль')) return;
     if (!await saveVars({ NFQWS_ARGS_CUSTOM: joinParts([res.tokens, ...cur]) }, 'вставлен чужой профиль')) return;
     bg.close();
     await safeRestart();

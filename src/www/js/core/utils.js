@@ -246,7 +246,7 @@ async function guarded(fn, okText) {
 }
 
 // navigator.clipboard needs a secure context: over plain http by a non-local address it is absent, then the old
-// execCommand('copy') through a hidden field still works. The prompt is the last resort
+// execCommand('copy') through a hidden field still works. A window with the selected text is the last resort
 async function copyText(text, quiet = false) {
   let ok = false;
   try { await navigator.clipboard.writeText(text); ok = true; } catch {
@@ -259,7 +259,7 @@ async function copyText(text, quiet = false) {
     ta.remove();
     was?.focus?.({ preventScroll: true });
   }
-  if (!ok) prompt('Скопируйте:', text);
+  if (!ok) copyByHand(text);
   else if (!quiet) toast('Скопировано');
   return ok;
 }

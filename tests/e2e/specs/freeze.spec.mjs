@@ -84,8 +84,8 @@ for (const w of [390, 1366]) {
     await expect(row.locator('.btn', { hasText: 'Отдельным профилем' })).toHaveCount(1);
     await expect(row.locator('.btn', { hasText: 'Применить для сети' })).toHaveCount(0);
     await page.screenshot({ path: test.info().outputPath('join.png'), fullPage: true });
-    page.once('dialog', (d) => d.accept());
     await row.locator('.btn', { hasText: 'В профиль #1' }).click();
+    await app.yes();
     await expect.poll(() => sent.length).toBe(1);
     expect(sent[0]).toMatchObject({ asn: net.asn, profile: 1 });
   });

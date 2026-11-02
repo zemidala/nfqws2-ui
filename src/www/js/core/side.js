@@ -316,7 +316,7 @@ function problemItems() {
 
 const LOG_DIR_HINT = '/var/log хранится в ОЗУ';
 async function clearLog(name) {
-  if (!confirm(`Очистить ${name}? Записи пропадут; nfqws2 продолжит писать в этот файл с начала, перезапуск не нужен.`)) return false;
+  if (!await ask(`Очистить ${name}? Записи пропадут; nfqws2 продолжит писать в этот файл с начала, перезапуск не нужен.`, 'Очистить', 'danger', 'trash')) return false;
   const r = await guarded(() => api('log_clear', { name }), 'Журнал очищен');
   if (r) { S.state.logs = r.logs; updateSide(); }
   return !!r;
@@ -558,7 +558,7 @@ function actionsBlock(res) {
     let control;
     if (!has) control = btn(isExclude ? 'Исключить' : 'Добавить', () => change('list_add', res.host), 'small', 'plus');
     else if (has.entry === res.host) control = btn('Убрать', () => change('list_remove', res.host), 'small danger', 'x');
-    else control = btn(`Убрать ${has.entry}`, () => { if (confirm(`Сайт входит в список через ${has.entry}. Убрать ${has.entry} целиком? Это затронет и другие его поддомены.`)) change('list_remove', has.entry); }, 'small danger', 'x');
+    else control = btn(`Убрать ${has.entry}`, async () => { if (await ask(`Убрать ${has.entry} целиком?\n\nСайт входит в список через ${has.entry}. Это затронет и другие его поддомены.`, 'Убрать', 'danger')) change('list_remove', has.entry); }, 'small danger', 'x');
     return h('div', { class: 'act' }, h('div', { class: 'item-main' }, h('b', { text: listName(l.name) }), h('span', { class: 'sm muted', text: listEffect(l) })), control);
   });
   box.append(h('div', {}, rows));
@@ -719,10 +719,10 @@ function overviewExtra() {
 async function autoApply(o) {
   const host = o.host;
   // сработала стратегия существующего профиля — достаточно записи в его списке, перезапуск не нужен
-  const ask = o.list
+  const q = o.list
     ? `Добавить ${host} в ${o.list.name}?\n\nНайденная стратегия уже стоит в профиле #${o.list.profile}, сайта просто нет в его списке. Новый профиль не создаётся, nfqws2 не перезапускается. Роутер сам проверит ${host}: если сайт не откроется, запись уберётся обратно.`
     : `Применить найденную стратегию только для ${host}?\n\nБудет создан отдельный профиль (или заменена стратегия уже созданного). nfqws2 перезапустится — на несколько секунд обход прервётся. Роутер сам проверит ${host} и сайты мониторинга и вернёт конфиг, если что-то пойдёт не так. Это займёт до минуты.`;
-  if (!confirm(ask)) return;
+  if (!await ask(q, o.list ? 'Добавить' : 'Применить')) return;
   toast(o.list ? 'Добавляю в список и проверяю…' : 'Применяю и проверяю — до минуты…');
   const r = await guarded(() => api('auto_apply', { host }));
   S.conf = null;

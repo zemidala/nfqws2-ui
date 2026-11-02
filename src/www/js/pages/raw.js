@@ -148,7 +148,7 @@ async function paneRaw(content) {
         issues = e.data.issues; dry = e.data.dry_run;
         ed.setIssues(issues); drawOutline(); drawCounts(); drawStatus(); drawExtra();
         if (e.data.fatal) toast('Не сохранено: nfqws2 с таким конфигом не запустится', { err: true });
-        else if (confirm('В конфиге есть ошибки (подсвечены). nfqws2 запустится, но эти места будут работать неправильно. Сохранить всё равно?')) save(true);
+        else if (await ask('Сохранить конфиг с ошибками?\n\nОни подсвечены в тексте. nfqws2 запустится, но эти места будут работать неправильно.', 'Сохранить всё равно', 'danger')) save(true);
       } else toast(e.message, { err: true });
     }
   };

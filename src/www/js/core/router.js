@@ -89,12 +89,16 @@ async function route(refresh = false) {
   if (!r.q.get('var') && !r.q.get('hl')) window.scrollTo(0, 0);
 }
 
-window.addEventListener('hashchange', () => {
-  if (S.dirty && !confirm('Есть несохранённые изменения. Уйти без сохранения?')) {
+// unsaved edits: the address goes back at once, and on «Уйти» the page moves on (hashchange again, now clean)
+window.addEventListener('hashchange', async () => {
+  if (S.dirty) {
+    const to = location.hash;
     history.replaceState(null, '', S.dirtyHash);
+    if (to === S.dirtyHash || !await ask('Уйти без сохранения?\n\nНа странице есть несохранённые изменения.', 'Уйти', 'danger')) return;
+    S.dirty = false;
+    location.hash = to;
     return;
   }
-  S.dirty = false;
   route();
 });
 window.addEventListener('beforeunload', (e) => { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });

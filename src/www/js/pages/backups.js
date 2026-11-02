@@ -10,7 +10,7 @@ async function paneBackup(content) {
   const fileInput = h('input', { type: 'file', accept: '.tar.gz,.tgz,application/gzip', hidden: true, onchange: async (e) => {
     const f = e.target.files[0];
     if (!f) return;
-    if (!confirm(`Восстановить конфиг и списки из «${f.name}»? Текущее состояние сохранится снимком. Списки и блобы, которых нет в архиве, удалятся.`)) return;
+    if (!await ask(`Восстановить конфиг и списки из «${f.name}»? Текущее состояние сохранится снимком. Списки и блобы, которых нет в архиве, удалятся.`, 'Восстановить')) { e.target.value = ''; return; }
     const fd = new FormData();
     fd.append('archive', f);
     const r = await fetch('api.php?upload=restore', { method: 'POST', body: fd, credentials: 'same-origin' });
@@ -65,7 +65,7 @@ async function paneBackup(content) {
       btn('Сравнить', () => compareSnapshot(e), 'small ghost', null, { disabled: e.partial || e.differs !== null && !e.differs.length }),
       btn('Восстановить', async () => {
         const gone = e.extra?.length ? `\n\nУдалятся (их не было в снимке): ${e.extra.map(base).join(', ')}.` : e.extra ? '' : '\n\nСписки и блобы, которых не было в снимке, удалятся.';
-        if (!confirm(`Вернуть конфиг и списки к снимку от ${fmtDate(e.ts)}? Текущее состояние сохранится отдельным снимком.${gone}`)) return;
+        if (!await ask(`Вернуть конфиг и списки к снимку от ${fmtDate(e.ts)}? Текущее состояние сохранится отдельным снимком.${gone}`, 'Восстановить')) return;
         const r = await guarded(() => api('snapshot_restore', { id: e.id }));
         if (r) { toast(restoredText(r, 'Снимок совпадает с текущим состоянием')); route(true); }
       }, 'small ghost', null, { disabled: e.partial || e.differs !== null && !e.differs.length }),
@@ -76,7 +76,7 @@ async function paneBackup(content) {
   sync();   // fill the hidden bar now, so it already has its final width
   content.append(
     h('div', { class: 'vh' }, h('h1', { text: 'Резервные копии' }), h('span', { class: 'grow' }),
-      btn('Создать снимок сейчас', async () => { const note = prompt('Подпись к снимку (необязательно):', ''); if (note === null) return; if (await guarded(() => api('snapshot_create', { note }), 'Снимок создан')) route(true); }, 'primary', 'plus')),
+      btn('Создать снимок сейчас', async () => { const note = await askText('Создать снимок', { hint: 'Подпись к снимку (необязательно):', ok: 'Создать', empty: true }); if (note === null) return; if (await guarded(() => api('snapshot_create', { note }), 'Снимок создан')) route(true); }, 'primary', 'plus')),
     h('div', { class: 'cards2' },
       panel('На роутере', chip(`${plural(data.local, 'снимок', 'снимка', 'снимков')} · ${fmtBytes(data.total)}`, 'num'),
         h('p', { class: 'sm muted', text: 'Снимок — конфиг, все списки, блобы и настройки интерфейса. Создаётся перед изменениями через интерфейс (не чаще раза в 15 минут), раз в сутки в 04:05 и вручную.' }),
@@ -221,7 +221,7 @@ async function paneHistory(content, r) {
         h('div', { class: 'who' }, e.source, e.n_added || e.n_removed ? ` · +${e.n_added || 0} −${e.n_removed || 0} строк` : ''),
         e.file !== '*' ? detail : null),
       e.file !== '*' && e.path ? btn('Откатить', async () => {
-        if (!confirm(`Вернуть ${e.file} к состоянию до этого изменения (${fmtDate(e.ts)})? Текущая версия останется в истории.`)) return;
+        if (!await ask(`Вернуть ${e.file} к состоянию до этого изменения (${fmtDate(e.ts)})? Текущая версия останется в истории.`, 'Откатить')) return;
         if (await guarded(() => api('history_revert', { id: e.id }), 'Изменение откачено')) route(true);
       }, 'small') : h('span')));
   }

@@ -18,9 +18,8 @@ test('восстановление удаляет список, которого
     const row = page.locator('.tbl.snaps tbody tr').filter({ hasText: 'e2e restore' }).first();
     await expect(row).toContainText('e2e-restore.list');
 
-    let asked = '';
-    page.once('dialog', (d) => { asked = d.message(); d.accept(); });
     await row.getByRole('button', { name: 'Восстановить' }).click();
+    const asked = await app.yes();
     await expect(page.locator('.toast').last()).toContainText('удалено: 1', { timeout: 60_000 });
     expect(asked).toContain('Удалятся (их не было в снимке): e2e-restore.list');
 

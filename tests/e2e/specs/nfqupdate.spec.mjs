@@ -32,7 +32,6 @@ async function setup(app, status, { width } = {}) {
     }
     return route.continue();
   });
-  app.page.on('dialog', (d) => d.accept());   // «Обновить nfqws2 до …?»
   await app.open('#/');
 }
 const dlg = (app) => app.page.locator('.modal').last();
@@ -62,6 +61,7 @@ test('обновление прошло → «Готово», ссылка на 
     : { ...info({ current: NEW, available: false, rollback: OLD, result: RESULT_OK }), log: 'Скачиваю…\n✓ a.example\n[exit 0]', exit: 0, job: { done: 1 } });
   await app.page.locator('#nfq-up').click();
   await dlg(app).getByRole('button', { name: `Обновить до ${NEW}` }).click();
+  await app.yes();   // «Обновить nfqws2 до …?»
   await expect(dlg(app)).toContainText(`Готово: nfqws2 ${NEW} работает`, { timeout: 30_000 });
   await expect(dlg(app)).toContainText('открываются 2 из 2');
   await expect(dlg(app).getByText('Посмотреть и сравнить')).toBeVisible();
@@ -72,6 +72,7 @@ test('после обновления сайт перестал открыват
   await setup(app, () => ({ ...info({ current: NEW, available: false, rollback: OLD, result: RESULT_WORSE }), log: '✗ b.example\n[exit 0]', exit: 0, job: { done: 1 } }));
   await app.page.locator('#nfq-up').click();
   await dlg(app).getByRole('button', { name: `Обновить до ${NEW}` }).click();
+  await app.yes();   // «Обновить nfqws2 до …?»
   await expect(dlg(app)).toContainText('часть сайтов перестала открываться', { timeout: 30_000 });
   await expect(dlg(app)).toContainText('b.example');
   await expect(dlg(app).getByRole('button', { name: `Вернуть ${OLD}` })).toBeVisible();
@@ -81,6 +82,7 @@ test('установка упала → «Не получилось» с при�
   await setup(app, () => ({ ...info(), log: 'ОШИБКА: сумма файла не сходится\n[exit 1]', exit: 1, job: { done: 1, error: 'сумма файла не сходится с выпуском на GitHub' } }));
   await app.page.locator('#nfq-up').click();
   await dlg(app).getByRole('button', { name: `Обновить до ${NEW}` }).click();
+  await app.yes();   // «Обновить nfqws2 до …?»
   await expect(dlg(app)).toContainText('Не получилось', { timeout: 30_000 });
   await expect(dlg(app)).toContainText('сумма файла не сходится');
 });

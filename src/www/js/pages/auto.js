@@ -14,7 +14,7 @@ async function viewAuto(main) {
   const fails = h('select', { class: 'select', 'aria-label': 'Сколько неудач подряд' }, [2, 3, 4].map((n) => h('option', { value: n, text: `${n} проверки подряд`, selected: n === cfg.fails })));
   const pause = h('select', { class: 'select', 'aria-label': 'Пауза между попытками' }, [6, 12, 24].map((n) => h('option', { value: n, text: `${n} часов`, selected: n === cfg.pause })));
   const save = async () => {
-    if (apply.checked && !cfg.apply && !confirm('Разрешить роутеру самому менять конфиг?\n\nКогда сайт из мониторинга сломается и стратегия найдётся, роутер создаст отдельный профиль только для этого сайта и перезапустит nfqws2 — без вашего участия, в любое время суток. Если сайт не откроется или сломается другой сайт мониторинга, конфиг вернётся как был. Чужие профили и списки не меняются.')) { apply.checked = false; return; }
+    if (apply.checked && !cfg.apply && !await ask('Разрешить роутеру самому менять конфиг?\n\nКогда сайт из мониторинга сломается и стратегия найдётся, роутер создаст отдельный профиль только для этого сайта и перезапустит nfqws2 — без вашего участия, в любое время суток. Если сайт не откроется или сломается другой сайт мониторинга, конфиг вернётся как был. Чужие профили и списки не меняются.', 'Разрешить')) { apply.checked = false; return; }
     if (await guarded(() => api('auto_set', { enabled: enabled.checked, apply: apply.checked, fails: Number(fails.value), pause: Number(pause.value) }), 'Сохранено')) { await loadState().catch(() => {}); route(true); }
   };
   [enabled, apply, fails, pause].forEach((el) => el.addEventListener('change', save));

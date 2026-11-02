@@ -44,15 +44,60 @@ function renderDiff(ops) {
   return box;
 }
 
-function modal(title, body, footer) {
-  const close = () => { bg.remove(); document.removeEventListener('keydown', esc); };
+// opts: cls — extra class of the window (.ask — narrow), cancel — label of the closing button, onClose — after any close
+function modal(title, body, footer, opts = {}) {
+  const close = () => { bg.remove(); document.removeEventListener('keydown', esc); opts.onClose?.(); };
   const esc = (e) => { if (e.key === 'Escape') close(); };
   const bg = h('div', { class: 'modal-bg', onclick: (e) => { if (e.target === bg) close(); } },
-    h('div', { class: 'modal', role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
+    h('div', { class: 'modal' + (opts.cls ? ' ' + opts.cls : ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
       h('div', { class: 'modal-h' }, h('h2', { text: title }), h('button', { class: 'btn ghost icon', type: 'button', onclick: close, 'aria-label': 'Закрыть' }, icon('x'))),
-      body, h('div', { class: 'modal-f' }, btn('Закрыть', close, 'ghost'), footer)));
+      body, h('div', { class: 'modal-f' }, btn(opts.cancel || 'Закрыть', close, 'ghost'), footer)));
   document.addEventListener('keydown', esc);
   document.body.append(bg);
   bg.close = close;
   return bg;
+}
+
+// Own confirm(): resolves true / false. The question (text up to the first «?») becomes the title, the rest —
+// paragraphs under it («\n\n» between them). Esc, the cross, «Отмена» and a click outside — false
+function ask(text, ok = 'Да', cls = 'primary', ic = null) {
+  const q = text.indexOf('?');
+  const first = text.split('\n\n')[0];
+  const title = q > 0 && q < first.length ? text.slice(0, q + 1) : first;
+  const rest = text.slice(title.length).trim();
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v) => { if (done) return; done = true; resolve(v); if (v) bg.close(); };
+    const yes = btn(ok, () => finish(true), cls, ic);
+    const bg = modal(title, rest ? h('div', { class: 'modal-b stack ask-b' }, rest.split(/\n\n+/).map((p) => h('p', { class: 'sm muted', text: p }))) : null,
+      yes, { cls: 'ask', cancel: 'Отмена', onClose: () => finish(false) });
+    yes.focus();
+  });
+}
+
+// Own prompt(): resolves the trimmed text or null. Enter — the same as the button.
+// o: value, ok (button label), hint (a line above the field), empty (an empty answer is allowed)
+function askText(title, o = {}) {
+  return new Promise((resolve) => {
+    let done = false;
+    const finish = (v) => { if (done) return; done = true; resolve(v); if (v !== null) bg.close(); };
+    const input = h('input', { class: 'input', type: 'text', value: o.value || '', spellcheck: 'false', autocomplete: 'off', 'aria-label': title,
+      onkeydown: (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } } });
+    const submit = () => { const v = input.value.trim(); if (v || o.empty) finish(v); else input.focus(); };
+    const hint = o.hint;
+    const ok = o.ok || 'Готово';
+    const bg = modal(title, h('div', { class: 'modal-b stack ask-b' }, hint ? h('p', { class: 'sm muted', text: hint }) : null, input),
+      btn(ok, submit, 'primary'), { cls: 'ask', cancel: 'Отмена', onClose: () => finish(null) });
+    input.focus();
+    input.select();
+  });
+}
+
+// The last resort of copyText(): the text in a field, selected — Ctrl+C by hand
+function copyByHand(text) {
+  const ta = h('textarea', { class: 'input mono', readonly: '', rows: Math.min(8, text.split('\n').length + 1), 'aria-label': 'Текст для копирования' });
+  ta.value = text;
+  modal('Скопируйте вручную', h('div', { class: 'modal-b stack ask-b' }, h('p', { class: 'sm muted', text: 'Браузер не дал доступа к буферу обмена. Текст выделен — нажмите Ctrl+C.' }), ta), null, { cls: 'ask' });
+  ta.focus();
+  ta.select();
 }

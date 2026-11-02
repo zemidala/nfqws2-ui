@@ -138,7 +138,7 @@ function drawListNav(nav, current) {
 }
 
 async function createList(initial = '') {
-  const name = prompt('Имя нового списка (латиница, цифры, _ и -):', initial);
+  const name = await askText('Новый список', { value: initial, ok: 'Создать', hint: 'Имя: латиница, цифры, _ и -.' });
   if (!name) return null;
   const r = await guarded(() => api('list_create', { name: name.trim() }));
   if (!r) return null;
@@ -199,7 +199,7 @@ async function viewDups(content, r) {
     h('p', { class: 'sm muted', text: 'Поиск по всем спискам сайтов. Повторы внутри одного списка показывает сам список («Исправить автоматически»). Каждое удаление можно отменить.' }),
     Object.keys(coveredByList).length ? h('div', { class: 'row' }, h('span', { class: 'sm muted', text: 'Лишние записи:' }),
       Object.entries(coveredByList).map(([ln, entries]) => btn(`убрать ${entries.length} из ${listName(ln)}`, async () => {
-        if (!confirm(`Убрать из ${ln} ${plural(entries.length, 'запись', 'записи', 'записей')}, которые уже покрыты доменами из других списков?`)) return;
+        if (!await ask(`Убрать из ${ln} ${plural(entries.length, 'запись', 'записи', 'записей')}, которые уже покрыты доменами из других списков?`, 'Убрать', 'danger')) return;
         if (!await guarded(() => api('list_remove', { name: ln, items: entries }))) return;
         toast(`Убрано из ${listName(ln)}: ${entries.length}`, { undo: () => undoLast(false) });
         await loadState().catch(() => {});
@@ -216,7 +216,7 @@ async function viewDups(content, r) {
 }
 
 async function importListUrl() {
-  const url = prompt('Ссылка на список сайтов или IP (обновляется раз в сутки):', 'https://');
+  const url = await askText('Список по ссылке', { value: 'https://', ok: 'Дальше', hint: 'Ссылка на список сайтов или IP. Он будет обновляться по ней раз в сутки.' });
   if (!url || url === 'https://') return;
   const guess = (url.split('/').pop() || 'imported').replace(/\.(list|txt|lst)$/i, '').replace(/[^A-Za-z0-9_-]/g, '_').slice(0, 40);
   const name = await createList(guess);
@@ -272,7 +272,7 @@ async function drawList(content, name) {
     };
     if (!sub) {
       return h('div', { class: 'row sm' }, h('button', { class: 'chip add', type: 'button', text: '+ обновлять по ссылке', onclick: async () => {
-        const url = prompt('Ссылка на список (обновляется раз в сутки, в 04:05):', 'https://');
+        const url = await askText('Обновлять по ссылке', { value: 'https://', ok: 'Подключить', hint: 'Ссылка на список. Он будет обновляться по ней раз в сутки, в 04:05.' });
         if (!url || url === 'https://') return;
         if (await setUrl(url)) { toast('Скачиваю…'); await runSub(); }
       } }));
@@ -282,8 +282,8 @@ async function drawList(content, name) {
       h('span', { class: 'muted', text: 'Обновляется по ссылке:' }), h('a', { class: 'mono ellipsis', style: 'max-width:40ch', href: sub.url, target: '_blank', rel: 'noopener', text: sub.url }),
       h('span', { class: sub.status === 'error' ? 'status-bad' : 'muted', text: sub.last ? `${fmtDate(sub.last)} · ` + (sub.status === 'ok' ? `${plural(sub.count || 0, 'запись', 'записи', 'записей')}` + (sub.changed ? ` (+${sub.changed.added} −${sub.changed.removed})` : ', без изменений') : sub.error || '') : 'ещё не обновлялся' }),
       btn('Обновить сейчас', runSub, 'small', 'refresh'),
-      btn('Изменить', async () => { const url = prompt('Ссылка на список:', sub.url); if (url && url !== sub.url && await setUrl(url)) route(); }, 'small ghost'),
-      btn('Отключить', async () => { if (confirm('Больше не обновлять список по ссылке? Сами записи останутся.') && await setUrl('')) route(); }, 'small ghost'));
+      btn('Изменить', async () => { const url = await askText('Ссылка на список', { value: sub.url, ok: 'Сохранить', hint: 'Список обновляется по ней раз в сутки, в 04:05.' }); if (url && url !== sub.url && await setUrl(url)) route(); }, 'small ghost'),
+      btn('Отключить', async () => { if (await ask('Больше не обновлять список по ссылке? Сами записи останутся.', 'Отключить') && await setUrl('')) route(); }, 'small ghost'));
   }
   async function runSub() {
     const r = await guarded(() => api('sub_run', { list: name }));
@@ -304,7 +304,7 @@ async function drawList(content, name) {
     draw();
   }
   async function renameList() {
-    const to = prompt('Новое имя списка:', name.replace(/\.list$/, ''));
+    const to = await askText('Переименовать список', { value: name.replace(/\.list$/, ''), ok: 'Переименовать', hint: 'Имя: латиница, цифры, _ и -. Ссылки в конфиге обновятся сами.' });
     if (!to || to === name.replace(/\.list$/, '')) return;
     const r = await guarded(() => api('list_rename', { name, to }));
     if (!r) return;
@@ -313,7 +313,7 @@ async function drawList(content, name) {
     go('#/sites/' + encodeURIComponent(r.name));
   }
   async function copyList() {
-    const to = prompt('Имя копии:', name.replace(/\.list$/, '') + '-copy');
+    const to = await askText('Копия списка', { value: name.replace(/\.list$/, '') + '-copy', ok: 'Создать копию', hint: 'Имя копии: латиница, цифры, _ и -.' });
     if (!to) return;
     const r = await guarded(() => api('list_copy', { name, to }), 'Копия создана');
     if (r) { await loadState(); go('#/sites/' + encodeURIComponent(r.name)); }
@@ -321,12 +321,12 @@ async function drawList(content, name) {
   // очистить: файл остаётся (на стандартные ссылается конфиг nfqws2-keenetic), записи уходят
   async function clearList() {
     if (!data.content.trim()) { toast('Список и так пуст'); return; }
-    if (!confirm(`Очистить ${name}? Файл останется пустым.` + (meta.used.length ? ' Профили, которые его читают, перестанут учитывать его записи сразу, без перезапуска.' : '')
-      + ' Перед этим делается снимок, вернуть записи можно из «Истории».')) return;
+    if (!await ask(`Очистить ${name}? Файл останется пустым.` + (meta.used.length ? ' Профили, которые его читают, перестанут учитывать его записи сразу, без перезапуска.' : '')
+      + ' Перед этим делается снимок, вернуть записи можно из «Истории».', 'Очистить', 'danger', 'trash')) return;
     if (await guarded(() => api('list_save', { name, content: '', note: 'список очищен' }), 'Список очищен')) { await loadState(); reload(); }
   }
   async function deleteList() {
-    if (!confirm(`Удалить ${name}? Перед удалением делается снимок, вернуть можно из истории.`)) return;
+    if (!await ask(`Удалить ${name}? Перед удалением делается снимок, вернуть можно из истории.`, 'Удалить', 'danger', 'trash')) return;
     if (await guarded(() => api('list_delete', { name }), 'Список удалён')) { await loadState(); go('#/sites'); }
   }
 
@@ -512,7 +512,7 @@ async function attachListToProfile(p, opt, path) {
   const toks = target.tokens();
   toks.splice(target.insertAt(toks), 0, `--${opt}=${path}`);
   const vars = target.build(toks);
-  if (target.shared && !confirm(target.shared + ' Продолжить?')) return;
+  if (target.shared && !await ask('Подключить список?\n\n' + target.shared, 'Подключить')) return;
   if (await saveVars(vars, `список ${base(path)} подключён к профилю #${p.index}`)) {
     toast('Подключено. Перезапустите nfqws2, чтобы применить.');
     route(true);

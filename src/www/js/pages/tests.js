@@ -683,7 +683,7 @@ async function viewTests(main, r, bare = false) {
     const who = s.list ? `--hostlist=${s.list.path}` : `--hostlist-domains=${s.hosts.join(',')}`;
     const part = [`--filter-tcp=${http ? 80 : 443}`, `--filter-l7=${http ? 'http' : 'tls'}`, who, `--payload=${http ? 'http_req' : 'tls_client_hello'}`, ...steps];
     const what = s.list ? `всех сайтов из ${s.list.name}` : s.hosts.join(', ');
-    if (!confirm(`Создать профиль для ${what}?\n\nОн встанет первым (#1), остальные профили сдвинутся на один номер и не изменятся. Сайты из ${s.list ? 'списка' : 'этого перечня'} пойдут через новую стратегию.\n\nПосле сохранения nfqws2 перезапустится с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, всё вернётся как было.`)) return;
+    if (!await ask(`Создать профиль для ${what}?\n\nОн встанет первым (#1), остальные профили сдвинутся на один номер и не изменятся. Сайты из ${s.list ? 'списка' : 'этого перечня'} пойдут через новую стратегию.\n\nПосле сохранения nfqws2 перезапустится с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, всё вернётся как было.`, 'Создать профиль')) return;
     if (!await saveVars({ NFQWS_ARGS_CUSTOM: joinParts([part, ...cur]) }, `профиль для ${s.list ? s.list.name : 'нескольких сайтов'} из подбора`)) return;
     await safeRestart();
     go('#/settings/p1');
@@ -793,7 +793,7 @@ async function viewTests(main, r, bare = false) {
 
   // Запись в список профиля: без перезапуска; потом смотрим, через какой профиль сайт пошёл на самом деле
   async function addToProfileList(lt, x, s) {
-    if (!confirm(`Добавить ${s.host} в ${lt.list.name}?\n\nПрофиль #${lt.profile} уже использует стратегию, которая сработала в тесте. Новый профиль не создаётся, nfqws2 перечитает список сам — перезапуск не нужен.`)) return;
+    if (!await ask(`Добавить ${s.host} в ${lt.list.name}?\n\nПрофиль #${lt.profile} уже использует стратегию, которая сработала в тесте. Новый профиль не создаётся, nfqws2 перечитает список сам — перезапуск не нужен.`, 'Добавить')) return;
     if (!await guarded(() => api('list_add', { name: lt.list.name, items: [s.host] }))) return;
     api('pick_applied', { host: s.host, steps: x.steps, target: `список ${lt.list.name} профиля #${lt.profile}` }).catch(() => {});
     await loadState().catch(() => {});
@@ -820,7 +820,7 @@ async function viewTests(main, r, bare = false) {
     const udpPorts = (S.conf.vars.UDP_PORTS || '').split(',').map((x) => x.trim()).filter(Boolean);
     const udpHas = udpPorts.some((x) => { const [a, b] = x.split(/[:-]/).map(Number); return 443 >= a && 443 <= (b || a); });
     const extra = quic && !udpHas ? { UDP_PORTS: [...udpPorts, '443'].join(',') } : {};
-    if (!confirm(`Создать профиль только для ${s.host}${quic ? ' (QUIC, UDP 443)' : ''}?\n\nОн встанет первым (#1), остальные профили сдвинутся на один номер. Другие сайты не затронет.\n\nПосле сохранения nfqws2 перезапустится с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, всё вернётся как было.`)) return;
+    if (!await ask(`Создать профиль только для ${s.host}${quic ? ' (QUIC, UDP 443)' : ''}?\n\nОн встанет первым (#1), остальные профили сдвинутся на один номер. Другие сайты не затронет.\n\nПосле сохранения nfqws2 перезапустится с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, всё вернётся как было.`, 'Создать профиль')) return;
     if (!await saveVars({ NFQWS_ARGS_CUSTOM: joinParts([part, ...cur]), ...extra }, `профиль только для ${s.host}${quic ? ' (QUIC)' : ''}`)) return;
     api('pick_applied', { host: s.host, steps, target: `отдельный профиль для ${s.host}` }).catch(() => {});
     await safeRestart();
