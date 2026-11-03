@@ -117,6 +117,13 @@ function learn_parse(line)
 	return { key = key, host = host, sig = sig, cur = tonumber(cur), n = tonumber(n), stats = stats }
 end
 
+-- when a saved record was last counted (the latest of its strategies)
+function learn_fresh(r)
+	local t = 0
+	for _, s in pairs(r.stats) do if s.t > t then t = s.t end end
+	return t
+end
+
 -- one record as a line (the interface reads the same format)
 function learn_line(key, host, rec)
 	local parts = {}
@@ -156,7 +163,7 @@ function learn_save_timer()
 			local key, host = line:match("^([^\t]+)\t(.+)$")
 			for k, hosts in pairs(autostate or {}) do
 				for h, rec in pairs(hosts) do
-					if rec.learn and (line == "*" or (k == key and h == host)) then hosts[h] = nil end
+					if rec.learn and (line == "*" or ((rec.lkey or k) == key and h == host)) then hosts[h] = nil end
 				end
 			end
 			for k, hosts in pairs(LEARN_SAVED or {}) do
@@ -169,18 +176,22 @@ function learn_save_timer()
 		local w = io.open(LEARN_FORGET, "w")   -- emptied, not removed: /tmp is sticky and the file is root's
 		if w then w:close() end
 	end
-	local lines = {}
+	-- one line per key and host: two profiles with the same strategies share what they learned
+	local lines, seen, sigs = {}, {}, {}
+	local function add(key, host, rec)
+		local id = key .. "\t" .. host
+		if not seen[id] then seen[id] = true; sigs[host .. "\t" .. rec.sig] = true; lines[#lines + 1] = learn_line(key, host, rec) end
+	end
 	for key, hosts in pairs(autostate or {}) do
 		for host, rec in pairs(hosts) do
-			if rec.learn then lines[#lines + 1] = learn_line(key, host, rec) end
+			if rec.learn then add(rec.lkey or key, host, rec) end
 		end
 	end
-	-- saved records nobody met since the start are kept as they were
+	-- saved records nobody took over since the start are kept as they were — except an older copy of one already
+	-- written above (the same host and strategies under a former «learn_<profile>_<n>» key)
 	for key, hosts in pairs(LEARN_SAVED or {}) do
 		for host, r in pairs(hosts) do
-			if not (autostate and autostate[key] and autostate[key][host] and autostate[key][host].learn) then
-				lines[#lines + 1] = learn_line(key, host, r)
-			end
+			if not r.taken and not sigs[host .. "\t" .. r.sig] then add(key, host, r) end
 		end
 	end
 	table.sort(lines)
@@ -227,11 +238,26 @@ function learn(ctx, desync)
 		end
 		hrec.stats = {}
 		hrec.learn = true
-		-- what was learned before (another start of nfqws2), if the strategies are still the same
+		-- stored under key= of the profile, or else the strategies' signature: not the profile's number, which shifts
+		-- when a profile is added above it (func_instance is «learn_<profile>_<n>»)
+		hrec.lkey = (desync.arg.key and #desync.arg.key > 0) and desync.arg.key or ("s" .. hrec.sig)
+		-- what was learned before (another start of nfqws2), if the strategies are still the same; a record of the
+		-- older format sits under func_instance
 		learn_load()
 		local key, host = learn_keys(desync)
-		local saved = LEARN_SAVED[key] and LEARN_SAVED[key][host]
+		local saved = LEARN_SAVED[hrec.lkey] and LEARN_SAVED[hrec.lkey][host]
+		if not (saved and saved.sig == hrec.sig) then
+			-- the older format: under some «learn_<profile>_<n>» — the number may have shifted, the signature tells
+			saved = nil
+			for _, hosts in pairs(LEARN_SAVED) do
+				local r = hosts[host]
+				if r and not r.taken and r.sig == hrec.sig and (not saved or learn_fresh(r) > learn_fresh(saved)) then
+					saved = r
+				end
+			end
+		end
 		if saved and saved.sig == hrec.sig and saved.n == hrec.n then
+			saved.taken = true
 			hrec.stats = saved.stats
 			hrec.cur = saved.cur
 			DLOG("learn: restored " .. key .. " " .. host)

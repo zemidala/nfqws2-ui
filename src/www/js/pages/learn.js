@@ -53,7 +53,8 @@ async function viewLearn(main) {
     const toggle = () => { if (open.has(it.host)) open.delete(it.host); else open.add(it.host); draw(); };
     const main = h('tr', { 'data-key': it.key + ':' + it.host },
       h('td', { class: 'nm' }, h('button', { type: 'button', class: 'lex', 'aria-expanded': String(isOpen), 'aria-label': (isOpen ? 'Свернуть ' : 'Все стратегии ') + it.host, onclick: toggle }, icon(isOpen ? 'down' : 'chev')), h('span', { class: 'mono', text: it.host })),
-      h('td', { class: 'mono sm c-cur', 'data-h': 'Сейчас', text: stratName(s) }),
+      // no profile has these strategies any more (changed or removed): the record waits, the module will not use it
+      h('td', { class: 'mono sm c-cur', 'data-h': 'Сейчас', text: stratName(s) + (it.profile ? '' : ' · профиль изменён') }),
       h('td', { class: 'c-sure', 'data-h': 'Уверенность' }, bar(s.score), ' ', h('span', { class: 'sm', text: pct(s.score) + ' %' })),
       h('td', { class: 'num hide-narrow', text: `${s.ok} / ${s.fail}` }),   // of the strategy taken now, as in the mockup
       h('td', { class: 'sm muted hide-narrow', text: lf ? fmtDate(lf) : '—' }),

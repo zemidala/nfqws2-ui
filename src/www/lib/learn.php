@@ -45,25 +45,78 @@ function ctype_digit_safe(string $s): bool
   return $s !== '' && strspn($s, '0123456789') === strlen($s);   // the router's PHP has no ctype
 }
 
-// The records with their strategies spelled out: the key «learn_P_I» is profile P, instance I; the strategy number N is
-// the --lua-desync steps with strategy=N in that profile. Counts decay to now, as the module does
+// djb2 over 32 bits, as learn_hash() in the module; in floats: the routers' 32-bit PHP would overflow an int
+function learnHash(string $s): string
+{
+  $h = 5381.0;
+  for ($i = 0, $n = strlen($s); $i < $n; $i++) {
+    $h = fmod($h * 33 + ord($s[$i]), 4294967296.0);
+  }
+  return sprintf('%04x%04x', (int)floor($h / 65536), (int)fmod($h, 65536));
+}
+
+// Every learn of the running profiles: the strategy=N steps after it, their signature as learn_strategies() counts it
+// (the args of each step sorted, a flag as «name=»), and key= if the profile names its records itself
+function learnOwners(): array
+{
+  $out = [];
+  foreach (currentProfiles() as $p) {
+    $args = $p['args'];
+    foreach ($args as $i => $t) {
+      if (!preg_match('/^--lua-desync=learn(:|$)/', $t)) {
+        continue;
+      }
+      $key = preg_match('/:key=([^:]+)/', $t, $km) ? $km[1] : null;
+      $steps = [];
+      $parts = [];
+      foreach (array_slice($args, $i + 1) as $s) {
+        if (!preg_match('/^--lua-desync=(.*):strategy=(\d+)(:|$)/', $s, $sm)) {
+          continue;
+        }
+        $n = (int)$sm[2];
+        $bare = preg_replace('/:strategy=\d+/', '', substr($s, 13));
+        $steps[$n][] = '--lua-desync=' . $bare;
+        $x = explode(':', $bare);
+        $fn = array_shift($x);
+        $x = array_map(fn($a) => str_contains($a, '=') ? $a : "$a=", $x);
+        sort($x, SORT_STRING);
+        $parts[] = "$n:$fn:" . implode(':', $x);
+      }
+      sort($parts, SORT_STRING);
+      $out[] = ['profile' => $p['index'], 'key' => $key, 'sig' => learnHash(implode('|', $parts)), 'steps' => $steps];
+    }
+  }
+  return $out;
+}
+
+// The records with their strategies spelled out. A record belongs to the profile whose learn has its key= or the same
+// strategies (the signature in the record) — not to a profile number: numbers shift. Counts decay to now, as the module does
 function learnInfo(): array
 {
   ini_set('serialize_precision', '-1');   // the routers' php.ini has 17: 0.87 would go out as 0.869999…
-  $profiles = [];
-  foreach (currentProfiles() as $p) {
-    $profiles[$p['index']] = $p;
-  }
+  $owners = learnOwners();
   $now = time();
   $items = [];
+  // the same host and strategies twice — an older line under the profile number (before the keys by signature):
+  // the fresher one counts
+  $fresh = fn($r) => max([0, ...array_column($r['stats'], 't')]);
+  $recs = [];
   foreach (learnRead() as $r) {
-    $prof = preg_match('/_(\d+)_\d+$/', $r['key'], $m) ? (int)$m[1] : null;
-    $steps = [];
-    foreach ($prof && isset($profiles[$prof]) ? $profiles[$prof]['args'] : [] as $t) {
-      if (preg_match('/^--lua-desync=.*:strategy=(\d+)(:|$)/', $t, $sm)) {
-        $steps[(int)$sm[1]][] = preg_replace('/:strategy=\d+/', '', $t);
+    $id = $r['host'] . "\t" . $r['sig'];
+    if (!isset($recs[$id]) || $fresh($r) > $fresh($recs[$id])) {
+      $recs[$id] = $r;
+    }
+  }
+  foreach ($recs as $r) {
+    $own = null;
+    foreach ($owners as $o) {
+      if ($o['key'] !== null ? $o['key'] === $r['key'] && $o['sig'] === $r['sig'] : $o['sig'] === $r['sig']) {
+        $own = $o;
+        break;
       }
     }
+    $prof = $own['profile'] ?? null;
+    $steps = $own['steps'] ?? [];
     $list = [];
     for ($i = 1; $i <= $r['n']; $i++) {
       $s = $r['stats'][$i] ?? null;
