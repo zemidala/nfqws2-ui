@@ -104,7 +104,8 @@
 :root[data-variant="k"] .seg button { border: 1px solid var(--line); border-radius: 0; margin-left: -1px; min-height: var(--ctl-h); padding: 0 14px; font-size: var(--fs-md); font-weight: 400; color: var(--muted); background: var(--surface); }
 :root[data-variant="k"] .seg button:first-child { border-radius: 3px 0 0 3px; margin-left: 0; }
 :root[data-variant="k"] .seg button:last-child { border-radius: 0 3px 3px 0; }
-:root[data-variant="k"] .seg button.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent-ink); box-shadow: none; position: relative; z-index: 1; }
+:root[data-variant="k"] .seg button.on { border-color: var(--sel); background: var(--sel); color: var(--sel-fg); box-shadow: none; position: relative; z-index: 1; }   /* the chosen part filled, see components.css */
+:root[data-variant="k"] .seg button:not(.on) { color: var(--track-fg); }
 /* вкладки страницы — как сегменты Keenetic: крупный текст, выбранная — чёрная с синей чертой */
 :root[data-variant="k"] .subtabs a { font-size: var(--fs-lg); font-weight: 400; padding: 10px 16px; border-bottom-width: 3px; }
 :root[data-variant="k"] .subtabs a.on { font-weight: 400; }

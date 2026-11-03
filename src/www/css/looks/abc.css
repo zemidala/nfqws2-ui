@@ -35,9 +35,9 @@
 :root[data-variant="b"] .tbl th:first-child { border-radius: 10px 0 0 10px; } :root[data-variant="b"] .tbl th:last-child { border-radius: 0 10px 10px 0; }
 :root[data-variant="b"] .mnav { background: var(--bg); padding: 14px 12px 24px; }
 :root[data-variant="b"] .mnav .mlinks > a { min-height: 38px; padding: 6px 14px; border-radius: 999px; }
-:root[data-variant="b"] .mnav .mlinks > a.on { background: var(--accent); color: var(--accent-fg); }
-:root[data-variant="b"] .mnav .mlinks > a.on > svg { color: var(--accent-fg); }
-:root[data-variant="b"] .mnav .mlinks > a.on :is(.tail, .tag) { color: var(--accent-fg); border-color: currentColor; }   /* the count on the filled pill: faint grey on the accent read at Lc 0–9 */
+:root[data-variant="b"] .mnav .mlinks > a.on { background: var(--sel); color: var(--sel-fg); }   /* the chosen fill, as everywhere (components.css) */
+:root[data-variant="b"] .mnav .mlinks > a.on > svg { color: var(--sel-fg); }
+:root[data-variant="b"] .mnav .mlinks > a.on :is(.tail, .tag) { color: var(--sel-fg); border-color: currentColor; }   /* the count on the filled pill: faint grey on the accent read at Lc 0–9 */
 :root[data-variant="b"] .mon-tiles { gap: 16px; }
 :root[data-variant="b"] .mon-tile { border: 0; border-radius: 14px; padding: 18px 20px; background: var(--accent-soft); }
 :root[data-variant="b"] .mon-tile b { font-size: var(--fs-2xl); font-weight: 700; }
@@ -45,46 +45,16 @@
 :root[data-variant="c"] { --radius: 8px; --gap: 12px; --shadow: none; }
 :root[data-variant="c"] main .panel { border-width: 1.5px; border-color: color-mix(in srgb, var(--fg) 18%, var(--surface)); }
 :root[data-variant="c"] .panel-h h2 { border-left: 3px solid var(--accent); padding-left: 10px; }
-/* C: the kind of a control shows in its look (local/design/controls.html, variant A). An action is a solid, slightly
-   raised button that sinks by 1 px when pressed; a choice — one of a few («Списком / Текстом») or on/off («Структура»)
-   — sits in a sunken track, the chosen part filled (a dot marks on/off: not by colour alone). The accent frame is left
-   for hover and focus. The chosen fill: the accent itself in the light theme, a darker accent in the dark one — white
-   text on it stays readable (APCA ≥ 75 at 13 px) */
-:root[data-variant="c"] { --c-sel: var(--accent); --c-selfg: var(--accent-fg); --c-track: color-mix(in srgb, var(--fg) 72%, var(--bg)); --c-raise: rgb(0 0 0 / .12); }
-@media (prefers-color-scheme: dark) { :root[data-variant="c"]:not([data-mode="light"]) { --c-sel: color-mix(in srgb, var(--accent) 54%, #000); --c-selfg: #fff; --c-track: color-mix(in srgb, var(--fg) 92%, var(--bg)); --c-raise: rgb(0 0 0 / .35); } }
-:root[data-variant="c"][data-mode="dark"] { --c-sel: color-mix(in srgb, var(--accent) 54%, #000); --c-selfg: #fff; --c-track: color-mix(in srgb, var(--fg) 92%, var(--bg)); --c-raise: rgb(0 0 0 / .35); }
+/* C: an action is a solid, slightly raised button (the choice track, on/off and the 1 px press are common to every
+   style — components.css); the main button sits on the chosen fill: white text on a darker accent in the dark theme */
+:root[data-variant="c"] { --c-raise: rgb(0 0 0 / .12); }
+@media (prefers-color-scheme: dark) { :root[data-variant="c"]:not([data-mode="light"]) { --c-raise: rgb(0 0 0 / .35); } }
+:root[data-variant="c"][data-mode="dark"] { --c-raise: rgb(0 0 0 / .35); }
 :root[data-variant="c"] .btn:not(.primary):not(.ghost):not(.tog) { background: var(--soft); border-color: color-mix(in srgb, var(--fg) 16%, var(--surface)); color: var(--fg); box-shadow: 0 1px 0 var(--c-raise); }
 :root[data-variant="c"] .btn:not(.primary):not(.ghost):not(.tog):hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 14%, var(--soft)); border-color: var(--accent); }
-:root[data-variant="c"] .btn.primary { background: var(--c-sel); border-color: var(--c-sel); color: var(--c-selfg); box-shadow: 0 1px 0 var(--c-raise); }
+:root[data-variant="c"] .btn.primary { background: var(--sel); border-color: var(--sel); color: var(--sel-fg); box-shadow: 0 1px 0 var(--c-raise); }
 :root[data-variant="c"] .btn.ghost { color: var(--accent-ink); }
-:root[data-variant="c"] .btn:not(.tog):active:not(:disabled) { transform: translateY(1px); box-shadow: none; }
-:root[data-variant="c"] .seg button { color: var(--c-track); }
-:root[data-variant="c"] .seg button:hover:not(.on) { color: var(--fg); background: var(--soft); }
-:root[data-variant="c"] .seg button.on { background: var(--c-sel); color: var(--c-selfg); box-shadow: none; }
-:root[data-variant="c"] .btn.tog, :root[data-variant="c"] .cfg-tools .btn.tog.on { background: var(--bg); border-color: var(--line); color: var(--c-track); box-shadow: none; }
-:root[data-variant="c"] .btn.tog::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ctl-line); }
-:root[data-variant="c"] .btn.tog > svg { display: none; }   /* the dot says what the button is; no second picture */
-:root[data-variant="c"] .btn.tog:hover { color: var(--fg); border-color: var(--accent); }
-:root[data-variant="c"] .btn.tog.on { color: var(--fg); }
-/* C: small text (12–13 px) readable at APCA 75 on every background it sits on (pages, panels, tinted notes, log lines):
-   greys from the scheme's own text colour, links from its accent, status colours fixed (no scheme changes them).
-   Above the scheme's rules (look.js schemeCss: :root×3 + :is(…) that counts as two attributes) */
-:root:root:root:root:root[data-variant="c"] {
-  --muted: color-mix(in srgb, var(--fg) 82%, var(--surface)); --faint: var(--muted);
-  --accent-ink: color-mix(in srgb, var(--accent) 76%, #000); --tk-opt: var(--accent-ink);
-  --ok: #116333; --bad: #951e23; --warn: #7f4b00; --tk-key: #911b4e; --tk-var: #7f4b00;
-}
-@media (prefers-color-scheme: dark) { :root:root:root:root:root[data-variant="c"]:not([data-mode="light"]) {
-  --muted: color-mix(in srgb, var(--fg) 92%, var(--surface)); --faint: var(--muted);
-  --accent-ink: color-mix(in srgb, var(--accent) 45%, #fff); --tk-opt: var(--accent-ink);
-  --ok: #96e4ba; --bad: #ffc3c0; --warn: #f5cd8c; --tk-key: #ffc2da; --tk-var: #f5cd8c; --tk-fn: #96e4ba;
-} }
-:root:root:root:root:root[data-variant="c"][data-mode="dark"] {
-  --muted: color-mix(in srgb, var(--fg) 92%, var(--surface)); --faint: var(--muted);
-  --accent-ink: color-mix(in srgb, var(--accent) 45%, #fff); --tk-opt: var(--accent-ink);
-  --ok: #96e4ba; --bad: #ffc3c0; --warn: #f5cd8c; --tk-key: #ffc2da; --tk-var: #f5cd8c; --tk-fn: #96e4ba;
-}
-:root[data-variant="c"] .btn.tog.on::before { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+:root[data-variant="c"] .btn:not(.tog):active:not(:disabled) { box-shadow: none; }
 :root[data-variant="c"] .tbl th { color: var(--accent-ink); font-weight: 600; border-bottom: 1.5px solid var(--accent); }
 :root[data-variant="c"] .tbl td { border-bottom-style: dashed; }
 /* the menu drawn as a scheme: a line down each group, every page a node on it, the open one an accent node */

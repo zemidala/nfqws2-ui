@@ -152,8 +152,72 @@ button.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
 .notice svg { margin-top: 1px; }
 .seg { display: inline-flex; flex-wrap: wrap; max-width: 100%; border: 1px solid var(--line); border-radius: calc(var(--radius) * .7 + 2px); padding: 2px; background: var(--bg); justify-self: start; }
 .seg button { border: 0; background: none; color: var(--muted); padding: 0 11px; border-radius: calc(var(--radius) * .5 + 2px); cursor: pointer; min-height: calc(var(--ctl-h) - 6px);   /* with the 2 px frame and padding of .seg the whole switch is --ctl-h */ font-size: var(--fs-sm); font-weight: 500; }
-/* the chosen half must read at a glance: accent tint, accent text and an accent outline, not a shade lighter */
-.seg button.on { background: var(--accent-soft); color: var(--accent-ink); box-shadow: inset 0 0 0 1px var(--accent); }
+/* The kind of a control shows in its look, in every style (local/design/controls.html, variant A): a choice — one of
+   a few («Списком / Текстом») or on/off («Структура») — sits in a sunken track with the chosen part filled, on/off
+   also shows a dot (not by colour alone); an action is the style's own button and sinks by 1 px when pressed.
+   The chosen fill: the accent in the light theme, a darker accent with white text in the dark one (APCA ≥ 75 at 13 px) */
+:root { --sel: var(--accent); --sel-fg: var(--accent-fg); --track-fg: color-mix(in srgb, var(--fg) 72%, var(--bg)); }
+@media (prefers-color-scheme: dark) { :root:not([data-mode="light"]) { --sel: color-mix(in srgb, var(--accent) 54%, #000); --sel-fg: #fff; --track-fg: color-mix(in srgb, var(--fg) 92%, var(--bg)); } }
+:root[data-mode="dark"] { --sel: color-mix(in srgb, var(--accent) 54%, #000); --sel-fg: #fff; --track-fg: color-mix(in srgb, var(--fg) 92%, var(--bg)); }
+.seg button { color: var(--track-fg); }
+.seg button:hover:not(.on) { color: var(--fg); background: var(--soft); }
+.seg button.on { background: var(--sel); color: var(--sel-fg); box-shadow: none; }
+:root .btn.tog, :root .cfg-tools .btn.tog.on { background: var(--bg); border-color: var(--line); color: var(--track-fg); box-shadow: none; }
+.btn.tog::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ctl-line); }
+.btn.tog > svg { display: none; }   /* the dot says what the button is; no second picture */
+:root .btn.tog:hover { color: var(--fg); border-color: var(--accent); background: var(--bg); }
+:root .btn.tog.on { color: var(--fg); }
+.btn.tog.on::before { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
+.btn:not(.tog):active:not(:disabled) { transform: translateY(1px); }
+
+/* Small text (12–13 px) readable at APCA 75 on every background it sits on (pages, panels, tinted notes, log lines),
+   in A, B, C and K with any scheme: greys from the scheme's own text colour, links from its accent, status colours and
+   the editor's tokens fixed. The chosen fill and the main button: a darker accent with white text in both themes.
+   Z keeps its brand colours (orange with black text, the brand grey) — not here.
+   Above the scheme's rules (look.js schemeCss: :root×3 + an :is(…) that counts as two attributes) */
+:root:root:root:root:root:is([data-variant="a"], [data-variant="b"], [data-variant="c"], [data-variant="k"]:not([data-palette])) {
+  --muted: color-mix(in srgb, var(--fg) 82%, var(--surface)); --faint: var(--muted);
+  --accent-ink: color-mix(in srgb, var(--accent) 76%, #000); --tk-opt: var(--accent-ink);
+  --ok: #116333; --bad: #951e23; --warn: #7f4b00; --tk-var: #7f4b00;
+  --sel: color-mix(in srgb, var(--accent) 80%, #000); --sel-fg: #fff;
+}
+@media (prefers-color-scheme: dark) { :root:root:root:root:root:is([data-variant="a"], [data-variant="b"], [data-variant="c"], [data-variant="k"]:not([data-palette])):not([data-mode="light"]) {
+  --muted: color-mix(in srgb, var(--fg) 92%, var(--surface)); --faint: var(--muted);
+  --accent-ink: color-mix(in srgb, var(--accent) 45%, #fff); --tk-opt: var(--accent-ink);
+  --ok: #a5e8c4; --bad: #ffc3c0; --warn: #f5cd8c; --tk-var: #f5cd8c; --tk-fn: #a5e8c4;
+  --sel: color-mix(in srgb, var(--accent) 54%, #000);
+} }
+:root:root:root:root:root:is([data-variant="a"], [data-variant="b"], [data-variant="c"], [data-variant="k"]:not([data-palette]))[data-mode="dark"] {
+  --muted: color-mix(in srgb, var(--fg) 92%, var(--surface)); --faint: var(--muted);
+  --accent-ink: color-mix(in srgb, var(--accent) 45%, #fff); --tk-opt: var(--accent-ink);
+  --ok: #a5e8c4; --bad: #ffc3c0; --warn: #f5cd8c; --tk-var: #f5cd8c; --tk-fn: #a5e8c4;
+  --sel: color-mix(in srgb, var(--accent) 54%, #000);
+}
+/* K: a light accent — its links need more black; its dark text itself is raised (the greys come from it) */
+/* (only K's own colours: a scheme brings its own text and accent, and those pass) */
+:root:root:root:root:root:root[data-variant="k"]:not([data-palette], [data-scheme]) { --accent-ink: color-mix(in srgb, var(--accent) 56%, #000); }
+:root:root:root:root:root:root[data-variant="k"]:not([data-palette]) { --tk-fn: #186a3b; }   /* no scheme sets it */
+@media (prefers-color-scheme: dark) { :root:root:root:root:root:root:root[data-variant="k"]:not([data-palette]):not([data-mode="light"]) { --tk-fn: #a5e8c4; } }
+:root:root:root:root:root:root:root[data-variant="k"]:not([data-palette])[data-mode="dark"] { --tk-fn: #a5e8c4; }
+@media (prefers-color-scheme: dark) { :root:root:root:root:root:root[data-variant="k"]:not([data-palette], [data-scheme]):not([data-mode="light"]) {
+  --fg: #e6e8ea; --muted: color-mix(in srgb, var(--fg) 94%, var(--surface)); --accent-ink: color-mix(in srgb, var(--accent) 30%, #fff); --tk-fn: #a5e8c4; } }
+:root:root:root:root:root:root[data-variant="k"]:not([data-palette], [data-scheme])[data-mode="dark"] {
+  --fg: #e6e8ea; --muted: color-mix(in srgb, var(--fg) 94%, var(--surface)); --accent-ink: color-mix(in srgb, var(--accent) 30%, #fff); --tk-fn: #a5e8c4; }
+/* the keys in the editor and the log keep each style's own hue */
+:root:root:root:root:root:root:is([data-variant="a"], [data-variant="k"]:not([data-palette])) { --tk-key: #712f97; }
+:root:root:root:root:root:root[data-variant="b"] { --tk-key: #7f3264; }
+:root:root:root:root:root:root[data-variant="c"] { --tk-key: #911b4e; }
+@media (prefers-color-scheme: dark) {
+  :root:root:root:root:root:root[data-variant="a"]:not([data-mode="light"]) { --tk-key: #e7c6ff; }
+  :root:root:root:root:root:root[data-variant="k"]:not([data-palette]):not([data-mode="light"]) { --tk-key: #e3ceef; }
+  :root:root:root:root:root:root[data-variant="b"]:not([data-mode="light"]) { --tk-key: #f7c3e3; --tk-fn: #aee188; }
+  :root:root:root:root:root:root[data-variant="c"]:not([data-mode="light"]) { --tk-key: #ffc2da; }
+}
+:root:root:root:root:root:root[data-variant="a"][data-mode="dark"] { --tk-key: #e7c6ff; }
+:root:root:root:root:root:root[data-variant="k"]:not([data-palette])[data-mode="dark"] { --tk-key: #e3ceef; }
+:root:root:root:root:root:root[data-variant="b"][data-mode="dark"] { --tk-key: #f7c3e3; --tk-fn: #aee188; }
+:root:root:root:root:root:root[data-variant="c"][data-mode="dark"] { --tk-key: #ffc2da; }
+:root:root:is([data-variant="a"], [data-variant="b"], [data-variant="c"], [data-variant="k"]:not([data-palette])) .btn.primary { background: var(--sel); border-color: var(--sel); color: var(--sel-fg); }
 /* labels and numbers centred by their capitals, not by the font's ascent and descent (they rode 1–1.5px high) */
 .seg button { text-box: trim-both cap alphabetic; }
 .frow { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 8px 14px; align-items: start; }
