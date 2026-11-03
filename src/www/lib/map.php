@@ -284,6 +284,18 @@ return array (
     'initial_reset' => array (
       0 => 'fixes',
     ),
+    'learn_convert' => array (
+      0 => 'conf',
+      1 => 'lists',
+      2 => 'check',
+      3 => 'adapt',
+      4 => 'fixes',
+      5 => 'diag',
+      6 => 'dns',
+      7 => 'dnsx',
+      8 => 'state',
+      9 => 'learn',
+    ),
     'learn_forget' => array (
       0 => 'service',
       1 => 'conf',

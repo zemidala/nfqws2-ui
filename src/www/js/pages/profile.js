@@ -100,6 +100,23 @@ async function viewProfile(content, index, r) {
   };
   const changed = () => JSON.stringify([model, ipsetModel, mode, modeListModel, modeAllModel]) !== orig;
 
+  // circular → learn: the server edits the text in place (comments and line breaks stay), puts the module into the
+  // nfqws2 lua folder and adds --lua-init; then a restart with a check, as after any save
+  async function toLearn() {
+    const isCirc = (t) => /^--lua-desync=circular(:|$)/.test(t);
+    const n = isCustom ? customParts.slice(0, s.part - 1).reduce((a, x) => a + x.filter(isCirc).length, 0) : 0;
+    const shared = !isCustom ? (S.state.conf_profiles || []).filter((x) => x.source?.source === s.source).length : 1;
+    if (!await ask(`Перевести профиль на обучение?\n\nВместо круговой смены стратегий роутер будет запоминать для каждого сайта, какая стратегия его открывает, и брать лучшую. Стратегии профиля не меняются, меняется одно слово: circular → learn.` +
+      (shared > 1 ? `\n\nЭта переменная (${s.source}) общая для ${shared} профилей — обучение включится во всех.` : '') +
+      '\n\nПосле сохранения nfqws2 перезапустится с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, всё вернётся как было.', 'Перевести')) return;
+    const res = await guarded(() => api('learn_convert', { var: s.source, n }), 'Профиль переведён на обучение');
+    if (!res) return;
+    await loadState();
+    await loadConf();
+    await safeRestart();
+    route();
+  }
+
   const head = h('div', {});
   const body = h('div', {});
   const bar = h('div', { class: 'savebar', hidden: true });
@@ -401,7 +418,8 @@ async function viewProfile(content, index, r) {
     h('optgroup', { label: 'Условия' }, h('option', { value: 'payload', text: 'Типы пакетов (--payload)' }), h('option', { value: 'range', text: 'Диапазон пакетов (--out-range)' })));
     return h('div', { class: 'group' }, h('div', { class: 'group-h' }, h('h3', { text: 'Что делает' }),
       orchFn === 'learn' ? h('span', { class: 'sm muted', text: 'learn запоминает для каждого сайта стратегию, которая его открывает' })
-        : hasCircular ? h('span', { class: 'sm muted', text: 'circular перебирает стратегии 1, 2, … при сбоях' }) : h('span', { class: 'sm muted', text: 'шаги выполняются сверху вниз' })),
+        : hasCircular ? h('span', { class: 'row', style: 'gap:8px' }, h('span', { class: 'sm muted', text: 'circular перебирает стратегии 1, 2, … при сбоях' }),
+          btn('Перевести на обучение', () => toLearn(), 'small', null, changed() ? { disabled: true, title: 'Сначала сохраните или отмените свои правки' } : {}), newTag('learn:convert')) : h('span', { class: 'sm muted', text: 'шаги выполняются сверху вниз' })),
     h('div', { class: 'seq' }, items, addStep));
   }
 

@@ -40,6 +40,8 @@ pack() {
 	cp src/www/index.html src/www/app.js src/www/api.php src/www/icon.svg src/www/manifest.json "$W/"
 	cp -R src/www/lib src/www/js src/www/css "$W/"
 	cp src/bin/nfqws-ui-setup src/bin/nfqws-ui "$B/"
+	# the «learn» module: the interface copies it into the nfqws2 lua folder when a profile switches to it
+	mkdir -p "$D$5"; cp src/lua/nfqws-ui.lua "$D$5/"
 	sed -i "s/?v=[0-9A-Za-z.-]*\"/?v=$VERSION-$HASH\"/g" "$W/index.html"
 	sed -i "s/^const UI_VERSION = '[^']*';/const UI_VERSION = '$VERSION';/" "$W/api.php"
 	sed -i "s/^VERSION=.*/VERSION=$VERSION/" "$B/nfqws-ui-setup"
@@ -63,9 +65,9 @@ pack() {
 	( cd "$S" && $TAR --mode=0644 -czf - ./debian-binary ./control.tar.gz ./data.tar.gz ) > "$OUT/$4"
 }
 
-pack openwrt /www/nfqws-ui /usr/sbin "nfqws2-ui_${VERSION}-1_all.ipk"
+pack openwrt /www/nfqws-ui /usr/sbin "nfqws2-ui_${VERSION}-1_all.ipk" /usr/share/nfqws-ui
 # В Entware всё лежит под /opt
-pack entware /opt/share/www/nfqws-ui /opt/sbin "nfqws2-ui_${VERSION}-1_all_entware.ipk"
+pack entware /opt/share/www/nfqws-ui /opt/sbin "nfqws2-ui_${VERSION}-1_all_entware.ipk" /opt/share/nfqws-ui
 
 # Архив файлов — для ручной установки
 ( cd "$STAGE/openwrt/data" && $TAR --mode='u=rwX,go=rX' -czf - . ) > "$OUT/nfqws2-ui_${VERSION}.tar.gz"

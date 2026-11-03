@@ -1430,6 +1430,11 @@ switch ($cmd) {
     learnForget(is_string($in['key'] ?? null) ? $in['key'] : null, is_string($in['host'] ?? null) ? $in['host'] : null);
     respond(learnInfo());
 
+  case 'learn_convert':
+    // the n-th circular of a variable → learn; saved with the usual check and snapshot, the page restarts with a check
+    $text = learnConvert($str('var'), (int)($in['n'] ?? 0));
+    saveConf($text, confRawVars($text), false, 'профиль: перебор стратегий → обучение');
+
   case 'dns_start':
     // own servers come with the start and are kept for the next checks (an empty list clears them)
     if (is_array($in['own'] ?? null)) {

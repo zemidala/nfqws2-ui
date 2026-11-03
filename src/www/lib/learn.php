@@ -77,7 +77,7 @@ function learnInfo(): array
   }
   usort($items, fn($a, $b) => strcmp($a['host'], $b['host']));
   $file = learnFile();
-  return ['items' => $items, 'updated' => $file ? filemtime($file) : null, 'module' => is_file(LUA_DIR . '/nfqws-ui.lua')];
+  return ['items' => $items, 'updated' => $file ? filemtime($file) : null, 'module' => is_file(LUA_DIR . '/nfqws-ui.lua') || is_file(learnShipped())];
 }
 
 // Forget one host of one key, or everything: the module drops it from memory on its next minute; both files lose
@@ -97,6 +97,92 @@ function learnForget(?string $key, ?string $host): void
     $keep = $all ? [] : array_filter(file($f, FILE_IGNORE_NEW_LINES) ?: [], fn($l) => !str_starts_with($l, "$key\t$host\t"));
     file_put_contents($f, $keep ? implode("\n", $keep) . "\n" : '');
   }
+}
+
+// The module ships with the package (outside the nfqws2 folder, which belongs to nfqws2-keenetic) and is copied into
+// the nfqws2 lua folder when a profile switches to learn: nfqws2 keeps starting even if nfqws2-ui is removed later
+function learnShipped(): string
+{
+  return (ROOT ? '/opt/share' : '/usr/share') . '/nfqws-ui/nfqws-ui.lua';
+}
+
+// copy the shipped module into the lua folder if it is missing or older; true — the lua folder has it
+function learnInstall(): bool
+{
+  $src = learnShipped();
+  $dst = LUA_DIR . '/nfqws-ui.lua';
+  if (is_file($src) && (!is_file($dst) || md5_file($src) !== md5_file($dst))) {
+    @copy($src, "$dst.new") && @chmod("$dst.new", 0644) && @rename("$dst.new", $dst);
+  }
+  return is_file($dst);
+}
+
+// Switch the n-th circular of a variable (0-based, counted over the whole variable) to learn. The same args stay —
+// learn takes everything circular takes. Learn has to see the server's answer: --in-range=-s34228 before it, and
+// --payload=all for it alone (the strategies keep the payload types they had). Point edits: the rest of the text,
+// comments and line breaks stay as they were. Then the --lua-init lines it needs, after zapret-auto.lua
+function learnConvert(string $var, int $n): string
+{
+  if (!in_array($var, ARG_VARS, true) || $var === 'NFQWS_BASE_ARGS') {
+    fail('Неверная переменная');
+  }
+  if (!learnInstall()) {
+    fail('Модуль обучения не найден: переустановите nfqws2-ui');
+  }
+  $text = file_get_contents(CONF_FILE);
+  $toks = tokens(confRawVars($text)[$var] ?? '');
+  $at = null;
+  $seen = 0;
+  foreach ($toks as $i => $t) {
+    if (preg_match('/^--lua-desync=circular(:|$)/', $t) && $seen++ === $n) {
+      $at = $i;
+      break;
+    }
+  }
+  if ($at === null) {
+    fail('Перебор стратегий (circular) не найден — обновите страницу');
+  }
+  // what came before it in the same profile: the payload types, a range of incoming packets
+  $payload = null;
+  $range = false;
+  for ($i = $at - 1; $i >= 0 && !isNewArg($toks[$i]); $i--) {
+    if ($payload === null && str_starts_with($toks[$i], '--payload=')) {
+      $payload = substr($toks[$i], 10);
+    }
+    $range = $range || str_starts_with($toks[$i], '--in-range=');
+  }
+  $learn = '--lua-desync=learn' . substr($toks[$at], strlen('--lua-desync=circular'));
+  $seq = array_merge($payload !== null && $payload !== 'all' ? ['--payload=all'] : [], $range ? [] : ['--in-range=-s34228'], [$learn],
+    $payload !== null && $payload !== 'all' ? ["--payload=$payload"] : []);
+  $indent = tokenIndent($text, $var, $at);
+  $text = editTokenInText($text, $var, $at, implode($indent === null ? ' ' : "\n$indent", $seq));
+
+  $base = tokens(confRawVars($text)['NFQWS_BASE_ARGS'] ?? '');
+  $has = fn($f) => (bool)array_filter($base, fn($t) => preg_match('~^--lua-init=@\S*/' . preg_quote($f, '~') . '$~', $t));
+  if (!$has('zapret-auto.lua')) {
+    $text = appendTokenInText($text, 'NFQWS_BASE_ARGS', '--lua-init=@' . LUA_DIR . '/zapret-auto.lua');
+  }
+  if (!$has('nfqws-ui.lua')) {
+    $text = appendTokenInText($text, 'NFQWS_BASE_ARGS', '--lua-init=@' . LUA_DIR . '/nfqws-ui.lua');
+  }
+  return $text;
+}
+
+// the spaces in front of the i-th argument of a variable when it starts its own line; null — it shares a line
+function tokenIndent(string $text, string $var, int $i): ?string
+{
+  if (!preg_match('/^' . preg_quote($var, '/') . '="([^"]*)"/m', $text, $m, PREG_OFFSET_CAPTURE)) {
+    return null;
+  }
+  preg_match_all('/\S+/', preg_replace('/\\\\(?=[ \t]*\r?\n)/', ' ', $m[1][0]), $tm, PREG_OFFSET_CAPTURE);
+  $off = $tm[0][$i][1] ?? null;
+  if ($off === null) {
+    return null;
+  }
+  $before = substr($m[1][0], 0, $off);
+  $nl = strrpos($before, "\n");
+  $lead = $nl === false ? null : substr($before, $nl + 1);
+  return $lead !== null && trim($lead) === '' ? $lead : null;
 }
 
 // cron pass: the fresh /tmp copy goes next to nfqws2.conf (survives a reboot); readable by nfqws2 (user nobody)

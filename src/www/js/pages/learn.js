@@ -78,10 +78,13 @@ async function viewLearn(main) {
     if (!data) return;
     const items = data.items || [];
     if (!items.length) {
+      // profiles that could switch: those with circular
+      const circ = (S.state.conf_profiles || []).filter((p) => (p.desync || []).some((d) => d.fn === 'circular'));
       morphKids(out, [keyed(panel(null, null,
         h('p', { text: 'Пока ничего не выучено.' }),
-        h('p', { class: 'sm muted', text: 'Обучение работает в профилях, где вместо круговой смены стратегий (circular) стоит learn: «--lua-desync=learn:fails=3:time=60» и шаги с «:strategy=1», «:strategy=2»… Нужен файл nfqws-ui.lua в папке lua nfqws2 и строка --lua-init с ним в «Параметрах запуска».' }),
-        !data.module ? notice('warn', 'Модуля обучения на роутере нет', 'Файл nfqws-ui.lua не найден в папке lua nfqws2.') : null), 'empty')]);
+        h('p', { class: 'sm muted', text: 'Обучение работает в профилях, где вместо круговой смены стратегий (circular) стоит learn. Профиль с circular переводится одной кнопкой «Перевести на обучение» на его странице.' }),
+        circ.length ? h('div', { class: 'row' }, circ.map((p) => btn(`#${p.index} «${profName(p)}»`, () => go('#/settings/p' + p.index), 'small', 'chev'))) : null,
+        !data.module ? notice('warn', 'Модуля обучения на роутере нет', 'Файл nfqws-ui.lua не найден — переустановите nfqws2-ui.') : null), 'empty')]);
       return;
     }
     const profiles = [...new Set(items.map((x) => x.profile).filter(Boolean))].map((n) => { const p = prof(n); return `#${n}` + (p ? ` «${profName(p)}»` : ''); });

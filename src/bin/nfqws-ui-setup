@@ -50,6 +50,9 @@ else
 fi
 
 CONF_DIR=${NFQWS_UI_CONF_DIR:-$R/etc/nfqws-ui}
+# the «learn» module ships here; the interface copies it into the nfqws2 lua folder when a profile switches to it
+if [ -n "$R" ]; then SHARE=/opt/share/nfqws-ui; else SHARE=/usr/share/nfqws-ui; fi
+LEARN_LUA=$R/etc/nfqws2/lua/nfqws-ui.lua
 WEB_JSON=$CONF_DIR/web.json
 LDIR=${NFQWS_UI_LIGHTTPD:-$R/etc/lighttpd}
 LCONF=$LDIR/conf.d/90-nfqws-ui.conf
@@ -559,6 +562,10 @@ cron)
 	say "Задания cron $([ "$CRON" = true ] && echo включены || echo выключены)."
 	;;
 apply)
+	# a profile already uses learn: give nfqws2 the module of this version (it takes it at the next restart)
+	if [ -f "$LEARN_LUA" ] && [ -f "$SHARE/nfqws-ui.lua" ] && ! cmp -s "$SHARE/nfqws-ui.lua" "$LEARN_LUA"; then
+		cp "$SHARE/nfqws-ui.lua" "$LEARN_LUA.new" && chmod 644 "$LEARN_LUA.new" && mv "$LEARN_LUA.new" "$LEARN_LUA"
+	fi
 	if [ ! -f "$WEB_JSON" ] && [ "$MANAGED" = true ]; then
 		# Первая установка: если порт по умолчанию занят, берём следующий свободный
 		while port_busy "$PORT" && [ "$PORT" -lt $((DEF_PORT + 20)) ]; do PORT=$((PORT + 1)); done
@@ -653,7 +660,8 @@ uninstall)
 		die "интерфейс установлен пакетом, удаляйте так: apk del nfqws2-ui"
 	fi
 	"$0" remove
-	rm -rf "$WWW" /tmp/nfqws-ui-cache /tmp/nfqws-ui-test /tmp/nfqws-ui-sess /tmp/nfqws-ui-pending.json /tmp/nfqws-ui-login.json
+	# the module copy in the nfqws2 lua folder stays: a profile may still load it
+	rm -rf "$WWW" "$SHARE" /tmp/nfqws-ui-cache /tmp/nfqws-ui-test /tmp/nfqws-ui-sess /tmp/nfqws-ui-pending.json /tmp/nfqws-ui-login.json
 	rm -f "$CONF_DIR/.manual" $SBIN/nfqws-ui-setup $SBIN/nfqws-ui
 	say "nfqws2-ui удалён. Настройки, снимки и история остались в $CONF_DIR, $R/etc/nfqws2/.snapshots, $R/etc/nfqws2/.history"
 	;;
