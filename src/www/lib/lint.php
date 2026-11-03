@@ -368,6 +368,11 @@ function luaCatalog(): array
       $f['file_keys'] = array_keys($fileKeys[$f['file']] ?? []);
     }
     unset($f);
+    // learn (nfqws-ui.lua) calls zapret-auto's detectors and hostkey with its own args, exactly like circular
+    if (isset($funcs['learn'], $funcs['circular'])) {
+      $funcs['learn']['args'] += $funcs['circular']['args'];
+      $funcs['learn']['file_keys'] = array_values(array_unique(array_merge($funcs['learn']['file_keys'], $funcs['circular']['file_keys'])));
+    }
     return ['functions' => $funcs, 'std' => $std, 'globals' => array_values(array_unique($globals)), 'gfuncs' => array_values(array_unique($gfuncs))];
   });
 }
