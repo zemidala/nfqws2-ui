@@ -48,9 +48,10 @@ const portsText = (ports) => [ports.tcp && 'TCP ' + ports.tcp, ports.udp && 'UDP
 // Короткое описание стратегии: для circular — «перебор: N стратегий», иначе функции через «+»
 const strategyText = (p) => {
   const fns = p.desync.map((d) => d.fn);
-  if (fns.includes('circular')) {
+  const orch = fns.includes('circular') ? 'перебор' : fns.includes('learn') ? 'обучение' : null;
+  if (orch) {
     const n = new Set(p.desync.map((d) => (d.params.match(/(?:^|:)strategy=(\d+)/) || [])[1]).filter(Boolean)).size;
-    return n ? `перебор: ${plural(n, 'стратегия', 'стратегии', 'стратегий')}` : 'перебор стратегий';
+    return n ? `${orch}: ${plural(n, 'стратегия', 'стратегии', 'стратегий')}` : orch + ' стратегий';
   }
   return [...new Set(fns)].join(' + ') || 'без стратегии';
 };

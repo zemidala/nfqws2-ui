@@ -439,7 +439,8 @@ function lintConf(array $raw, string $text): array
       if (str_starts_with($t, '--lua-desync=')) {
         $hasDesync = true;
         $fn = explode(':', substr($t, 13))[0];
-        if ($fn === 'circular') {
+        // learn (nfqws-ui.lua) takes the strategy=N steps the same way circular does
+        if ($fn === 'circular' || $fn === 'learn') {
           $inCircular = true;
         }
         if (preg_match('/:strategy=(\d+)/', $t, $m)) {
@@ -460,7 +461,7 @@ function lintConf(array $raw, string $text): array
       $u = array_values(array_unique($strategies));
       sort($u);
       if (!$inCircular) {
-        $add($var, $tok, 'warning', "$label: strategy=N используется без --lua-desync=circular — номера стратегий ни на что не влияют");
+        $add($var, $tok, 'warning', "$label: strategy=N используется без --lua-desync=circular (или learn) — номера стратегий ни на что не влияют");
       } elseif ($u !== range(1, count($u))) {
         $add($var, $tok, 'error', "$label: номера strategy должны идти подряд с 1 (сейчас: " . implode(', ', $u) . ')');
       }
@@ -754,7 +755,7 @@ function lintCircular(string $var, array $toks, array $comment, array &$issues, 
     $parts[count($parts) - 1][$i] = $t;
   }
   foreach ($parts as $part) {
-    if (!array_filter($part, fn($t) => preg_match('/^--lua-desync=circular(:|$)/', $t))) {
+    if (!array_filter($part, fn($t) => preg_match('/^--lua-desync=(circular|learn)(:|$)/', $t))) {
       continue;
     }
     $st = [];   // номер стратегии => [токен => шаг]

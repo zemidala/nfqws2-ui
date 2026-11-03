@@ -177,7 +177,8 @@ function configCandidates(string $proto): array
     }
     $strategies = [];
     foreach ($steps as $t) {
-      if (preg_match('/^--lua-desync=circular(:|$)/', $t)) {
+      // orchestrators: circular and learn (nfqws-ui.lua) only choose among the strategy=N steps
+      if (preg_match('/^--lua-desync=(circular|learn)(:|$)/', $t)) {
         continue;
       }
       $n2 = preg_match('/:strategy=(\d+)/', $t, $m) ? (int)$m[1] : 0;

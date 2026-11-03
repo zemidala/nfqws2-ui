@@ -320,7 +320,10 @@ async function viewProfile(content, index, r) {
   // --- «Что делает» ---
   function groupWhat(oi) {
     const seq = model.seq;
-    const hasCircular = seq.some((x) => x.type === 'desync' && x.fn === 'circular');
+    // learn (nfqws-ui.lua) is an orchestrator over strategy=N steps, like circular
+    const isOrch = (f) => f === 'circular' || f === 'learn';
+    const orchFn = seq.find((x) => x.type === 'desync' && isOrch(x.fn))?.fn;
+    const hasCircular = !!orchFn;
     let dragFrom = null;
     const move = (from, to) => { if (to < 0 || to >= seq.length || from === to) return; const [it] = seq.splice(from, 1); seq.splice(to, 0, it); touch(); draw(); };
     const ctl = (i) => h('div', { class: 'step-ctl' },
@@ -366,7 +369,7 @@ async function viewProfile(content, index, r) {
       // шаг стратегии (lua-desync)
       const fn = S.catalog.lua.functions[it.fn];
       const strat = it.params.find((x) => x.k === 'strategy');
-      const badge = it.fn === 'circular' ? h('span', { class: 'sn o', text: '⟳', title: 'Перебор стратегий' }) : h('span', { class: 'sn', text: strat ? strat.v : ++stratN });
+      const badge = isOrch(it.fn) ? h('span', { class: 'sn o', text: '⟳', title: it.fn === 'learn' ? 'Обучение: выбор стратегии по успеху' : 'Перебор стратегий' }) : h('span', { class: 'sn', text: strat ? strat.v : ++stratN });
       const fnSel = h('select', { class: 'fn-sel', 'data-fk': 'fn-' + i, 'aria-label': 'Функция', onfocus: () => { helpInfo = fnHelp(it.fn); helpIss = oi.get(it); renderHelp(helpBox, helpInfo, helpIss); },
         onchange: (e) => { it.fn = e.target.value; touch(); draw(); } },
         Object.keys(S.catalog.lua.functions).sort().map((f) => h('option', { value: f, text: f, selected: f === it.fn })));
@@ -381,7 +384,7 @@ async function viewProfile(content, index, r) {
         return el;
       }), addParamSelect(it));
       const doc = fn?.doc?.[0] || (fn ? '' : 'нет такой функции в lua-скриптах');
-      return wrapStep(i, it, it.fn === 'circular' ? 'orch' : '', badge, h('div', { class: 'step-main' },
+      return wrapStep(i, it, isOrch(it.fn) ? 'orch' : '', badge, h('div', { class: 'step-main' },
         h('div', { class: 'step-t' }, fnSel, strat && hasCircular ? h('span', { class: 'sm muted', text: `стратегия ${strat.v}` }) : null, h('span', { class: 'sm muted ellipsis', text: doc })),
         params, issueLines(it)));
     });
@@ -393,11 +396,12 @@ async function viewProfile(content, index, r) {
       else seq.push({ type: 'desync', fn: val, params: (S.catalog.lua.functions[val]?.required || []).map((k) => ({ k, v: '' })) });
       touch(); draw();
     } }, h('option', { value: '', text: '+ Добавить шаг…' }),
-    h('optgroup', { label: 'Шаг стратегии' }, ['multisplit', 'multidisorder', 'fake', 'fakedsplit', 'fakeddisorder', 'hostfakesplit', 'circular'].filter((f) => S.catalog.lua.functions[f]).map((f) => h('option', { value: f, text: f + ' — ' + (S.catalog.lua.functions[f].doc[0] || '').slice(0, 60) }))),
+    h('optgroup', { label: 'Шаг стратегии' }, ['multisplit', 'multidisorder', 'fake', 'fakedsplit', 'fakeddisorder', 'hostfakesplit', 'circular', 'learn'].filter((f) => S.catalog.lua.functions[f]).map((f) => h('option', { value: f, text: f + ' — ' + (S.catalog.lua.functions[f].doc[0] || '').slice(0, 60) }))),
     h('optgroup', { label: 'Все функции' }, Object.keys(S.catalog.lua.functions).sort().map((f) => h('option', { value: f, text: f }))),
     h('optgroup', { label: 'Условия' }, h('option', { value: 'payload', text: 'Типы пакетов (--payload)' }), h('option', { value: 'range', text: 'Диапазон пакетов (--out-range)' })));
     return h('div', { class: 'group' }, h('div', { class: 'group-h' }, h('h3', { text: 'Что делает' }),
-      hasCircular ? h('span', { class: 'sm muted', text: 'circular перебирает стратегии 1, 2, … при сбоях' }) : h('span', { class: 'sm muted', text: 'шаги выполняются сверху вниз' })),
+      orchFn === 'learn' ? h('span', { class: 'sm muted', text: 'learn запоминает для каждого сайта стратегию, которая его открывает' })
+        : hasCircular ? h('span', { class: 'sm muted', text: 'circular перебирает стратегии 1, 2, … при сбоях' }) : h('span', { class: 'sm muted', text: 'шаги выполняются сверху вниз' })),
     h('div', { class: 'seq' }, items, addStep));
   }
 
