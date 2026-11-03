@@ -45,7 +45,28 @@
 :root[data-variant="c"] { --radius: 8px; --gap: 12px; --shadow: none; }
 :root[data-variant="c"] main .panel { border-width: 1.5px; border-color: color-mix(in srgb, var(--fg) 18%, var(--surface)); }
 :root[data-variant="c"] .panel-h h2 { border-left: 3px solid var(--accent); padding-left: 10px; }
-:root[data-variant="c"] .btn:not(.primary):not(.ghost) { background: transparent; border-color: var(--accent); color: var(--accent-ink); }
+/* C: the kind of a control shows in its look (local/design/controls.html, variant A). An action is a solid, slightly
+   raised button that sinks by 1 px when pressed; a choice — one of a few («Списком / Текстом») or on/off («Структура»)
+   — sits in a sunken track, the chosen part filled (a dot marks on/off: not by colour alone). The accent frame is left
+   for hover and focus. The chosen fill: the accent itself in the light theme, a darker accent in the dark one — white
+   text on it stays readable (APCA ≥ 75 at 13 px) */
+:root[data-variant="c"] { --c-sel: var(--accent); --c-selfg: var(--accent-fg); --c-track: color-mix(in srgb, var(--fg) 72%, var(--bg)); --c-raise: rgb(0 0 0 / .12); }
+@media (prefers-color-scheme: dark) { :root[data-variant="c"]:not([data-mode="light"]) { --c-sel: color-mix(in srgb, var(--accent) 58%, #000); --c-selfg: #fff; --c-track: color-mix(in srgb, var(--fg) 86%, var(--bg)); --c-raise: rgb(0 0 0 / .35); } }
+:root[data-variant="c"][data-mode="dark"] { --c-sel: color-mix(in srgb, var(--accent) 58%, #000); --c-selfg: #fff; --c-track: color-mix(in srgb, var(--fg) 86%, var(--bg)); --c-raise: rgb(0 0 0 / .35); }
+:root[data-variant="c"] .btn:not(.primary):not(.ghost):not(.tog) { background: var(--soft); border-color: color-mix(in srgb, var(--fg) 16%, var(--surface)); color: var(--fg); box-shadow: 0 1px 0 var(--c-raise); }
+:root[data-variant="c"] .btn:not(.primary):not(.ghost):not(.tog):hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 14%, var(--soft)); border-color: var(--accent); }
+:root[data-variant="c"] .btn.primary { background: var(--c-sel); border-color: var(--c-sel); color: var(--c-selfg); box-shadow: 0 1px 0 var(--c-raise); }
+:root[data-variant="c"] .btn.ghost { color: var(--accent-ink); }
+:root[data-variant="c"] .btn:not(.tog):active:not(:disabled) { transform: translateY(1px); box-shadow: none; }
+:root[data-variant="c"] .seg button { color: var(--c-track); }
+:root[data-variant="c"] .seg button:hover:not(.on) { color: var(--fg); background: var(--soft); }
+:root[data-variant="c"] .seg button.on { background: var(--c-sel); color: var(--c-selfg); box-shadow: none; }
+:root[data-variant="c"] .btn.tog, :root[data-variant="c"] .cfg-tools .btn.tog.on { background: var(--bg); border-color: var(--line); color: var(--c-track); box-shadow: none; }
+:root[data-variant="c"] .btn.tog::before { content: ""; flex: none; width: 8px; height: 8px; border-radius: 50%; background: var(--ctl-line); }
+:root[data-variant="c"] .btn.tog > svg { display: none; }   /* the dot says what the button is; no second picture */
+:root[data-variant="c"] .btn.tog:hover { color: var(--fg); border-color: var(--accent); }
+:root[data-variant="c"] .btn.tog.on { color: var(--fg); }
+:root[data-variant="c"] .btn.tog.on::before { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 :root[data-variant="c"] .tbl th { color: var(--accent-ink); font-weight: 600; border-bottom: 1.5px solid var(--accent); }
 :root[data-variant="c"] .tbl td { border-bottom-style: dashed; }
 /* the menu drawn as a scheme: a line down each group, every page a node on it, the open one an accent node */

@@ -189,8 +189,8 @@ async function paneRaw(content) {
   }, true);
   // after «don't show» elsewhere on the page the editor's notes are checked again (the server leaves hidden ones out)
   S.lintHook = () => { if (ed.ta.isConnected) { relint(ed.ta.value); return true; } S.lintHook = null; return false; };
-  const outlineBtn = btn('Структура', () => { setLook({ nooutline: !getLook().nooutline }); outlineBtn.classList.toggle('on', !getLook().nooutline); }, 'small' + (getLook().nooutline ? '' : ' on'), 'layers',
-    { title: 'Показать или скрыть колонку «Структура» — без неё больше места под текст конфига' });
+  const outlineBtn = btn('Структура', () => { setLook({ nooutline: !getLook().nooutline }); outlineBtn.classList.toggle('on', !getLook().nooutline); outlineBtn.setAttribute('aria-pressed', String(!getLook().nooutline)); }, 'small tog' + (getLook().nooutline ? '' : ' on'), 'layers',
+    { title: 'Показать или скрыть колонку «Структура» — без неё больше места под текст конфига', 'aria-pressed': String(!getLook().nooutline) });
   const tools = h('div', { class: 'cfg-tools' }, outlineBtn, find, findN, counts,
     // меняются только пробелы и переносы; сервер сверяет, что аргументы nfqws2 те же, иначе отказывает
     btn('Оформить', async () => {
