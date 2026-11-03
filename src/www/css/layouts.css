@@ -166,6 +166,38 @@ a.over-row:hover { background: var(--soft); }
   :root:root:root:root .conn-tbl td.c-nfq { grid-column: 1 / -1; }
   :root:root:root:root .conn-tbl td[data-h]::before { content: attr(data-h); display: block; margin-bottom: 2px; font-size: var(--fs-xs); color: var(--muted); }
 }
+/* What the router learned («learn» orchestrator), mockup local/design/learn.html, variant A */
+.learn-tbl th { white-space: nowrap; }
+.learn-tbl td.nm { max-width: 320px; overflow-wrap: anywhere; }
+.learn-tbl td.c-cur { min-width: 220px; overflow-wrap: break-word; }
+.learn-tbl td.c-sure { white-space: nowrap; }
+.lex { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 6px 0 0; vertical-align: middle; }
+.lex svg { width: 14px; height: 14px; }
+.lbar { display: inline-block; width: 70px; height: 6px; border-radius: 3px; background: var(--soft); vertical-align: middle; overflow: hidden; }
+.lbar i { display: block; height: 100%; background: var(--ok); }
+.lbar i.mid { background: var(--warn); } .lbar i.low { background: var(--bad); }
+.learn-tbl tr.lmore > td { background: var(--soft); padding: 8px 12px 12px; }
+.lstrat { display: grid; grid-template-columns: 22px minmax(0, 1fr) auto auto; gap: 4px 10px; align-items: center; font-size: var(--fs-sm); }
+.lstrat .cur { color: var(--accent-ink); font-weight: 600; }
+/* phone: a row is the site and how sure on one line, the strategy under them — long strategy names (tcp_ts,tcp_md5)
+   cannot wrap inside a table cell, and nothing may scroll sideways */
+@media (max-width: 599px) {
+  :root:root:root .learn-tbl thead { display: none; }
+  :root:root:root .scroll > .learn-tbl, :root:root:root .learn-tbl tbody { display: block; width: 100%; min-width: 0; }
+  :root:root:root .learn-tbl tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
+  :root:root:root .learn-tbl td { display: block; padding: 0; border: 0; background: none; }
+  :root:root:root .learn-tbl .hide-narrow { display: none; }
+  :root:root:root .learn-tbl td.nm { grid-column: 1; grid-row: 1; max-width: none; }
+  :root:root:root .learn-tbl td.c-sure { grid-column: 2; grid-row: 1; justify-self: end; }
+  :root:root:root .learn-tbl td.c-cur { grid-column: 1 / -1; grid-row: 2; min-width: 0; padding-left: 20px; overflow-wrap: anywhere; color: var(--muted); }
+  :root:root:root .learn-tbl tr.lmore { display: block; padding: 0 0 10px; }
+  :root:root:root .learn-tbl tr.lmore > td { display: block; padding: 8px 12px 12px; background: var(--soft); }
+  .lbar { width: 44px; }
+  .lstrat { grid-template-columns: 18px minmax(0, 1fr) auto; }
+  .lstrat > .lbar { display: none; }
+  .lstrat .mono { overflow-wrap: anywhere; }
+  .learn-tbl tr.lmore .row > .grow { flex-basis: 100%; }   /* the note under the buttons, not squeezed beside them */
+}
 /* DNS servers page */
 .dns-lead { margin: -4px 0 14px; max-width: 860px; }
 .dns-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }

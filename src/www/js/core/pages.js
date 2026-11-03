@@ -5,10 +5,10 @@
 const PAGE_NEEDS = {
   viewAsn: ['asn'],
   viewDevices: ['devices'],
-  viewDiag: ['about', 'auto', 'backups', 'basics', 'community', 'configs', 'conns', 'diag', 'dns', 'freeze', 'picks', 'profile', 'raw', 'report', 'settings', 'tests'],
+  viewDiag: ['about', 'auto', 'backups', 'basics', 'community', 'configs', 'conns', 'diag', 'dns', 'freeze', 'learn', 'picks', 'profile', 'raw', 'report', 'settings', 'tests'],
   viewLog: ['journal'],
   viewSettings: ['about', 'backups', 'basics', 'profile', 'raw', 'report', 'settings'],
-  viewSite: ['about', 'auto', 'backups', 'basics', 'community', 'configs', 'conns', 'diag', 'dns', 'freeze', 'picks', 'profile', 'raw', 'report', 'settings', 'tests'],
+  viewSite: ['about', 'auto', 'backups', 'basics', 'community', 'configs', 'conns', 'diag', 'dns', 'freeze', 'learn', 'picks', 'profile', 'raw', 'report', 'settings', 'tests'],
   viewSites: ['lists'],
-  viewTests: ['about', 'auto', 'backups', 'basics', 'community', 'configs', 'conns', 'dns', 'freeze', 'picks', 'profile', 'raw', 'report', 'settings', 'tests'],
+  viewTests: ['about', 'auto', 'backups', 'basics', 'community', 'configs', 'conns', 'dns', 'freeze', 'learn', 'picks', 'profile', 'raw', 'report', 'settings', 'tests'],
 };

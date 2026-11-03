@@ -55,7 +55,7 @@ new MutationObserver(() => ddScan()).observe(document.documentElement, { childLi
 
 // On a phone a table of four or more columns shows each row as a card: the column names become labels (data-th,
 // drawn by CSS), so nothing scrolls sideways. Tables with a phone layout of their own are left alone.
-const CARD_SKIP = '.mon-tbl, .conn-tbl, .devs, .cfg-tbl, .dnsx-tbl';
+const CARD_SKIP = '.mon-tbl, .conn-tbl, .devs, .cfg-tbl, .dnsx-tbl, .learn-tbl';
 function cardTable(t) {
   if (t.matches(CARD_SKIP)) return;
   const names = [...t.querySelectorAll(':scope > thead th')].map((th) => th.textContent.trim());

@@ -345,6 +345,7 @@ async function viewTests(main, r, bare = false) {
   if (r.arg === 'freeze') return viewFreeze(main);
   if (r.arg === 'dns') return viewDns(main);
   if (r.arg === 'conns') return viewConns(main);
+  if (r.arg === 'learn') return viewLearn(main);
   if (r.arg === 'configs') return viewCfg(main);
   const tab = ['trace', 'monitor', 'notify'].includes(r.arg) ? r.arg : 'pick';
   if (tab === 'monitor') {
