@@ -284,6 +284,24 @@ return array (
     'initial_reset' => array (
       0 => 'fixes',
     ),
+    'learn_forget' => array (
+      0 => 'service',
+      1 => 'conf',
+      2 => 'lists',
+      3 => 'tests',
+      4 => 'refine',
+      5 => 'state',
+      6 => 'learn',
+    ),
+    'learn_get' => array (
+      0 => 'service',
+      1 => 'conf',
+      2 => 'lists',
+      3 => 'tests',
+      4 => 'refine',
+      5 => 'state',
+      6 => 'learn',
+    ),
     'leftovers' => array (
     ),
     'leftovers_delete' => array (

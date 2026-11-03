@@ -30,3 +30,14 @@ eq(r.ok, 2, 'ok halves'); eq(r.fail, 1, 'fail halves')
 -- single strategy: skip gives back 1
 eq(learn_pick({}, 1, t0, H, 1), 1, 'only one')
 print('ok: choice logic')
+
+-- a saved line reads back the same
+local rec = { sig = learn_hash('1:fake:blob=x|2:multisplit:pos=2'), cur = 2, n = 3, stats = { [1] = { ok = 0, fail = 2.5, t = t0 }, [2] = { ok = 7, fail = 0.25, t = t0 + 5 } } }
+local line = learn_line('learn_1_1', 'rutracker.org', rec)
+local back = learn_parse(line)
+eq(back.key, 'learn_1_1', 'key'); eq(back.host, 'rutracker.org', 'host'); eq(back.sig, rec.sig, 'sig')
+eq(back.cur, 2, 'cur'); eq(back.n, 3, 'n'); eq(back.stats[2].ok, 7, 'ok'); eq(back.stats[1].fail, 2.5, 'fail'); eq(back.stats[3], nil, 'untried stays empty')
+eq(learn_parse('garbage'), nil, 'a broken line is skipped')
+-- the signature changes with any argument
+if learn_hash('1:fake:repeats=4') == learn_hash('1:fake:repeats=5') then error('hash does not see args') end
+print('ok: memory file format')

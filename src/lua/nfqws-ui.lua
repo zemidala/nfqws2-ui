@@ -61,9 +61,18 @@ function learn_count(stats, i, ok, now, half)
 	if ok then rec.ok = rec.ok + 1 else rec.fail = rec.fail + 1 end
 end
 
--- how many strategies the plan has (strategy=1..N without gaps, as circular requires)
+-- a short hash of a string (djb2, 32 bits) — Lua 5.1 has no bit operators, arithmetic is enough
+function learn_hash(s)
+	local h = 5381
+	for i = 1, #s do h = (h * 33 + s:byte(i)) % 4294967296 end
+	return string.format("%08x", h)
+end
+
+-- how many strategies the plan has (strategy=1..N without gaps, as circular requires) and their signature: the
+-- functions and args of every strategy. A saved record is used only while the signature is the same — after the
+-- profile changed, «strategy 2» may be another thing, and its old score must not carry over
 local function learn_strategies(desync)
-	local uniq, n = {}, 0
+	local uniq, parts, n = {}, {}, 0
 	for _, instance in pairs(desync.plan) do
 		local s = tonumber(instance.arg.strategy)
 		if instance.arg.strategy then
@@ -71,13 +80,126 @@ local function learn_strategies(desync)
 				error("learn: strategy number '" .. tostring(instance.arg.strategy) .. "' is invalid")
 			end
 			uniq[s] = true
+			local args = {}
+			for k, v in pairs(instance.arg) do
+				if k ~= "strategy" then args[#args + 1] = tostring(k) .. "=" .. tostring(v) end
+			end
+			table.sort(args)
+			parts[#parts + 1] = s .. ":" .. tostring(instance.func) .. ":" .. table.concat(args, ":")
 		end
 	end
 	for _ in pairs(uniq) do n = n + 1 end
 	if n ~= #uniq then
 		error("learn: strategy numbers must start from 1 and increment. gaps are not allowed.")
 	end
-	return n
+	table.sort(parts)
+	return n, learn_hash(table.concat(parts, "|"))
+end
+
+-- ---------- memory on disk ----------
+-- nfqws2 runs as nobody: it writes only to /tmp. The interface (root) copies the file next to nfqws2.conf on every
+-- cron pass, so what was learned survives a reboot; at start the fresher /tmp copy wins.
+-- A line: key <TAB> host <TAB> signature <TAB> current <TAB> count <TAB> i,ok,fail,time;i,ok,fail,time…
+LEARN_FILE = "/tmp/nfqws2-learn.txt"
+LEARN_KEEP = { "/tmp/nfqws2-learn.txt", "/etc/nfqws2/learn.txt", "/opt/etc/nfqws2/learn.txt" }
+-- the interface asks to forget: a line «key <TAB> host» or «*» for everything (the file is made writable for nobody)
+LEARN_FORGET = "/tmp/nfqws2-learn.forget"
+LEARN_SAVE_MS = 60000
+
+-- parse one saved line into { key, host, sig, cur, n, stats }
+function learn_parse(line)
+	local key, host, sig, cur, n, list = line:match("^([^\t]+)\t([^\t]+)\t([^\t]+)\t(%d+)\t(%d+)\t(.*)$")
+	if not key then return nil end
+	local stats = {}
+	for i, ok, fail, t in list:gmatch("(%d+),([%d.]+),([%d.]+),(%d+)") do
+		stats[tonumber(i)] = { ok = tonumber(ok), fail = tonumber(fail), t = tonumber(t) }
+	end
+	return { key = key, host = host, sig = sig, cur = tonumber(cur), n = tonumber(n), stats = stats }
+end
+
+-- one record as a line (the interface reads the same format)
+function learn_line(key, host, rec)
+	local parts = {}
+	for i = 1, rec.n do
+		local s = rec.stats[i]
+		if s then parts[#parts + 1] = string.format("%d,%.3f,%.3f,%d", i, s.ok, s.fail, s.t) end
+	end
+	return table.concat({ key, host, rec.sig, rec.cur or 1, rec.n, table.concat(parts, ";") }, "\t")
+end
+
+-- saved records, by key and host: read once, taken over by a host the first time learn meets it
+local function learn_load()
+	if LEARN_SAVED then return end
+	LEARN_SAVED = {}
+	for _, path in ipairs(LEARN_KEEP) do
+		local f = io.open(path, "r")
+		if f then
+			for line in f:lines() do
+				local r = learn_parse(line)
+				if r then
+					LEARN_SAVED[r.key] = LEARN_SAVED[r.key] or {}
+					LEARN_SAVED[r.key][r.host] = r
+				end
+			end
+			f:close()
+			DLOG("learn: loaded " .. path)
+			return
+		end
+	end
+end
+
+-- apply «forget» from the interface, then write everything learned (to a temp file, then rename — never half a file)
+function learn_save_timer()
+	local f = io.open(LEARN_FORGET, "r")
+	if f then
+		for line in f:lines() do
+			local key, host = line:match("^([^\t]+)\t(.+)$")
+			for k, hosts in pairs(autostate or {}) do
+				for h, rec in pairs(hosts) do
+					if rec.learn and (line == "*" or (k == key and h == host)) then hosts[h] = nil end
+				end
+			end
+			for k, hosts in pairs(LEARN_SAVED or {}) do
+				for h in pairs(hosts) do
+					if line == "*" or (k == key and h == host) then hosts[h] = nil end
+				end
+			end
+		end
+		f:close()
+		local w = io.open(LEARN_FORGET, "w")   -- emptied, not removed: /tmp is sticky and the file is root's
+		if w then w:close() end
+	end
+	local lines = {}
+	for key, hosts in pairs(autostate or {}) do
+		for host, rec in pairs(hosts) do
+			if rec.learn then lines[#lines + 1] = learn_line(key, host, rec) end
+		end
+	end
+	-- saved records nobody met since the start are kept as they were
+	for key, hosts in pairs(LEARN_SAVED or {}) do
+		for host, r in pairs(hosts) do
+			if not (autostate and autostate[key] and autostate[key][host] and autostate[key][host].learn) then
+				lines[#lines + 1] = learn_line(key, host, r)
+			end
+		end
+	end
+	table.sort(lines)
+	local tmp = LEARN_FILE .. ".new"
+	local w = io.open(tmp, "w")
+	if not w then
+		DLOG_ERR("learn: cannot write " .. tmp)
+		return
+	end
+	w:write(table.concat(lines, "\n"), #lines > 0 and "\n" or "")
+	w:close()
+	os.rename(tmp, LEARN_FILE)
+end
+
+-- the key and host a record is stored under — the same ones automate_host_record uses
+local function learn_keys(desync)
+	local key = (desync.arg.key and #desync.arg.key > 0) and desync.arg.key or desync.func_instance
+	local hkf = desync.arg.hostkey and _G[desync.arg.hostkey] or standard_hostkey
+	return key, hkf(desync)
 end
 
 function learn(ctx, desync)
@@ -93,12 +215,27 @@ function learn(ctx, desync)
 		DLOG("learn: passing with no tampering")
 		return
 	end
+	if not LEARN_TIMER then
+		-- every minute: apply «forget», write the file (a repeating timer, not oneshot)
+		LEARN_TIMER = true
+		timer_set("learn_save", "learn_save_timer", LEARN_SAVE_MS, false)
+	end
 	if not hrec.n then
-		hrec.n = learn_strategies(desync)
+		hrec.n, hrec.sig = learn_strategies(desync)
 		if hrec.n == 0 then
 			error("learn: add strategy=N tag argument to each following instance ! N must start from 1 and increment")
 		end
 		hrec.stats = {}
+		hrec.learn = true
+		-- what was learned before (another start of nfqws2), if the strategies are still the same
+		learn_load()
+		local key, host = learn_keys(desync)
+		local saved = LEARN_SAVED[key] and LEARN_SAVED[key][host]
+		if saved and saved.sig == hrec.sig and saved.n == hrec.n then
+			hrec.stats = saved.stats
+			hrec.cur = saved.cur
+			DLOG("learn: restored " .. key .. " " .. host)
+		end
 	end
 	local half = tonumber(desync.arg.half) or LEARN_HALF
 	local now = os.time()
