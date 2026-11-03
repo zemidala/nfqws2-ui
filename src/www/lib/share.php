@@ -7,9 +7,9 @@ defined('API_FILE') || exit;
 // branch, the base's Action checks it. A strategy from one router waits; a second router makes it live.
 // What goes: provider AS, protocol, strategy, the site's network (AS); the site's name only if it is in the base's
 // known.txt (widely known sites). This installation's random number goes to the relay only, the base sees a hash.
-// Empty relay address — the relay is not set up yet: «Поделиться» opens the GitHub form, as before.
+// The relay does not answer — «Поделиться» offers the GitHub form, as before.
 // /tmp/nfqws-ui-relay (root only) — another address for a check before a release: a test relay or a local one
-define('COMMUNITY_RELAY', is_file('/tmp/nfqws-ui-relay') ? rtrim(trim((string)file_get_contents('/tmp/nfqws-ui-relay')), '/') : '');
+define('COMMUNITY_RELAY', is_file('/tmp/nfqws-ui-relay') ? rtrim(trim((string)file_get_contents('/tmp/nfqws-ui-relay')), '/') : 'https://nfqws2-strategies.zemidala.workers.dev');
 define('SHARE_STATE', UI_CONF_DIR . '/share.json');   // queue for «help the base», first-seen days, the last send
 const SHARE_KNOWN_FILE = '/tmp/nfqws-ui-known.json';
 const SHARE_STATS_FILE = '/tmp/nfqws-ui-share-stats.json';
