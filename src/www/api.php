@@ -786,7 +786,7 @@ switch ($cmd) {
       flock($diagLock, LOCK_UN);
       fclose($diagLock);
     }
-    $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : ['config', 'std'], ['config', 'std', 'hist', 'other', 'community', 'ext', 'full']));
+    $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : ['config', 'std'], ['config', 'ports', 'std', 'hist', 'other', 'community', 'ext', 'full']));
     $own = array_values(array_filter(is_array($in['steps'] ?? null) ? $in['steps'] : [], fn($t) => is_string($t) && preg_match('/^--lua-desync=[^\s"`$\\\\]+$/', $t)));
     // свои стратегии из формы подбора: до OWN_MAX штук, у каждой — только шаги --lua-desync
     $ownList = $cmd === 'test_start' ? ownFromRequest($in['own'] ?? null) : [];
@@ -824,7 +824,7 @@ switch ($cmd) {
       }
       $list = ['name' => basename($path), 'path' => $path];
     }
-    $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : [], ['config', 'std', 'hist', 'community']));
+    $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : [], ['config', 'ports', 'std', 'hist', 'community']));
     $ownList = ownFromRequest($in['own'] ?? null);   // own strategies alone are a valid run
     curlRequire();
     testLaunch(['type' => 'multi', 'host' => $list ? $list['name'] : 'сайтов: ' . count($hosts), 'hosts' => $hosts, 'list' => $list,
@@ -1006,7 +1006,7 @@ switch ($cmd) {
 
   case 'test_candidates':
     $proto = ($in['proto'] ?? '') === 'http' ? 'http' : 'https';
-    respond(['config' => configCandidates($proto), 'std' => array_map(fn($x) => ['name' => $x[0], 'steps' => $x[1]], $proto === 'http' ? STD_HTTP : STD_TLS),
+    respond(['config' => configCandidates($proto, !empty($in['ports'])), 'std' => array_map(fn($x) => ['name' => $x[0], 'steps' => $x[1]], $proto === 'http' ? STD_HTTP : STD_TLS),
       'catalog' => ['ext' => count(catalogCandidates('ext', $proto === 'http')), 'full' => count(catalogCandidates('full', $proto === 'http'))]]);
 
   case 'tests_history':
@@ -1596,6 +1596,9 @@ switch ($cmd) {
         fail('Недопустимый срок');
       }
       $s['session'] = (int)$in['session'];
+    }
+    if (isset($in['restart_check'])) {
+      $s['restart_check'] = (bool)$in['restart_check'];
     }
     saveUiSettings($s);
     respond($s);

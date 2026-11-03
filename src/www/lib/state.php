@@ -267,7 +267,7 @@ function state(): array
     'subs' => uiSettings()['subs'],
     'ui' => (function () use ($seen) {
       $w = uiWeb();
-      return ['version' => UI_VERSION, 'seen' => $seen, 'conf_file' => CONF_FILE, 'https_port' => $w['https_port'], 'legacy_port' => $w['legacy_port'], 'auth' => authEnabled(), 'session' => sessionLife(),
+      return ['version' => UI_VERSION, 'seen' => $seen, 'conf_file' => CONF_FILE, 'https_port' => $w['https_port'], 'legacy_port' => $w['legacy_port'], 'auth' => authEnabled(), 'session' => sessionLife(), 'restart_check' => uiSettings()['restart_check'] !== false,
         'provider' => uiSettings()['provider'], 'platform' => ROOT ? 'Keenetic' : 'OpenWrt', 'repo' => REPO_URL, 'update' => updateInfo() + ['running' => updateRunning()]];
     })(),
     'undo' => (function () {

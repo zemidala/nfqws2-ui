@@ -20,6 +20,7 @@ function uiSettings(): array
     'notify' => ['tg_token' => '', 'tg_chat' => '', 'via' => '', 'iface' => '', 'proxy' => ''],
     'auto' => ['enabled' => false, 'apply' => false, 'fails' => 2, 'pause' => 12],
     'session' => 604800,   // сколько не выходить из интерфейса без действий, секунды: см. SESSION_LIVES
+    'restart_check' => true,   // «Перезапустить» checks the sites and rolls back on failure; off — a plain restart
     'provider' => '',
     'provider_asn' => 0,   // номер AS провайдера: по нему берутся стратегии сообщества
     'seen' => null,        // метки «новое»: см. seenInfo()

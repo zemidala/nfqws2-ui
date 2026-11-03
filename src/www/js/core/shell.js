@@ -69,6 +69,8 @@ const FEATURES = [
   ['auto:pause', '1.31.0', '«Автоподбор»: своя пауза между попытками — от 1 до 168 часов'],
   ['lists:full', '1.31.0', '«Списки»: список во весь экран, выход по Esc'],
   ['dns:btn', '1.31.0', '«DNS-серверы»: «Проверить» — под полем своих серверов'],
+  ['basic:restart', '1.32.0', '«Основное»: «После перезапуска проверять сайты» можно выключить — тогда перезапуск сразу, без проверки и отката'],
+  ['pick:ports', '1.32.0', '«Подбор стратегии»: стратегии и из профилей для других портов — без правки filter-tcp'],
   ['look:kinds', '1.31.0', 'Стиль C: действие, выбор и вкл/выкл различаются видом — кнопка плотная, выбор в утопленной дорожке'],
   ['look:pins', '1.31.0', 'Меню: звёздочка закрепляет пункт в группе «Закреплённые» под «Обзором»; порядок — в «Оформлении»'],
   ['mon:ivl', '1.30.0', '«Мониторинг»: свой интервал проверки — в минутах или часах'],
@@ -366,7 +368,7 @@ function updateChrome() {
   const busy = pendingActive();
   document.getElementById('svc-ctl').replaceChildren(
     st.running
-      ? [svcBtn(h('span', { class: 'ctl-label', text: 'Перезапустить' }), 'restart', safeRestart, 'small', 'power', { title: 'Перезапустить nfqws2 с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, изменения откатятся сами', 'aria-label': 'Перезапустить', disabled: busy }),
+      ? [svcBtn(h('span', { class: 'ctl-label', text: 'Перезапустить' }), 'restart', safeRestart, 'small', 'power', { title: restartTip(), 'aria-label': 'Перезапустить', disabled: busy }),
         svcBtn(h('span', { class: 'ctl-label', text: 'Остановить' }), 'stop', () => service('stop'), 'small danger', 'stop', { title: 'Остановить nfqws2 — обход блокировок перестанет работать', 'aria-label': 'Остановить', disabled: busy })]
       : svcBtn(h('span', { class: 'ctl-label', text: 'Запустить' }), 'start', () => service('start'), 'small primary', 'play', { title: 'Запустить nfqws2', 'aria-label': 'Запустить' }));
   document.getElementById('ver').textContent = st.version ? 'v' + st.version : '';
@@ -387,7 +389,7 @@ function updateChrome() {
   document.getElementById('banner').replaceChildren(
     need ? h('div', { class: 'banner' }, h('div', { class: 'banner-in' },
       h('span', { text: 'Конфиг изменён после запуска — изменения вступят в силу после перезапуска.', title: (st.restart_why || []).join('; ') }),
-      btn('Перезапустить с проверкой', safeRestart, 'warn small', 'refresh'))) : []);
+      btn(restartLabel(), safeRestart, 'warn small', 'refresh'))) : []);
   // Плашка обновления — отдельно: #banner на широком экране скрыт (там «нужен перезапуск» показывает колонка слева)
   document.getElementById('upd-banner').replaceChildren(
     u?.available && !updateSkipped(u.latest) ? h('div', { class: 'banner info' }, h('div', { class: 'banner-in' },
@@ -457,7 +459,15 @@ function svcBtn(label, action, onclick, cls, ic, attrs = {}) {
   return btn(label, onclick, cls + (on ? ' busy' : ''), on ? 'refresh' : ic, { ...attrs, disabled: attrs.disabled || !!S.svcAction, 'aria-busy': on ? 'true' : null });
 }
 
+// «Основное» → «После перезапуска проверять сайты» (on by default); off — a plain restart: no check, no rollback
+const restartChecks = () => S.state?.ui?.restart_check !== false;
+const restartTip = () => restartChecks()
+  ? 'Перезапуск с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, изменения откатятся сами'
+  : 'Перезапуск без проверки сайтов и без отката — так выбрано в «Система → Основное»';
+const restartLabel = () => restartChecks() ? 'Перезапустить с проверкой' : 'Перезапустить';
+
 async function safeRestart() {
+  if (!restartChecks()) return service('restart');
   await svcBusy('restart', async () => {
     const r = await guarded(() => api('safe_restart', { minutes: 3 }));
     if (!r) return;

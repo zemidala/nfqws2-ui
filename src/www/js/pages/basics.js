@@ -33,7 +33,28 @@ async function paneBasic(content) {
         h('select', { class: 'select', id: 'f-mode', onchange: (e) => { vals.NFQWS_EXTRA_ARGS = e.target.value; refresh(); } }, MODES.map(([val, t]) => h('option', { value: val, text: t, selected: vals.NFQWS_EXTRA_ARGS === val }))), hints('NFQWS_EXTRA_ARGS')),
       h('div', { class: 'frow' }, input('TCP_PORTS')), h('div', { class: 'frow' }, input('UDP_PORTS')),
       h('div', { class: 'frow' }, toggle('IPV6_ENABLED')), h('div', { class: 'frow' }, toggle('LOG_LEVEL'), logSizeHint())),
+    restartPanel(),
     bar);
+}
+
+// «После перезапуска проверять сайты»: an interface setting, saved at once (not a config variable — no save bar)
+function restartPanel() {
+  const on = S.state.ui?.restart_check !== false;
+  const note = h('span', { class: 'sm muted' });
+  const say = (v) => note.replaceChildren(v
+    ? '«Перезапустить» проверяет сайты из мониторинга и ждёт подтверждения 3 минуты: если сайты перестали открываться или вы не подтвердили, изменения откатятся сами.'
+    : h('span', { class: 'status-warn', text: 'Без проверки «Перезапустить» сразу перезапускает nfqws2. Отката нет: если новый конфиг сломает обход, сайты перестанут открываться, пока вы сами не вернёте прошлый снимок.' }));
+  say(on);
+  return h('section', { class: 'panel' },
+    h('label', { class: 'chk' }, h('input', { type: 'checkbox', id: 'f-restart-check', checked: on, onchange: async (e) => {
+      const v = e.target.checked;
+      if (!await guarded(() => api('settings_set', { restart_check: v }), 'Сохранено')) { e.target.checked = !v; return; }
+      S.state.ui.restart_check = v;
+      say(v);
+      updateChrome();
+      updateSide();
+    } }),
+      h('span', {}, h('b', { text: 'После перезапуска проверять сайты' }), ' ', newTag('basic:restart'), h('br'), note)));
 }
 
 // Сколько сейчас занимают журналы nfqws2 — подсказка у галочки «Отладочный журнал»

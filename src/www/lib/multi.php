@@ -27,7 +27,7 @@ function multiCandidates(array $job, array $hosts, string $proto, array &$status
     $add(['name' => strategyName($st), 'from' => 'своя стратегия', 'steps' => $st, 'own' => true]);
   }
   if (in_array('config', $job['sets'], true)) {
-    array_map($add, configCandidates($proto));
+    array_map($add, configCandidates($proto, in_array('ports', $job['sets'], true)));
   }
   if (in_array('std', $job['sets'], true)) {
     foreach ($http ? STD_HTTP : STD_TLS as [$name, $steps]) {

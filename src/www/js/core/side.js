@@ -141,13 +141,13 @@ function renderSideService(el) {
     // restart / stop live in the top bar; here only where the bar has none of them — «Вкладки» on a wide screen
     layout() !== 'tabs' || !isWide() ? null : h('div', { class: 'svc-buttons' },
       st.running
-        ? [svcBtn('Перезапустить', 'restart', safeRestart, 'small', 'power', { title: 'Перезапуск с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, изменения откатятся сами', disabled: pendingActive() }),
+        ? [svcBtn('Перезапустить', 'restart', safeRestart, 'small', 'power', { title: restartTip(), disabled: pendingActive() }),
           svcBtn('Остановить', 'stop', () => service('stop'), 'small danger', 'stop', { title: 'Остановить nfqws2 — обход блокировок перестанет работать', disabled: pendingActive() })]
         : svcBtn('Запустить', 'start', () => service('start'), 'small primary', 'play')),
     h('p', { class: 'muted sm num', text: [st.version && 'nfqws2 v' + st.version, st.running && st.process.started && 'запущен ' + fmtAgo(st.now - st.process.started), st.running && st.process.rss_kb && (st.process.rss_kb / 1024).toFixed(1).replace('.', ',') + ' МБ'].filter(Boolean).join(' · ') }),
     !st.running && st.stop ? stopNote(st.stop) : null,
     need && !pendingActive() ? notice('warn', 'Нужен перезапуск', 'Конфиг изменён после запуска nfqws2. После перезапуска интерфейс проверит сайты и откатит изменения, если вы их не подтвердите.'
-      + (st.restart_why?.length ? ' Что отличается: ' + st.restart_why.join('; ') + '.' : ''), btn('Перезапустить с проверкой', safeRestart, 'small warn')) : null,
+      + (st.restart_why?.length ? ' Что отличается: ' + st.restart_why.join('; ') + '.' : ''), btn(restartLabel(), safeRestart, 'small warn')) : null,
     st.rollback?.files.length && !pendingActive() ? h('div', { class: 'row sm' },
       h('span', { class: 'muted', text: `С ${fmtDate(st.rollback.since)} изменено: ${st.rollback.files.join(', ')}` }),
       btn('Вернуть рабочее состояние', rollbackToWorking, 'small ghost', 'history', { title: 'Вернуть файлы к моменту последнего запуска или подтверждения и перезапустить nfqws2' })) : null);
@@ -273,7 +273,7 @@ function problemItems() {
   }
   if (st.running && st.pid_lost) {
     items.push({ level: 'error', title: 'nfqws2 не перезапускается', text: `Скрипт запуска nfqws2 не видит работающий процесс (PID ${st.process?.pid}): его файл PID с ним не совпадает. Так бывает, если при перезапуске рядом работал ещё один nfqws2. Пока это так, «Перезапустить» и restart в консоли его не трогают — новый конфиг не применяется. Кнопка остановит процесс сама и запустит сервис заново.`,
-      href: PAGES.log[0], fix: btn('Перезапустить', safeRestart, 'small', 'refresh', { title: 'Остановить работающий nfqws2 и запустить заново, с проверкой сайтов и откатом' }) });
+      href: PAGES.log[0], fix: btn('Перезапустить', safeRestart, 'small', 'refresh', { title: restartTip() }) });
   }
   if (st.rivals?.length) {
     items.push({ level: 'warning', title: 'Работает другой обходчик', text: `${st.rivals.join(', ')} — он правит те же пакеты, что и nfqws2: стратегии мешают друг другу, результаты подбора ненадёжны. Оставьте что-то одно.`, href: PAGES.log[0] });

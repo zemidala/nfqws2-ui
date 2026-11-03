@@ -364,6 +364,11 @@ async function viewTests(main, r, bare = false) {
   const quicNote = h('div', { class: 'frow', hidden: true }, h('span', { class: 'lbl', text: 'QUIC' }), h('div', { class: 'row' },
     h('span', { class: 'sm muted', text: 'Проверка — настоящим первым пакетом HTTP/3 на имя сайта: ответил сервер — QUIC проходит. Каталог zapret2, уточнение и подбор для нескольких сайтов рассчитаны на TLS и здесь не участвуют. Обычно до минуты.' })));
   const setCfg = h('input', { type: 'checkbox', id: 't-cfg', checked: true });
+  // NFQ-L231: also the strategies of profiles for other ports (2053, 8443…) — tried on this site's 443/80
+  const setPorts = h('input', { type: 'checkbox', id: 't-ports' });
+  const portsLbl = h('label', { class: 'chk', title: 'Профили, у которых в --filter-tcp нет 443 (для HTTP — 80): их стратегии тоже пробуются на этом сайте. Конфиг не меняется' },
+    setPorts, 'и из профилей для других портов', newTag('pick:ports'));
+  setCfg.addEventListener('change', () => { setPorts.disabled = !setCfg.checked; });
   const setStd = h('input', { type: 'checkbox', id: 't-std', checked: true });
   const setHist = h('input', { type: 'checkbox', id: 't-hist', checked: true });
   const setComm = h('input', { type: 'checkbox', id: 't-comm', checked: true });
@@ -446,6 +451,7 @@ async function viewTests(main, r, bare = false) {
     multiRow.hidden = !multi;
     ownRow.hidden = multi && isQuic();
     tlsRow.hidden = proto.value !== 'https';
+    portsLbl.hidden = isQuic();
     oneRows.forEach((el) => { el.hidden = multi || isQuic(); });
     quicNote.hidden = !isQuic() || multi;
     if (multi && !mHosts.value) fillMulti();
@@ -458,7 +464,7 @@ async function viewTests(main, r, bare = false) {
 
   async function start() {
     const cmd = tab === 'trace' ? 'trace_start' : 'test_start';
-    const sets = [setCfg.checked && 'config', setStd.checked && 'std', setHist.checked && 'hist', setHist.checked && 'other', setComm.checked && 'community', catSel.value].filter(Boolean);
+    const sets = [setCfg.checked && 'config', setCfg.checked && setPorts.checked && !isQuic() && 'ports', setStd.checked && 'std', setHist.checked && 'hist', setHist.checked && 'other', setComm.checked && 'community', catSel.value].filter(Boolean);
     const single = tab === 'pick' && mode.value !== 'multi';
     if (tab !== 'trace' && !sets.length && !(tab === 'pick' && ownTa.value.trim())) { toast('Выберите, что пробовать', { err: true }); return; }
     if (tab === 'pick' && mode.value === 'multi') {
@@ -466,7 +472,7 @@ async function viewTests(main, r, bare = false) {
       const hosts = mHosts.value.split(/[\s,]+/).filter(Boolean);
       const mOwn = await ownStrategies();
       if (!mOwn) return;
-      const mSets = sets.filter((x) => ['config', 'std', 'hist', 'community'].includes(x));
+      const mSets = sets.filter((x) => ['config', 'ports', 'std', 'hist', 'community'].includes(x));
       if (!mSets.length && !mOwn.length) { toast('Выберите, что пробовать: каталог zapret2 в подборе для нескольких сайтов не участвует', { err: true }); return; }
       if (!await guarded(() => api('multi_start', { hosts, list: mList.value, proto: proto.value, sets: mSets, own: mOwn, repeats: Number(repeats.value), tls12: proto.value === 'https' && tls12.checked }))) return;
       poll();
@@ -920,7 +926,7 @@ async function viewTests(main, r, bare = false) {
       h('div', { class: 'frow' }, hostLbl, h('div', { class: 'row' }, host, proto, tab === 'pick' ? newTag('pick:quic') : newTag('trace:quic'))),
       tab === 'pick' ? [multiRow, quicNote,
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Что пробовать' }), h('div', { class: 'row' },
-          h('label', { class: 'chk' }, setCfg, 'стратегии из вашего конфига'), h('label', { class: 'chk' }, setStd, 'стандартный набор'),
+          h('label', { class: 'chk' }, setCfg, 'стратегии из вашего конфига'), portsLbl, h('label', { class: 'chk' }, setStd, 'стандартный набор'),
           h('label', { class: 'chk', title: 'Стратегии из истории подборов: сначала работавшие для этого сайта, затем до пяти помогавших другим сайтам' }, setHist, 'что работало раньше'),
           h('label', { class: 'chk', title: 'До восьми стратегий, которые сработали у абонентов вашего провайдера (база на GitHub, раз в сутки). Сначала — открывавшие этот сайт или его сеть.' }, setComm, 'стратегии сообщества', newTag('pick:community')))),
         ownRow,

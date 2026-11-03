@@ -148,7 +148,9 @@ function catalogCandidates(string $level, bool $http): array
 }
 
 // Стратегии из конфига: шаги профилей, которые могут обработать это соединение; circular раскладывается на стратегии
-function configCandidates(string $proto): array
+// $anyPort: also profiles of the same protocol for other ports (2053, 8443, a game's port) — the probe still goes to
+// 443/80, their strategies are tried on it (NFQ-L231); the label names the profile's own ports
+function configCandidates(string $proto, bool $anyPort = false): array
 {
   $quic = $proto === 'quic';
   $wantPayload = $proto === 'http' ? 'http_req' : ($quic ? 'quic_initial' : 'tls_client_hello');
@@ -156,7 +158,13 @@ function configCandidates(string $proto): array
   $out = [];
   foreach (expectedProfiles(confValues()) as $n => $e) {
     $p = buildProfile($n + 1, $e['tokens']);
-    if (!inRanges($port, protoPorts($p)[$quic ? 'udp' : 'tcp'])) {
+    $ports = protoPorts($p)[$quic ? 'udp' : 'tcp'];
+    $other = !inRanges($port, $ports);
+    if ($other && (!$anyPort || $quic || !$ports)) {
+      continue;
+    }
+    // another port: only a profile for this protocol — its --filter-l7 (if any) names tls or http
+    if ($other && ($l7 = current(preg_grep('/^--filter-l7=/', $e['tokens']))) && !in_array($proto === 'http' ? 'http' : 'tls', explode(',', substr($l7, 12)), true)) {
       continue;
     }
     // UDP-профиль под другой протокол (discord, stun, wireguard) к QUIC не относится
@@ -187,7 +195,7 @@ function configCandidates(string $proto): array
     ksort($strategies);
     foreach ($strategies as $sn => $st) {
       $key = implode(' ', $st);
-      $from = '#' . ($n + 1) . ($sn ? " стратегия $sn" : '');
+      $from = '#' . ($n + 1) . ($sn ? " стратегия $sn" : '') . ($other ? ' (порты ' . implode(',', array_map(fn($r) => $r[0] === $r[1] ? $r[0] : "$r[0]-$r[1]", $ports)) . ')' : '');
       if (isset($out[$key])) {
         // одна и та же стратегия в нескольких профилях (общая переменная) — тестируем один раз
         $out[$key]['from'] .= ', ' . $from;

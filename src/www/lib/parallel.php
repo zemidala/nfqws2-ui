@@ -369,7 +369,7 @@ function testJob(): void
   $probe = fn() => $quic ? quicProbe($job['host'], $qip, true) + ['code' => 0] : curlProbe($job['host'], $http);
   $cands = [];
   if (in_array('config', $job['sets'], true)) {
-    $cands = array_merge($cands, configCandidates($status['proto']));
+    $cands = array_merge($cands, configCandidates($status['proto'], in_array('ports', $job['sets'], true)));
   }
   if (in_array('std', $job['sets'], true)) {
     foreach ($http ? STD_HTTP : ($quic ? STD_QUIC : STD_TLS) as [$name, $steps]) {
