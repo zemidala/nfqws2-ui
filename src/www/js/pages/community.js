@@ -18,9 +18,16 @@ function shareBtn(x, s, labelled = false) {
     confirm: ['Подтвердить', 'ok', 'Стратегия из базы сообщества сработала и у вас — подтвердите, это поднимет её для других'],
     fail: ['Не сработала', 'bad', 'Стратегия из базы сообщества у вас не открыла сайт — отметьте, роутеры будут пробовать её позже других'],
   }[mode];
+  const done = SHARED.get(shareKey(x, s));
+  if (done) return chip(done, 'ok');
   const shown = labelled || mode !== 'share';
-  return btn(shown ? text : '', () => shareStrategy(x, s), 'small' + (shown && mode !== 'fail' ? '' : ' ghost'), ic, { title, 'aria-label': text });
+  const el = btn(shown ? text : '', () => shareStrategy(x, s, el), 'small' + (shown && mode !== 'fail' ? '' : ' ghost'), ic, { title, 'aria-label': text });
+  return el;
 }
+
+// sent through the relay on this page load: the button gives way to a mark (pages redraw on polling)
+const SHARED = new Map();
+const shareKey = (x, s) => (s.host || '') + '|' + x.steps.join(' ');
 
 // Что подбор взял из базы сообщества — одна строка под результатами; база пуста, а найдено рабочее — приглашение поделиться
 function communityNote(s, best) {
@@ -29,22 +36,76 @@ function communityNote(s, best) {
   if (c.error) return h('p', { class: 'sm muted' }, 'Стратегии сообщества не проверялись: ' + c.error + '. ', h('a', { href: PAGES.comm[0], text: 'Подробнее' }));
   if (c.count) return null;
   if (best) {
-    return h('div', { class: 'notice info' }, icon('share'), h('div', { class: 'grow' }, h('b', { text: `Для AS${c.asn} в базе сообщества стратегий пока нет` }),
-      h('div', { class: 't', text: 'Поделитесь найденной — её будут пробовать первой абоненты вашего провайдера. Откроется заполненная форма на GitHub, отправляете вы сами.' })),
+    return h('div', { class: 'notice info' }, icon('share'), h('div', { class: 'grow' }, h('b', { text: `У вашего провайдера (AS${c.asn}) в базе пока 0 стратегий — ваша будет первой` }),
+      h('div', { class: 't', text: 'Поделитесь найденной: её будут пробовать абоненты вашего провайдера. Перед отправкой видно всё, что уйдёт.' })),
       h('div', { class: 'notice-actions' }, shareBtn(best, s, true)));
   }
   return h('p', { class: 'sm muted' }, `Для вашего провайдера (AS${c.asn}) в базе сообщества стратегий пока нет. `, h('a', { href: PAGES.comm[0], text: 'Как поделиться своей' }));
 }
 
-// Окно «Поделиться»: что уйдёт в публичный issue — видно целиком; отправляет сам человек на GitHub
-async function shareStrategy(x, s) {
-  const proto = s.proto === 'http' ? 'http' : 'tls';
+// «Поделиться»: with the relay set up — straight into the base (what goes is shown in full); otherwise, or if the
+// relay does not answer, the GitHub form as before. el — the button: it gives way to a mark after sending
+async function shareStrategy(x, s, el) {
   const fail = !!x.community && !pickFull(x);
+  const title = fail ? 'Стратегия не сработала' : x.community ? 'Подтвердить стратегию' : 'Отправить стратегию в общую базу?';
   const body = h('div', { class: 'stack modal-b' }, spinner('Определяю провайдера и сеть сайта…'));
-  const send = btn('Открыть форму на GitHub', null, 'primary', 'share', { disabled: true });
-  const bg = modal(fail ? 'Стратегия не сработала' : x.community ? 'Подтвердить стратегию' : 'Поделиться стратегией', body, send);
+  const send = btn('Отправить', null, 'primary', 'share', { disabled: true });
+  const bg = modal(title, body, send);
   const info = await api('share_info', { host: s.host || '' }).catch((e) => ({ error: e.message }));
   if (s.asn) info.target_asn = s.asn;   // находка для целой сети, без сайта
+  if (info.relay && info.asn) { shareRelayDialog(x, s, el, info, { fail, body, send, bg }); return; }
+  shareGithub(x, s, info, { fail, body, send, bg });
+}
+
+// through the relay: provider, strategy, the site's network; the name only of a known site (the base's known.txt)
+function shareRelayDialog(x, s, el, info, { fail, body, send, bg }) {
+  const proto = s.proto === 'http' ? 'http' : 'tls';
+  const kind = fail ? 'fails' : x.community ? 'works' : 'share';
+  const name = h('input', { class: 'input', value: info.name || '', placeholder: 'аноним', maxlength: 24, style: 'max-width:220px', 'aria-label': 'Подпись в базе' });
+  const auto = h('input', { type: 'checkbox', checked: !!info.auto });
+  const site = s.host && info.host_known ? `сайт ${s.host}` : info.target_asn ? `сеть сайта — AS${info.target_asn}` : 'сайт не указывается';
+  const err = h('div');
+  send.disabled = false;
+  send.onclick = async () => {
+    send.disabled = true;
+    err.replaceChildren();
+    try {
+      if (name.value.trim() !== (info.name || '') || auto.checked !== !!info.auto) await api('share_set', { name: name.value.trim(), auto: auto.checked });
+      await api('share_send', { kind, steps: x.steps, proto, host: s.host || '', net: info.target_asn || null });
+    } catch (e) {
+      // the relay did not take it: the GitHub form is the way that still works
+      err.replaceChildren(notice('warn', 'Не отправилось', e.message, btn('Открыть форму на GitHub', () => { bg.close(); shareGithub(x, s, info, null); }, 'small', 'share')));
+      send.disabled = false;
+      return;
+    }
+    const mark = kind === 'share' ? 'отправлена · ждёт второго подтверждения' : 'учтено';
+    SHARED.set(shareKey(x, s), mark);
+    el?.replaceWith(chip(mark, 'ok'));
+    toast(kind === 'share' ? 'Стратегия отправлена в базу' : 'Отметка отправлена');
+    bg.close();
+  };
+  body.replaceChildren(
+    h('p', { class: 'sm' }, 'Уйдёт: провайдер ', h('b', { text: `AS${info.asn}` }), info.provider ? ` (${info.provider})` : '', ', стратегия ',
+      h('span', { class: 'mono', text: strategyLabel(x) }), `, ${site}.`, s.host && !info.host_known ? ' Имя сайта не уходит: его нет в списке известных.' : ''),
+    h('pre', { class: 'box', style: 'white-space:pre-wrap;word-break:break-all', text: x.steps.join('\n') }),
+    h('p', { class: 'sm muted', text: kind === 'share' ? 'Стратегия попадёт в подбор у других, когда её подтвердит второй роутер. Ваш адрес, устройства и списки не отправляются.'
+      : kind === 'works' ? 'Подтверждение поднимает стратегию для абонентов вашего провайдера.' : 'Если стратегия не сработала у многих, роутеры будут пробовать её последней.' }),
+    h('div', { class: 'row' }, h('span', { class: 'sm', text: 'Подпись' }), name, h('span', { class: 'sm muted', text: 'необязательно — так стратегия будет подписана в базе' })),
+    info.auto ? null : h('label', { class: 'chk' }, auto, h('span', {}, h('b', { text: 'Дальше помогать базе самому' }), h('br'),
+      h('span', { class: 'sm muted', text: 'раз в сутки — уверенно выученное обучением и отметки «сработала» для стратегий из базы' }))),
+    err);
+}
+
+// Окно «Поделиться» через GitHub: что уйдёт в публичный issue — видно целиком; отправляет сам человек.
+// ui — уже открытое окно (из shareStrategy); null — открыть своё (после неудачи приёмника)
+function shareGithub(x, s, info, ui) {
+  const proto = s.proto === 'http' ? 'http' : 'tls';
+  const fail = !!x.community && !pickFull(x);
+  const body = ui?.body || h('div', { class: 'stack modal-b' });
+  const send = ui?.send || btn('Открыть форму на GitHub', null, 'primary', 'share');
+  send.replaceChildren(icon('share'), h('btn-l', {}, 'Открыть форму на GitHub'));
+  send.disabled = true;
+  const bg = ui?.bg || modal(fail ? 'Стратегия не сработала' : x.community ? 'Подтвердить стратегию' : 'Поделиться стратегией', body, send);
   const asn = h('input', { class: 'input mono', value: info.asn || '', placeholder: '12389', style: 'max-width:120px', 'aria-label': 'AS провайдера' });
   const prov = h('input', { class: 'input grow', value: info.provider || '', placeholder: 'название провайдера', 'aria-label': 'Провайдер' });
   const withHost = h('input', { type: 'checkbox', checked: true });
@@ -85,6 +146,34 @@ async function shareStrategy(x, s) {
   draw();
 }
 
+// «Ваш вклад» (mockup local/design/share.html, variant A): what this router gave the base, «help the base», the signature
+function contribPanel(sh) {
+  const st = sh.stats || { live: 0, waiting: 0, confirmed: 0, providers: 0 };
+  const num = (n, label) => h('div', { class: 'contrib-n' }, h('b', { text: String(n) }), h('span', { text: label }));
+  const auto = h('input', { type: 'checkbox', checked: !!sh.auto });
+  const name = h('input', { class: 'input', value: sh.name || '', placeholder: 'аноним', maxlength: 24, style: 'max-width:220px', 'aria-label': 'Подпись в базе' });
+  const save = async (data, ok) => { if (await guarded(() => api('share_set', data), ok)) Object.assign(sh, data); };
+  auto.addEventListener('change', () => save({ auto: auto.checked }, auto.checked ? 'Роутер будет помогать базе' : 'Помощь базе выключена'));
+  name.addEventListener('change', () => save({ name: name.value.trim() }, 'Подпись сохранена'));
+  const last = sh.last ? (sh.last.error ? `${fmtDate(sh.last.t)} · не отправилось: ${sh.last.error}`
+    : `${fmtDate(sh.last.t)} · ${plural(sh.last.learned || 0, 'стратегия', 'стратегии', 'стратегий')}, ${plural(sh.last.works || 0, 'отметка', 'отметки', 'отметок')}`) : 'ещё не было';
+  return panel('Ваш вклад', newTag('comm:share'),
+    h('div', { class: 'contrib' }, num(st.live + st.waiting, plural(st.live + st.waiting, 'стратегия отправлена', 'стратегии отправлено', 'стратегий отправлено').replace(/^\d+\s/, '')),
+      num(st.confirmed, plural(st.confirmed, 'роутер подтвердил', 'роутера подтвердили', 'роутеров подтвердили').replace(/^\d+\s/, '')), num(st.providers, plural(st.providers, 'провайдер', 'провайдера', 'провайдеров').replace(/^\d+\s/, ''))),
+    st.waiting ? h('p', { class: 'sm muted', text: `${plural(st.waiting, 'стратегия ждёт', 'стратегии ждут', 'стратегий ждут')} второго подтверждения: в подбор у других они попадут, когда их подтвердит ещё один роутер.` }) : null,
+    h('label', { class: 'chk' }, auto, h('span', {}, h('b', { text: 'Помогать базе' }), h('br'),
+      h('span', { class: 'sm muted', text: 'Раз в сутки роутер отправляет стратегии, которые обучение уверенно выучило, и отметки «сработала» для стратегий из базы.' }))),
+    h('dl', { class: 'contrib-dl' },
+      h('dt', { text: 'Уходит' }), h('dd', { text: 'провайдер, стратегия, сеть сайта; имя сайта — только известных (YouTube, Discord и подобных)' }),
+      h('dt', { text: 'Не уходит' }), h('dd', { text: 'адреса, устройства, ваши списки, остальные сайты' }),
+      h('dt', { text: 'Последняя' }), h('dd', { text: last + (sh.queued ? ` · в очереди ${sh.queued}` : '') }),
+      // what learn has learned well enough — it goes with the next daily send (only with the tick)
+      sh.ready?.length ? [h('dt', { text: 'Готово' }), h('dd', {}, sh.ready.slice(0, 5).map((r) => h('div', { class: 'mono', text: `${r.host}${r.known ? '' : ' (имя не уйдёт, только сеть)'} · ${r.name}` })),
+        sh.ready.length > 5 ? h('div', { text: `и ещё ${sh.ready.length - 5}` }) : null,
+        h('div', { text: sh.auto ? 'уйдёт с ближайшей ночной отправкой' : 'уйдёт, если включить «Помогать базе»' }))] : null),
+    h('div', { class: 'row' }, h('span', { class: 'sm', text: 'Подпись в базе' }), name, h('span', { class: 'sm muted', text: 'необязательно · до 24 знаков' })));
+}
+
 const strategyLabel = (x) => x.name || x.steps.map((t) => t.replace('--lua-desync=', '').split(':')[0]).join(' + ');
 
 async function viewCommunity(main) {
@@ -100,7 +189,8 @@ async function viewCommunity(main) {
     go(pickHref(hh));
   };
   const load = async (opts = {}) => {
-    const d = await api('community_get', opts).catch((e) => ({ error: e.message, items: [] }));
+    const [d, sh] = await Promise.all([api('community_get', opts).catch((e) => ({ error: e.message, items: [] })),
+      api('share_get', { force: !!opts.force }).catch(() => null)]);
     const http = d.items.filter((x) => x.proto === 'http');
     const tls = d.items.filter((x) => x.proto === 'tls');
     const table = (items) => h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
@@ -125,6 +215,7 @@ async function viewCommunity(main) {
     const whole = d.page ? h('p', { class: 'sm muted' }, d.total ? `Во всей базе ${plural(d.total, 'стратегия', 'стратегии', 'стратегий')} для ${plural(d.providers || 0, 'провайдера', 'провайдеров', 'провайдеров')}. ` : '',
       d.mine ? [link(d.mine, `AS${d.asn} на GitHub`), ' · '] : null, link(d.page, 'все провайдеры')) : null;
     body.replaceChildren(
+      sh?.relay ? contribPanel(sh) : null,
       panel(null, null, head,
         d.error ? notice('warn', 'База не загрузилась', d.error + ' — попробуйте позже.') : null,
         // проверять нечего — поле и кнопку не показываем: серая кнопка без объяснения выглядит как поломка
@@ -137,7 +228,7 @@ async function viewCommunity(main) {
       panel('Как это устроено', null, h('ul', { class: 'sm', style: 'margin:0;padding-left:18px;display:grid;gap:4px' },
         h('li', { text: 'DPI у провайдеров разный, поэтому стратегии собраны по номеру AS провайдера: здесь только те, что сработали у абонентов вашего.' }),
         h('li', { text: 'Подбор пробует их вместе с остальными (галочка «стратегии сообщества») — и автоподбор при поломке тоже. Применяется только то, что открыло сайт на вашем роутере.' }),
-        h('li', { text: 'Поделиться: после подбора у стратегии, открывшей сайт каждый раз, — кнопка «Поделиться» (в результатах и в «Истории подборов»). У стратегии из базы, которая сработала и у вас, — «Подтвердить», которая не сработала, — «Не сработала».' }),
+        h('li', { text: 'Поделиться: после подбора у стратегии, открывшей сайт каждый раз, — кнопка «Поделиться» (в результатах и в «Истории подборов»). У стратегии из базы, которая сработала и у вас, — «Подтвердить», которая не сработала, — «Не сработала».' + (sh?.relay ? ' Аккаунт GitHub не нужен: роутер отправляет сам, а новая стратегия попадает в подбор у других после второго подтверждения.' : '') }),
         h('li', { text: 'Порядок: сначала подтверждённые за последние 60 дней; среди них — открывавшие тот же сайт, затем ту же сеть, затем по числу «подтвердили» за вычетом «не сработала». Стратегию, которая не сработала у большинства (и хотя бы у двоих), подбор не пробует.' }),
         h('li', {}, 'База — открытый репозиторий ', h('a', { href: d.repo, target: '_blank', rel: 'noopener', text: 'zemidala/nfqws2-strategies' }), '. Присланное проверяет GitHub Action: принимаются только шаги --lua-desync без путей к файлам.'))));
   };

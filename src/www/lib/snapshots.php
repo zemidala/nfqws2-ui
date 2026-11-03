@@ -27,6 +27,9 @@ function uiSettings(): array
     'subs' => [],
     'lint_hide' => [],     // config notes hidden by «don't show»: key => text, see lintMark()
     'dns_own' => [],       // own DNS servers for the DNS page: an address, a DoT name or a DoH link, see dnsOwnParse()
+    // sharing strategies through the relay (lib/share.php): auto — «help the base» daily, name — the signature in
+    // the base, id — this installation's random number (never leaves the relay), me — its public hash for the counter
+    'share' => ['auto' => false, 'name' => '', 'id' => '', 'me' => ''],
   ];
   $s = json_decode((string)@file_get_contents(UI_SETTINGS), true);
   $s = is_array($s) ? $s : [];

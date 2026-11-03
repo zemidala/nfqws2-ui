@@ -562,12 +562,34 @@ return array (
     ),
     'settings_set' => array (
     ),
+    'share_get' => array (
+      0 => 'service',
+      1 => 'conf',
+      2 => 'lists',
+      3 => 'tests',
+      4 => 'picks',
+      5 => 'refine',
+      6 => 'state',
+      7 => 'learn',
+      8 => 'share',
+    ),
     'share_info' => array (
       0 => 'service',
       1 => 'check',
       2 => 'picks',
       3 => 'diag',
       4 => 'report',
+      5 => 'share',
+    ),
+    'share_send' => array (
+      0 => 'service',
+      1 => 'check',
+      2 => 'picks',
+      3 => 'diag',
+      4 => 'report',
+      5 => 'share',
+    ),
+    'share_set' => array (
     ),
     'snapshot_create' => array (
     ),

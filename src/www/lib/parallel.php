@@ -610,4 +610,5 @@ function testJob(): void
   $status['current'] = null;
   testSaveStatus($status);
   picksAdd($status, $repeats);
+  shareQueueWorks($status);   // «help the base»: strategies from the base that opened the site — marks for the daily send
 }

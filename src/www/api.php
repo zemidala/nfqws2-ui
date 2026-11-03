@@ -87,7 +87,7 @@ const CACHE_VER = 6;  // увеличить при изменении разбо
 // The server is split into sections in lib/ (one file each). They are loaded in this order: a later one may use
 // constants of an earlier one. API_FILE — this file: background jobs start it again (php-cgi -f API_FILE)
 define('API_FILE', __FILE__);
-const LIB = ['core', 'snapshots', 'service', 'conf', 'lists', 'check', 'devices', 'exclude', 'lint', 'adapt', 'listcheck', 'fixes', 'monitor', 'subs', 'tests', 'parallel', 'multi', 'configs', 'freeze', 'picks', 'auto', 'refine', 'diag', 'dns', 'dnsx', 'conns', 'update', 'state', 'report', 'learn'];
+const LIB = ['core', 'snapshots', 'service', 'conf', 'lists', 'check', 'devices', 'exclude', 'lint', 'adapt', 'listcheck', 'fixes', 'monitor', 'subs', 'tests', 'parallel', 'multi', 'configs', 'freeze', 'picks', 'auto', 'refine', 'diag', 'dns', 'dnsx', 'conns', 'update', 'state', 'report', 'learn', 'share'];
 // Sections to load, in LIB order; null — all of them. Loaded once each
 function libLoad(?array $names = null): void
 {
@@ -185,6 +185,7 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
     }
     updateCheck(false);
     asnRun();
+    shareDaily();   // «help the base» (off by default): what learn learned well and «works» marks of base strategies
   }
   exit(0);
 }
@@ -1350,7 +1351,55 @@ switch ($cmd) {
     $host = cleanHost($str('host'));
     $asn = myAsn(true);
     respond(['asn' => $asn, 'provider' => uiSettings()['provider'], 'target_asn' => validHost($host) && !isIp($host) ? hostAsn($host) : null,
-      'nfqws2' => (string)packageVersion('nfqws2-keenetic'), 'ui' => UI_VERSION, 'repo' => COMMUNITY_REPO]);
+      'nfqws2' => (string)packageVersion('nfqws2-keenetic'), 'ui' => UI_VERSION, 'repo' => COMMUNITY_REPO,
+      // through the relay: whether it is set up, whether the site's name may go, what this router has set
+      'relay' => shareRelay(), 'host_known' => validHost($host) && shareRelay() ? shareHostKnown($host) : false,
+      'name' => uiSettings()['share']['name'], 'auto' => uiSettings()['share']['auto']]);
+
+  case 'share_send':
+    // «Поделиться» / «Подтвердить» / «Не сработала» through the relay, no GitHub account
+    session_write_close();
+    $steps = is_array($in['steps'] ?? null) ? array_values($in['steps']) : [];
+    if (!$steps || count($steps) > 8 || array_filter($steps, fn($t) => !is_string($t) || !preg_match(COMMUNITY_STEP, $t))) {
+      fail('Стратегия не подходит для базы: только шаги --lua-desync без путей к файлам, не больше восьми');
+    }
+    $kind = in_array($in['kind'] ?? '', ['share', 'works', 'fails'], true) ? $in['kind'] : 'share';
+    $it = shareItem($kind, $steps, ($in['proto'] ?? '') === 'http' ? 'http' : 'tls', cleanHost($str('host')), is_int($in['net'] ?? null) ? $in['net'] : null);
+    if (!$it) {
+      fail('Провайдер не определён — откройте «Стратегии сообщества» и нажмите «Определить»');
+    }
+    respond(shareSend([$it]) + ['ok' => true, 'host' => $it['host']]);
+
+  case 'share_get':
+    session_write_close();
+    $st = shareState();
+    $ready = [];
+    if (shareRelay()) {
+      // what the next daily send would take from learn — shown, so it is clear before ticking «help the base».
+      // The first-seen days are kept: the «two different days» count starts with the first look
+      foreach (shareLearned($st) as $x) {
+        $ready[] = ['host' => $x['host'], 'known' => shareHostKnown($x['host']), 'proto' => $x['proto'], 'name' => strategyName($x['steps'])];
+      }
+      shareStateSave($st);
+    }
+    respond(['relay' => shareRelay(), 'auto' => uiSettings()['share']['auto'], 'name' => uiSettings()['share']['name'],
+      'stats' => shareRelay() ? shareStats(!empty($in['force'])) : null, 'last' => $st['last'], 'queued' => count($st['queue']), 'ready' => $ready]);
+
+  case 'share_set':
+    $s = uiSettings();
+    if (array_key_exists('auto', $in)) {
+      $s['share']['auto'] = (bool)$in['auto'];
+    }
+    if (array_key_exists('name', $in)) {
+      $name = trim((string)$in['name']);
+      // the base takes the same: letters, digits, space, «_» and «-», up to 24 — no links, no @
+      if ($name !== '' && !preg_match('/^[0-9A-Za-zА-Яа-яЁё _-]{1,24}$/u', $name)) {
+        fail('Подпись — до 24 знаков: буквы, цифры, пробел, «_» и «-»');
+      }
+      $s['share']['name'] = $name;
+    }
+    saveUiSettings($s);
+    respond(['ok' => true, 'auto' => $s['share']['auto'], 'name' => $s['share']['name']]);
 
   case 'profile_check':
     respond(profileCheck(array_slice(is_array($in['tokens'] ?? null) ? $in['tokens'] : [], 0, 200)));

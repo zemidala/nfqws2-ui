@@ -166,6 +166,15 @@ a.over-row:hover { background: var(--soft); }
   :root:root:root:root .conn-tbl td.c-nfq { grid-column: 1 / -1; }
   :root:root:root:root .conn-tbl td[data-h]::before { content: attr(data-h); display: block; margin-bottom: 2px; font-size: var(--fs-xs); color: var(--muted); }
 }
+/* «Ваш вклад» on the community page, mockup local/design/share.html, variant A */
+.contrib { display: flex; flex-wrap: wrap; gap: 12px 28px; margin-bottom: 12px; }
+.contrib-n { min-width: 110px; }
+.contrib-n b { display: block; font-size: var(--fs-2xl); font-weight: 500; line-height: 1.1; }
+.contrib-n span { font-size: var(--fs-sm); color: var(--muted); }
+.contrib-dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 12px; margin: 8px 0 12px 28px; font-size: var(--fs-sm); color: var(--muted); }
+.contrib-dl dt { color: var(--fg); }
+.contrib-dl dd { margin: 0; }
+@media (max-width: 479px) { .contrib-dl { margin-left: 0; } }
 /* What the router learned («learn» orchestrator), mockup local/design/learn.html, variant A */
 .learn-tbl th { white-space: nowrap; }
 .learn-tbl td.nm { max-width: 320px; overflow-wrap: anywhere; }
