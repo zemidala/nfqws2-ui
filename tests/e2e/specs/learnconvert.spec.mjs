@@ -17,6 +17,16 @@ test('профиль с circular → «Перевести на обучение�
   const custom = vars.NFQWS_ARGS_CUSTOM.trim();
   const saved = await app.api('conf_save_vars', { vars: { NFQWS_ARGS_CUSTOM: circular.join('\n') + (custom ? '\n--new\n' + custom : '') }, note: 'проверка: профиль с circular' });
   expect(saved.ok).toBe(true);
+  try {
+    await convert();
+  } finally {
+    // the test profile goes away again, also when a check above failed, with any left by an earlier failed run —
+    // known by its name and example.com; the stand's own profiles (real sites) stay
+    const now = (await app.api('conf_get')).vars.NFQWS_ARGS_CUSTOM.split(/\n--new\n/);
+    const keep = now.filter((p) => !(p.includes('--name=Перебор') && p.includes('--hostlist-domains=example.com')));
+    if (keep.length < now.length) await app.api('conf_save_vars', { vars: { NFQWS_ARGS_CUSTOM: keep.join('\n--new\n') }, note: 'проверка: профиль с circular убран' });
+  }
+  async function convert() {
   ssh(target, 'rm -f /opt/etc/nfqws2/lua/nfqws-ui.lua');
 
   await app.open('#/settings/p1');
@@ -42,6 +52,11 @@ test('профиль с circular → «Перевести на обучение�
   expect(text).toContain('--lua-desync=learn:fails=2:time=300');
   expect(text).not.toContain('--lua-desync=circular:fails=2:time=300');
   expect(text).toMatch(/--payload=all\s+--in-range=-s34228\s+--lua-desync=learn:fails=2:time=300\s+--payload=tls_client_hello/);
+  // the old --payload= right above circular became --payload=all in place: no dead line above the new one
+  const mine = (await app.api('conf_get')).vars.NFQWS_ARGS_CUSTOM.split(/\n--new\n/)[0];
+  expect(mine).toContain('--name=Перебор');
+  expect(mine).not.toMatch(/--payload=tls_client_hello\s+--payload=all/);
+  expect(mine.match(/--payload=/g)).toHaveLength(2);
   expect(text).toMatch(/--lua-init=@\S*\/nfqws-ui\.lua/);
   expect(ssh(target, 'ls /opt/etc/nfqws2/lua/nfqws-ui.lua')).toContain('nfqws-ui.lua');
   await expect.poll(async () => (await app.api('state')).running, { timeout: 30_000 }).toBe(true);
@@ -49,10 +64,5 @@ test('профиль с circular → «Перевести на обучение�
   await app.open('#/settings/p1');
   await expect(app.page.locator('main')).toContainText('learn запоминает');
   await expect(app.page.locator('main').getByRole('button', { name: 'Перевести на обучение' })).toHaveCount(0);
-
-  // the test profile goes away again
-  const after = (await app.api('conf_get')).vars.NFQWS_ARGS_CUSTOM;
-  const parts = after.split(/\n--new\n/);
-  expect(parts[0]).toContain('--name=Перебор');
-  expect((await app.api('conf_save_vars', { vars: { NFQWS_ARGS_CUSTOM: parts.slice(1).join('\n--new\n') }, note: 'проверка: профиль с circular убран' })).ok).toBe(true);
+  }
 });

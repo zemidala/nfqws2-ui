@@ -197,18 +197,28 @@ function learnConvert(string $var, int $n): string
   }
   // what came before it in the same profile: the payload types, a range of incoming packets
   $payload = null;
+  $pi = null;          // where that --payload= stands
+  $between = false;    // a desync step between it and circular reads it too
   $range = false;
   for ($i = $at - 1; $i >= 0 && !isNewArg($toks[$i]); $i--) {
     if ($payload === null && str_starts_with($toks[$i], '--payload=')) {
       $payload = substr($toks[$i], 10);
+      $pi = $i;
     }
+    $between = $between || ($payload === null && str_starts_with($toks[$i], '--lua-desync='));
     $range = $range || str_starts_with($toks[$i], '--in-range=');
   }
+  // learn reads every payload; its strategies get the old types back. When nothing else reads the old --payload=,
+  // it becomes --payload=all in place — no dead line left above a new one
+  $swap = $payload !== null && $payload !== 'all';
+  $inPlace = $swap && !$between;
   $learn = '--lua-desync=learn' . substr($toks[$at], strlen('--lua-desync=circular'));
-  $seq = array_merge($payload !== null && $payload !== 'all' ? ['--payload=all'] : [], $range ? [] : ['--in-range=-s34228'], [$learn],
-    $payload !== null && $payload !== 'all' ? ["--payload=$payload"] : []);
+  $seq = array_merge($swap && !$inPlace ? ['--payload=all'] : [], $range ? [] : ['--in-range=-s34228'], [$learn], $swap ? ["--payload=$payload"] : []);
   $indent = tokenIndent($text, $var, $at);
   $text = editTokenInText($text, $var, $at, implode($indent === null ? ' ' : "\n$indent", $seq));
+  if ($inPlace) {
+    $text = editTokenInText($text, $var, $pi, '--payload=all');   // before $at: its index did not move
+  }
 
   $base = tokens(confRawVars($text)['NFQWS_BASE_ARGS'] ?? '');
   $has = fn($f) => (bool)array_filter($base, fn($t) => preg_match('~^--lua-init=@\S*/' . preg_quote($f, '~') . '$~', $t));
