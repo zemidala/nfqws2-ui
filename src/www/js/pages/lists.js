@@ -257,10 +257,15 @@ async function drawList(content, name) {
     moreItem('Очистить список', () => clearList()),
     meta.removable ? moreItem('Удалить список', () => deleteList())
       : offItem('Удалить список', meta.stock ? STOCK_WHY : 'Список читают профили — сначала отключите его от них'));
+  // Full screen, as in «Конфиг целиком»: the list with its bar on the whole browser window; Esc or the same button —
+  // back. Not on a phone (there the list already spans the width). While full, the panel lives in <body>: inside main
+  // (a size container) a fixed box may be held by main's frame. Survives a redraw; leaving the page ends it (router).
+  const fsBtn = h('button', { type: 'button', class: 'btn small icon lst-fs', onclick: () => setFull(!panelEl.classList.contains('full')) });
+  const topSave = h('span', { class: 'lfs-only' });   // «Сохранить» in the bar while full, in the text view
   const head = h('div', { class: 'lhead' },
-    h('div', { class: 'row' }, h('h2', { class: 'mono ltitle', text: name }), LIST_NAMES[name] ? h('span', { class: 'muted', text: LIST_NAMES[name] }) : null, readers,
-      h('span', { class: 'grow' }), viewSlot, btn('История', () => openHistory(name, reload), 'small', 'history'), more),
-    h('div', { class: 'row sm' }, meta.used.length ? null : h('span', { class: 'muted', text: 'Ни один профиль не читает этот список — правки в нём ничего не меняют. Записи проверяются, когда список подключён к профилю.' }), attachMenu(meta)),
+    h('div', { class: 'row' }, h('h2', { class: 'mono ltitle', text: name }), LIST_NAMES[name] ? h('span', { class: 'muted lfs-hide', text: LIST_NAMES[name] }) : null, h('span', { class: 'row lfs-hide' }, readers),
+      h('span', { class: 'grow' }), viewSlot, topSave, fsBtn, newTag('lists:full'), h('span', { class: 'row lfs-hide' }, btn('История', () => openHistory(name, reload), 'small', 'history'), more)),
+    h('div', { class: 'row sm lfs-hide' }, meta.used.length ? null : h('span', { class: 'muted', text: 'Ни один профиль не читает этот список — правки в нём ничего не меняют. Записи проверяются, когда список подключён к профилю.' }), attachMenu(meta)),
     subRow());
 
   function subRow() {
@@ -271,13 +276,13 @@ async function drawList(content, name) {
       return true;
     };
     if (!sub) {
-      return h('div', { class: 'row sm' }, h('button', { class: 'chip add', type: 'button', text: '+ обновлять по ссылке', onclick: async () => {
+      return h('div', { class: 'row sm lfs-hide' }, h('button', { class: 'chip add', type: 'button', text: '+ обновлять по ссылке', onclick: async () => {
         const url = await askText('Обновлять по ссылке', { value: 'https://', ok: 'Подключить', hint: 'Ссылка на список. Он будет обновляться по ней раз в сутки, в 04:05.' });
         if (!url || url === 'https://') return;
         if (await setUrl(url)) { toast('Скачиваю…'); await runSub(); }
       } }));
     }
-    return h('div', { class: 'row sm' },
+    return h('div', { class: 'row sm lfs-hide' },
       levelIcon(sub.status === 'ok' ? 'ok' : sub.status === 'error' ? 'error' : 'info'),
       h('span', { class: 'muted', text: 'Обновляется по ссылке:' }), h('a', { class: 'mono ellipsis', style: 'max-width:40ch', href: sub.url, target: '_blank', rel: 'noopener', text: sub.url }),
       h('span', { class: sub.status === 'error' ? 'status-bad' : 'muted', text: sub.last ? `${fmtDate(sub.last)} · ` + (sub.status === 'ok' ? `${plural(sub.count || 0, 'запись', 'записи', 'записей')}` + (sub.changed ? ` (+${sub.changed.added} −${sub.changed.removed})` : ', без изменений') : sub.error || '') : 'ещё не обновлялся' }),
@@ -295,7 +300,32 @@ async function drawList(content, name) {
     route();
   }
   const body = h('div', { class: 'stack', style: 'gap:14px' });
-  content.replaceChildren(h('section', { class: 'panel' }, head, body));
+  const panelEl = h('section', { class: 'panel lpanel' }, head, body);
+  content.replaceChildren(panelEl);
+  const spot = document.createComment('list');
+  function setFull(on) {
+    S.listFull = on ? name : null;
+    if (on && panelEl.parentNode !== document.body) { panelEl.replaceWith(spot); document.body.append(panelEl); }
+    if (!on && spot.parentNode) spot.replaceWith(panelEl);
+    panelEl.classList.toggle('full', on);
+    document.documentElement.classList.toggle('cfg-fs', on);   // the page behind does not scroll (no second scrollbar)
+    fsLook(on);
+    panelEl.querySelector('.ed-ta, #add-entry')?.focus();
+  }
+  function fsLook(on) {
+    fsBtn.replaceChildren(icon(on ? 'shrink' : 'expand'));
+    fsBtn.setAttribute('aria-label', on ? 'Обычный размер' : 'Во весь экран');
+    fsBtn.dataset.tip = on ? 'Обычный размер (Esc)' : 'Во весь экран — список на всё окно браузера, выход по Esc';
+  }
+  fsLook(false);
+  if (S.listFull === name) queueMicrotask(() => setFull(true));   // was full before the redraw
+  // capture phase: runs before a dropdown, menu or dialog closes itself on the same Esc — then full screen stays
+  document.addEventListener('keydown', function onEsc(e) {
+    if (!panelEl.isConnected) { document.removeEventListener('keydown', onEsc, true); return; }
+    if (e.key !== 'Escape' || !panelEl.classList.contains('full') || document.querySelector('.modal-bg, .dd-pop, .more-pop:not([hidden]), .menu-list:not([hidden])')) return;
+    e.preventDefault();
+    setFull(false);
+  }, true);
 
   async function reload() {
     data = await api('list_get', { name });
@@ -365,15 +395,19 @@ async function drawList(content, name) {
       // большой список роутер проверяет секундами — тогда только при сохранении
       const relint = debounce(async (v) => { if (v.length > ED_PLAIN_CHARS) return; const r = await api('list_lint', { name, content: v }).catch(() => null); if (r) showIss(r.issues); }, 500);
       showIss(data.issues);
-      body.replaceChildren(tools, ed.el, issBox, h('div', { class: 'row' },
+      const saveText = async () => {
+        if (await guarded(() => api('list_save', { name, content: ed.ta.value }), 'Сохранено')) { setDirty(false); await reload(); }
+      };
+      ed.ta.addEventListener('keydown', (e) => { if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 's') { e.preventDefault(); saveText(); } });
+      topSave.replaceChildren(btn('Сохранить', saveText, 'primary small', null, { title: 'Ctrl+S' }));
+      body.replaceChildren(tools, ed.el, issBox, h('div', { class: 'row lfs-hide' },
         h('span', { class: 'sm muted grow', text: 'Одна запись на строку, # в начале — комментарий (Ctrl+/ ставит и снимает). Поддомены учитываются автоматически, ^домен — без поддоменов, «*» не поддерживается.' }),
         copyBtn(() => ed.ta.value, 'Копировать', 'small'),
-        btn('Сохранить', async () => {
-          if (await guarded(() => api('list_save', { name, content: ed.ta.value }), 'Сохранено')) { setDirty(false); await reload(); }
-        }, 'primary')));
+        btn('Сохранить', saveText, 'primary', null, { title: 'Ctrl+S' })));
       return;
     }
 
+    topSave.replaceChildren();   // the list view saves each change at once
     const addInput = h('input', { class: 'input grow', id: 'add-entry', placeholder: isIp ? 'Добавить: 1.2.3.0/24, можно несколько через пробел' : 'Добавить: example.com, можно несколько через пробел', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Добавить записи' });
     const add = async () => {
       const items = addInput.value.split(/[\s,]+/).filter(Boolean);

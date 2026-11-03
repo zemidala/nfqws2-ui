@@ -294,7 +294,7 @@ details.dns-more-panel > summary { cursor: pointer; color: var(--accent-ink); }
 .ltitle { font-size: var(--fs-md); font-weight: 700; }
 .ent { grid-template-columns: 22px 16px minmax(0, 1fr) auto auto auto; }
 .ent .note.faint { color: var(--faint); }
-.ent .chk { min-height: 28px; color: var(--muted); }
+.ent .chk { color: var(--muted); }   /* the style's small-button height, the same as the delete button beside it */
 @media (max-width: 759px) { .ent { grid-template-columns: 22px minmax(0, 1fr) auto; } .ent .chk { display: none; } }
 @media (max-width: 899px) { .lnav-acts { position: static; border-top: 0; display: contents; } }
 .lhead { display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: center; }

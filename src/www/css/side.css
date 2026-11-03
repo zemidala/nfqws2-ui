@@ -34,6 +34,14 @@
 .nav a:hover, .nav button.ni:hover { background: var(--soft); }
 .nav a.on, .nav button.ni.on { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
 .nav .tail { margin-left: auto; color: var(--faint); font-size: var(--fs-xs); display: inline-flex; gap: 6px; align-items: center; font-weight: 400; flex: none; }
+/* the pin star on a menu item: on hover (always, faint, on touch screens); a pinned one — filled, in the brand orange */
+.mnav .mpin { flex: none; margin: -4px -6px -4px auto; padding: 4px 6px; line-height: 1; font-size: var(--fs-sm); color: var(--faint); cursor: pointer; visibility: hidden; }
+.mnav .tail + .mpin { margin-left: 0; }
+.mnav a:hover .mpin, .mnav a:focus-visible .mpin, .mnav .mpin.on { visibility: visible; }
+.mnav .mpin:hover { color: #ff6a14; }
+.mnav .mpin.on { color: #ff6a14; }
+@media (hover: none) { .mnav .mpin { visibility: visible; } .mnav .mpin:not(.on) { opacity: .6; } }
+:root[data-variant="b"] .mnav .mlinks > a.on .mpin { color: var(--accent-fg); }
 .nav .nm { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; flex: 1; }
 .nav .drag-over { box-shadow: 0 -2px 0 var(--accent) inset; }
 @media (max-width: 899px) {

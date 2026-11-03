@@ -58,6 +58,24 @@ const LAYOUT_THUMB = {
   site: '<rect width="120" height="68" rx="4" fill="var(--bg)" stroke="var(--line)"/><rect width="120" height="10" rx="4" fill="var(--surface)" stroke="var(--line)"/><rect x="30" y="3" width="40" height="4" rx="2" fill="var(--accent)"/><rect x="88" y="3" width="26" height="4" rx="2" fill="var(--line)"/><rect x="18" y="16" width="84" height="6" rx="2" fill="var(--accent-soft)"/><rect x="18" y="26" width="84" height="36" rx="2" fill="var(--surface)" stroke="var(--line)"/><path d="M22 34h76M22 41h76M22 48h76M22 55h76" stroke="var(--line)"/>',
 };
 
+// «Закреплённые в меню»: the pinned pages in their order — ↑↓ move, «Открепить»; pinning itself is the star in the menu
+function pinsPanel() {
+  const box = h('div', { class: 'stack', style: 'gap:8px' });
+  const draw = () => {
+    const pins = menuPins();
+    const move = (i, d) => { const p = [...pins]; [p[i], p[i + d]] = [p[i + d], p[i]]; pinPage(p[i], true, p); draw(); };
+    box.replaceChildren(h('div', {}, h('b', { text: 'Закреплённые в меню' }), ' ', newTag('look:pins')),
+      h('span', { class: 'sm muted', text: 'Звёздочка справа у пункта бокового меню ставит его в группу «Закреплённые» под «Обзором», в своём разделе он тоже остаётся. Работает в компоновке «Боковое меню» без упрощённого вида.' }),
+      pins.length ? h('div', { class: 'olist' }, pins.map((id, i) => h('div', { class: 'olist-it' }, h('span', { class: 'grow', text: PAGES[id][1] }),
+        btn('', () => move(i, -1), 'small icon', 'up', { 'aria-label': 'Выше: ' + PAGES[id][1], disabled: i === 0 }),
+        btn('', () => move(i, 1), 'small icon', 'down', { 'aria-label': 'Ниже: ' + PAGES[id][1], disabled: i === pins.length - 1 }),
+        btn('Открепить', () => { pinPage(id, false); draw(); }, 'small ghost'))))
+        : h('span', { class: 'sm muted', text: 'Пока ничего не закреплено.' }));
+  };
+  draw();
+  return panel(null, null, box);
+}
+
 async function paneLook(content) {
   const look = getLook();
   // colour scheme for every style but Z; the swatch shows the scheme's page and button colours in the current theme.
@@ -102,6 +120,7 @@ async function paneLook(content) {
         lay('menu', 'Боковое меню', 'Все разделы списком слева, любой — в один клик.'),
         lay('tabs', 'Вкладки по задачам', 'Вкладки сверху, слева постоянная колонка обзора.'),
         lay('site', 'Вокруг сайта', 'Таблица сайтов и карточка сайта: проверка, подбор, трассировка рядом.'))),
+    pinsPanel(),
     panel(null, null,
       h('fieldset', { class: 'looks' }, h('legend', { class: 'sm muted', text: 'Стиль интерфейса' }),
         card('a', 'A · Консоль', 'Плотно, панель с разделителями. Больше всего данных на экране.', h('span', { class: 'thumb th-a' }, h('span', { class: 'tl' }, i('acc'), i(), i(), i()), h('span', { class: 'tr' }, i(), i('', 'width:70%'), i('acc', 'width:40%')))),

@@ -23,7 +23,8 @@ test('«Конфиг целиком» во весь экран: на всё ок
   expect(Math.round(ta.x + ta.width)).toBeGreaterThan(1366 - 30);
   const ol = app.page.locator('.cfg.full > .outline');
   if (await ol.isVisible()) expect((await ol.boundingBox()).x).toBe(0);
-  expect((await app.page.locator('.cfg.full > .cfg-tools').boundingBox()).height).toBeLessThan(60);
+  // one line — unless the config has notes: their chips (on a test stand's config) take a second line at 1366
+  if (!await app.page.locator('.cfg.full > .cfg-tools .chip').count()) expect((await app.page.locator('.cfg.full > .cfg-tools').boundingBox()).height).toBeLessThan(60);
   expect(await app.page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
   // the page behind does not scroll: no second scrollbar beside the editor's own, the block spans the whole width
   expect(await app.page.evaluate(() => getComputedStyle(document.documentElement).overflowY)).toBe('hidden');

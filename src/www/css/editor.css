@@ -98,6 +98,9 @@
 /* one height for everything in the toolbar: search field, buttons and status chips */
 .cfg-tools { --bar-h: 30px; }
 .cfg-tools > .input, .cfg-tools .btn { min-height: var(--bar-h); height: var(--bar-h); padding-block: 0; }
+/* an icon button (full screen) is square at the bar's height: above the styles' own small-icon size */
+:root .cfg-tools .btn.small.icon { width: var(--bar-h); min-height: var(--bar-h); }
+:root:root .cfg-tools .input { min-height: var(--bar-h); height: var(--bar-h); }   /* above the styles' own field height */
 .cfg-tools .chip { min-height: var(--bar-h); }
 .outline { border-right: 1px solid var(--line); padding: 8px 6px; display: grid; gap: 1px; align-content: start; overflow: auto; }
 .outline button { display: flex; gap: 6px; align-items: center; font-family: var(--mono); font-size: var(--fs-xs); text-align: left; background: none; border: 0; color: var(--fg); padding: 4px 8px; border-radius: 6px; cursor: pointer; }

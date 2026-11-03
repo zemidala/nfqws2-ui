@@ -2,6 +2,13 @@
 
 /* ---------- списки ---------- */
 .lhead { display: grid; gap: 6px; }
+/* a list on the whole window (the button in its bar), like the full-screen config editor; the text fills the height */
+.lpanel.full { position: fixed; inset: 0; z-index: 45; margin: 0; border: 0; border-radius: 0; box-shadow: none; display: flex; flex-direction: column; gap: 10px; overflow: hidden; }
+.lpanel.full > .stack { flex: 1 1 auto; min-height: 0; overflow: auto; display: flex; flex-direction: column; }
+.lpanel.full > .stack > .ed { flex: 1 1 0; min-height: 120px; display: flex; flex-direction: column; }
+.lpanel.full > .stack > .ed > .ed-ta { flex: 1 1 auto; height: auto !important; resize: none; }
+.lpanel.full .lfs-hide, .lpanel:not(.full) .lfs-only { display: none; }
+@media (max-width: 899px) { .lst-fs { display: none; } .lpanel.full { position: static; } }
 .entries { display: grid; border: 1px solid var(--line); border-radius: calc(var(--radius) * .8 + 2px); overflow: hidden; }
 .ent { display: grid; grid-template-columns: 22px 16px minmax(0, 1fr) auto auto; gap: 10px; align-items: center; padding: 3px 10px; min-height: 38px; border-top: 1px solid var(--line); background: var(--surface); }
 .ent:first-child { border-top: 0; }
@@ -73,6 +80,10 @@
 /* «Оттенок стиля», «Тема»: caption on top like the legends of the card groups, same left edge */
 .look-sub { display: grid; gap: 8px; justify-items: start; }
 .look-sub[hidden] { display: none; }
+/* «Закреплённые в меню»: one row per pinned page — its name, ↑ ↓ and «Открепить» */
+.olist { border: 1px solid var(--line); border-radius: calc(var(--radius) * .8 + 2px); max-width: 520px; }
+.olist-it { display: flex; align-items: center; gap: 6px; padding: 4px 6px 4px 12px; border-top: 1px solid var(--line); }
+.olist-it:first-child { border-top: 0; }
 .look { position: relative; display: grid; align-content: start; gap: 8px; border: 1px solid var(--line); border-radius: var(--radius); padding: 10px; background: var(--surface); cursor: pointer; }
 .look input { position: absolute; opacity: 0; }
 .look:has(input:checked) { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }

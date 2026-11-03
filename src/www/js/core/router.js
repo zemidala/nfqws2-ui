@@ -18,10 +18,11 @@ async function route(refresh = false) {
   }
   openDrawer(false);
   updateChrome();
-  // a full-screen config editor sits in <body>: it goes away with the page; leaving the page ends full screen
-  document.querySelectorAll('body > .cfg').forEach((e) => e.remove());
+  // a full-screen config editor or list sits in <body>: it goes away with the page; leaving the page ends full screen
+  document.querySelectorAll('body > .cfg, body > .lpanel').forEach((e) => e.remove());
   document.documentElement.classList.remove('cfg-fs');
   if (r.tab !== 'settings' || r.arg !== 'raw') S.cfgFull = false;
+  if (r.tab !== 'sites' || r.arg !== S.listFull) S.listFull = null;
   const main = document.getElementById('main');
   if (!S.state || refresh) {
     if (!S.state) main.replaceChildren(skel(2, 5));

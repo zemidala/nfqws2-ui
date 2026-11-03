@@ -67,6 +67,9 @@ const FEATURES = [
   ['dns:only', '1.31.0', '«DNS-серверы»: галочка «Только свои» — проверить свои серверы без публичных'],
   ['frz:only', '1.31.0', '«Обрыв на 16 КБ»: галочка «Только свои» — проверить свои сайты и адреса без опорных'],
   ['auto:pause', '1.31.0', '«Автоподбор»: своя пауза между попытками — от 1 до 168 часов'],
+  ['lists:full', '1.31.0', '«Списки»: список во весь экран, выход по Esc'],
+  ['dns:btn', '1.31.0', '«DNS-серверы»: «Проверить» — под полем своих серверов'],
+  ['look:pins', '1.31.0', 'Меню: звёздочка закрепляет пункт в группе «Закреплённые» под «Обзором»; порядок — в «Оформлении»'],
   ['mon:ivl', '1.30.0', '«Мониторинг»: свой интервал проверки — в минутах или часах'],
   ['cfg:mine', '1.30.0', '«Чужой конфиг»: проверку своего конфига для сравнения можно выключить'],
   ['raw:nowarn', '1.30.0', '«Оформление»: не показывать предупреждения и советы в «Конфиге целиком»'],
@@ -183,7 +186,16 @@ function pageTail(id) {
 }
 
 // Значки групп меню: показываются в стиле K («как в Keenetic»)
-const NAV_ICON = { 'Проверка сайта': 'search', 'Наблюдение': 'pulse', 'Обход': 'shield', 'Система': 'gear' };
+const PIN_HEAD = 'Закреплённые';
+const NAV_ICON = { [PIN_HEAD]: 'pin', 'Проверка сайта': 'search', 'Наблюдение': 'pulse', 'Обход': 'shield', 'Система': 'gear' };
+// pinned menu pages, in their order; only pages the full menu has (an old id from another version drops out)
+const menuPins = () => (Array.isArray(getLook().pins) ? getLook().pins : []).filter((id, i, a) => PAGES[id]?.[0] && id !== 'over' && a.indexOf(id) === i && MENU.some(([, ids]) => ids.includes(id)));
+function pinPage(id, on, order) {
+  const now = menuPins();
+  setLook({ pins: order || (on ? [...now.filter((x) => x !== id), id] : now.filter((x) => x !== id)) });
+  placeSide();
+  if (!document.getElementById('drawer')?.hidden) openDrawer(true);
+}
 
 // Упрощённый вид — по выбору в «Оформлении»; по умолчанию интерфейс полный
 const simple = () => document.documentElement.hasAttribute('data-simple');
@@ -198,13 +210,19 @@ function menuNav() {
   }
   // группа — заголовок и её страницы; в свёрнутом меню (полоска значков) страницы группы всплывают рядом со значком
   const mini = document.documentElement.hasAttribute('data-navmini');
-  return h('nav', { class: 'nav mnav', 'aria-label': 'Разделы' }, MENU.map(([head, ids]) => h('div', { class: 'mgrp' + (ids.some((id) => id === cur || (id === 'pick' && cur === 'site')) ? ' here' : '') + (ids.some(pageNew) ? ' has-new' : '') },
+  // pinned pages (Оформление → «Закреплённые в меню»): copies in their own group under «Обзор»; a star on each item
+  // pins and unpins (the same list with its order is on the look page — for the keyboard too)
+  const pins = menuPins();
+  const menu = pins.length ? [MENU[0], [PIN_HEAD, pins], ...MENU.slice(1)] : MENU;
+  const star = (id) => mini ? null : h('span', { class: 'mpin' + (pins.includes(id) ? ' on' : ''), 'aria-hidden': 'true', 'data-tip': pins.includes(id) ? 'Открепить' : 'Закрепить наверху меню',
+    text: pins.includes(id) ? '★' : '☆', onclick: (e) => { e.preventDefault(); e.stopPropagation(); pinPage(id, !pins.includes(id)); } });
+  return h('nav', { class: 'nav mnav', 'aria-label': 'Разделы' }, menu.map(([head, ids]) => h('div', { class: 'mgrp' + (ids.some((id) => id === cur || (id === 'pick' && cur === 'site')) ? ' here' : '') + (ids.some(pageNew) ? ' has-new' : '') },
     head ? h('div', { class: 'nav-h', tabindex: mini ? 0 : null, title: mini ? head : null }, icon(NAV_ICON[head] || 'settings'), h('span', { class: 'nh-t', text: head })) : null,
     h('div', { class: head ? 'mlinks' : 'mtop' }, head && mini ? h('div', { class: 'mfly-h', text: head }) : null,
       ids.map((id) => PAGES[id][0]
         ? h('a', { href: PAGES[id][0], 'data-pages': id === 'pick' ? 'pick site' : id, class: id === cur || (id === 'pick' && cur === 'site') ? 'on' : null, title: mini && !head ? PAGES[id][1] : null },
           id === 'over' ? h('span', { class: 'k-ic' }, icon('dash')) : null,
-          h('span', { class: 'nm', text: PAGES[id][1] }), pageNew(id) ? h('span', { class: 'tail' }, NEW_TAG()) : pageTail(id))
+          h('span', { class: 'nm', text: PAGES[id][1] }), pageNew(id) ? h('span', { class: 'tail' }, NEW_TAG()) : pageTail(id), head ? star(id) : null)
         : soonItem(id))))),
   // свернуть меню в полоску значков — как «Скрыть меню» у Keenetic; только на широком экране
   h('button', { type: 'button', class: 'nav-mini', title: mini ? 'Развернуть меню' : 'Свернуть меню в полоску значков — больше места под страницу', 'aria-label': mini ? 'Развернуть меню' : 'Свернуть меню',

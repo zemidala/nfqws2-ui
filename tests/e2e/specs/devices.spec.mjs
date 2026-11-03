@@ -38,19 +38,20 @@ for (const vp of [{ width: 1366, height: 600 }, { width: 390, height: 640 }]) {
     const scrolled = () => page.evaluate(() => {
       const box = document.querySelector('table.devs').closest('.scroll');
       const de = document.documentElement;
-      return [window.scrollY + (box ? box.scrollTop : 0), de.scrollHeight - innerHeight + (box ? box.scrollHeight - box.clientHeight : 0)];
+      return { win: window.scrollY, winMax: de.scrollHeight - innerHeight, box: box ? box.scrollTop : 0 };
     });
-    const [before] = await scrolled();
-    expect(before).toBeGreaterThan(0);
+    const before = await scrolled();
+    expect(before.win + before.box).toBeGreaterThan(0);
     await page.locator('.savebar').getByRole('button', { name: 'Сохранить' }).click();
     await expect.poll(() => sent.length).toBe(1);
     expect(sent[0].list['3c:22:fb:00:10:9e'].on).toBe(true);
     await expect(page.locator('.savebar')).toBeHidden();
     await page.waitForTimeout(500);
-    // stays put; only when it was at the very bottom the page gets shorter by the save bar and the browser clamps
-    const [after, maxY] = await scrolled();
-    expect(after).toBeGreaterThanOrEqual(Math.min(before, maxY) - 5);
-    expect(after).toBeGreaterThan(0);
+    // each stays put; only when the page was at the very bottom it gets shorter by the save bar and the browser clamps
+    const after = await scrolled();
+    expect(after.win).toBeGreaterThanOrEqual(Math.min(before.win, after.winMax) - 5);
+    expect(after.box).toBeGreaterThanOrEqual(before.box - 5);
+    if (after.winMax > 5 || before.box > 0) expect(after.win + after.box).toBeGreaterThan(0);   // there is still somewhere to be
   });
 }
 

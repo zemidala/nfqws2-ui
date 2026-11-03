@@ -18,13 +18,15 @@ async function viewDns(main) {
   const ownIn = h('input', { class: 'input mono grow', placeholder: '1.2.3.4, dns.example.com, https://dns.example.com/dns-query', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Свои DNS-серверы' });
   const onlyIn = h('input', { type: 'checkbox' });
   main.append(
-    h('div', { class: 'vh' }, h('h1', { text: 'DNS-серверы' }), h('span', { class: 'grow' }), startBtn),
-    h('p', { class: 'muted dns-lead' }, 'Какие DNS-серверы отвечают с этого роутера, не перехватывает ли провайдер обычный DNS и не подменяет ли адреса закрытых сайтов. ', when,
-      'Настройки DNS роутера страница не меняет — только показывает и советует.'),
-    h('div', { class: 'frow dns-own' }, h('span', { class: 'lbl', text: 'Свои серверы' }),
-      h('div', { class: 'stack', style: 'gap:6px' }, h('div', { class: 'row' }, ownIn, newTag('dns:own')),
-        h('span', { class: 'sm muted', text: 'Необязательно, через запятую, до пяти. Адрес — проверяется обычный DNS (порт 53), имя — DoT, ссылка https://… — DoH. Проверяются вместе с публичными и стоят в таблице первыми; список запоминается.' }),
-        h('label', { class: 'chk' }, onlyIn, 'Только свои — без публичных серверов', newTag('dns:only')))),
+    h('div', { class: 'vh' }, h('h1', { text: 'DNS-серверы' })),
+    h('p', { class: 'muted dns-lead' }, 'Какие DNS-серверы отвечают с этого роутера, не перехватывает ли провайдер обычный DNS и не подменяет ли адреса закрытых сайтов. ', when),
+    // the fields and the start button in one block, top to bottom — as on «Обрыв на 16 КБ»
+    panel(null, null,
+      h('div', { class: 'frow dns-own' }, h('span', { class: 'lbl', text: 'Свои серверы' }),
+        h('div', { class: 'stack', style: 'gap:6px' }, h('div', { class: 'row' }, ownIn, newTag('dns:own')),
+          h('span', { class: 'sm muted', text: 'Необязательно, через запятую, до пяти. Адрес — проверяется обычный DNS (порт 53), имя — DoT, ссылка https://… — DoH. Проверяются вместе с публичными и стоят в таблице первыми; список запоминается.' }),
+          h('label', { class: 'chk' }, onlyIn, 'Только свои — без публичных серверов', newTag('dns:only')))),
+      h('div', { class: 'row' }, startBtn, newTag('dns:btn'), h('span', { class: 'sm muted grow note-wide', text: 'Настройки DNS роутера страница не меняет — только показывает и советует.' }))),
     out);
   let q = {}, x = {}, sort = { key: 'best', dir: 1 }, all = false;
   const busy = () => !!(q.running || x.running);
