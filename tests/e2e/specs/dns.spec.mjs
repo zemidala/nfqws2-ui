@@ -45,8 +45,8 @@ async function open(app, page, quick, ext, w = 1366) {
 
 test('до первой проверки: объяснение и кнопка', async ({ app, page }) => {
   await open(app, page, {}, {});
-  await expect(page.locator('main .vh .btn.primary')).toBeEnabled();
-  await expect(page.locator('main .vh .btn.primary')).toHaveText('Проверить');
+  await expect(page.locator('main .panel:has(.dns-own) .btn.primary')).toBeEnabled();
+  await expect(page.locator('main .panel:has(.dns-own) .btn.primary')).toHaveText('Проверить');
   await expect(page.locator('main')).toContainText('Нажмите «Проверить»');
   await expect(page.locator('.dns-tile')).toHaveCount(0);
 });
@@ -72,7 +72,7 @@ test('подмена: три вывода, «Что делать» с тремя
   await expect(best.nth(2)).toContainText('Quad9');
   await expect(page.locator('.dns-site', { hasText: 'a.example' })).toContainText('подменён');
   await expect(page.locator('main h2', { hasText: 'Подменённые сайты' })).toBeVisible();
-  await expect(page.locator('main .vh .btn.primary')).toHaveText('Проверить снова');
+  await expect(page.locator('main .panel:has(.dns-own) .btn.primary')).toHaveText('Проверить снова');
 });
 
 test('таблица: свой DNS первым, чистые сверху, отказы названы, сортировка', async ({ app, page }) => {
@@ -145,7 +145,7 @@ test('ход проверки: таблица сразу целиком, яче�
     return undefined;
   });
   await app.open('#/tests/dns');
-  await page.locator('main .vh .btn.primary').click();
+  await page.locator('main .panel:has(.dns-own) .btn.primary').click();
   const rows = page.locator('.dnsx-tbl tbody tr:not(.own):not(.sep)');
   await expect(rows.first()).toContainText('MSK-IX');
   await expect(page.locator('.dns-tile.wait')).toHaveCount(3);
@@ -156,7 +156,7 @@ test('ход проверки: таблица сразу целиком, яче�
   const first = await rows.locator('td.nm').allTextContents();
   // the list order holds while it runs
   await expect.poll(async () => (await rows.locator('td.nm').allTextContents()).join('|'), { timeout: 10_000 }).toBe(first.join('|'));
-  await expect(page.locator('main .vh .btn.primary')).toBeEnabled({ timeout: 20_000 });
+  await expect(page.locator('main .panel:has(.dns-own) .btn.primary')).toBeEnabled({ timeout: 20_000 });
   expect(await page.evaluate(() => window.__tbl.isConnected && window.__tile.isConnected)).toBe(true);
   await expect(page.locator('.dnsx-tbl .spin')).toHaveCount(0);
   await expect(page.locator('.dns-tile.wait')).toHaveCount(0);
@@ -170,17 +170,17 @@ test('настоящая проверка: запуск и остановка н
   await app.open('#/tests/dns');
   const [q, x] = [await app.api('dns_get'), await app.api('dnsx_get')];
   test.skip(q.running || x.running, 'на устройстве уже идёт проверка DNS');
-  await page.locator('main .vh .btn.primary').click();
+  await page.locator('main .panel:has(.dns-own) .btn.primary').click();
   // the progress sits in the head of «Серверы», with the table already in place
   const prog = page.locator('main .panel', { has: page.locator('.dnsx-step') });
   await expect(prog).toBeVisible({ timeout: 15_000 });
   await expect(prog.locator('.dnsx-tbl')).toBeVisible();
-  await expect(page.locator('main .vh .btn.primary')).toBeDisabled();
+  await expect(page.locator('main .panel:has(.dns-own) .btn.primary')).toBeDisabled();
   // stop stops the quick part too: wait for its first public server, or the tiles have nothing to show (a race, not a bug)
   await expect.poll(async () => ((await app.api('dns_get')).servers || []).some((s) => s.kind === 'public'), { timeout: 30_000 }).toBe(true);
   // the block's own «Остановить» — the one in the top bar stops nfqws2
   await prog.getByRole('button', { name: 'Остановить' }).click();
   await expect.poll(async () => (await app.api('dns_get')).running || (await app.api('dnsx_get')).running, { timeout: 90_000 }).toBe(false);
-  await expect(page.locator('main .vh .btn.primary')).toBeEnabled({ timeout: 10_000 });
+  await expect(page.locator('main .panel:has(.dns-own) .btn.primary')).toBeEnabled({ timeout: 10_000 });
   await expect(page.locator('.dns-tile').first()).toBeVisible();
 });

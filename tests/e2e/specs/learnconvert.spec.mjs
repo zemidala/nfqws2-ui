@@ -24,7 +24,14 @@ test('профиль с circular → «Перевести на обучение�
     // known by its name and example.com; the stand's own profiles (real sites) stay
     const now = (await app.api('conf_get')).vars.NFQWS_ARGS_CUSTOM.split(/\n--new\n/);
     const keep = now.filter((p) => !(p.includes('--name=Перебор') && p.includes('--hostlist-domains=example.com')));
-    if (keep.length < now.length) await app.api('conf_save_vars', { vars: { NFQWS_ARGS_CUSTOM: keep.join('\n--new\n') }, note: 'проверка: профиль с circular убран' });
+    if (keep.length < now.length) {
+      await app.api('conf_save_vars', { vars: { NFQWS_ARGS_CUSTOM: keep.join('\n--new\n') }, note: 'проверка: профиль с circular убран' });
+      // restarted and confirmed: the working state is the stand's own config again, or a later rollback
+      // (restart.spec) brings the test profile back
+      if (!['checking', 'waiting'].includes((await app.api('state')).pending?.state)) await app.api('safe_restart');
+      await app.api('safe_confirm');
+      await expect.poll(async () => (await app.api('state')).running, { timeout: 30_000 }).toBe(true);
+    }
   }
   async function convert() {
   ssh(target, 'rm -f /opt/etc/nfqws2/lua/nfqws-ui.lua');

@@ -31,7 +31,7 @@ for (const w of [390, 1366]) {
     expect(await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth)).toBeLessThanOrEqual(0);
 
     await field.fill('203.0.113.53 https://dns.example.org/dns-query');
-    await page.locator('main .vh').getByRole('button', { name: /Проверить/ }).click();   // not the site check in the top bar
+    await page.locator('main .panel:has(.dns-own)').getByRole('button', { name: /Проверить/ }).click();   // not the site check in the top bar
     await expect.poll(() => sent).not.toBeNull();
     expect(sent.own).toEqual(['203.0.113.53', 'https://dns.example.org/dns-query']);
   });
