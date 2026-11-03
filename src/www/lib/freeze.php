@@ -55,8 +55,10 @@ define('FREEZE_FILE', UI_CONF_DIR . '/freeze.json');
 function freezeJob(array $job, array &$status, ?array &$nfq, string $iface, array $baseArgs): void
 {
   // сеть — по имени с большим файлом (curlProbe) или по адресу (padProbe); свои сайты — первыми
-  $refs = array_map(fn($r) => ['label' => $r[0], 'host' => $r[1], 'path' => $r[2]], FREEZE_REFS);
-  foreach (FREEZE_IPS as [$label, $ip, $port, $asn, $sni]) {
+  // «only own»: just the own sites and addresses, without the reference networks
+  $only = !empty($job['only']);
+  $refs = $only ? [] : array_map(fn($r) => ['label' => $r[0], 'host' => $r[1], 'path' => $r[2]], FREEZE_REFS);
+  foreach ($only ? [] : FREEZE_IPS as [$label, $ip, $port, $asn, $sni]) {
     $refs[] = ['label' => $label, 'host' => $ip, 'path' => null, 'pad' => ['ip' => $ip, 'port' => $port, 'sni' => $sni ?? FREEZE_SNI], 'asn' => $asn];
   }
   foreach ($job['extra'] ?? [] as $h) {

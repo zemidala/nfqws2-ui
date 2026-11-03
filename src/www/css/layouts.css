@@ -62,7 +62,7 @@
 .tile small { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
 .tile b { font-size: var(--fs-xl); line-height: 1.2; }
 .tile span { font-size: var(--fs-sm); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.tile.ok b { color: var(--ok); } .tile.bad b { color: var(--bad); }
+.tile.ok b { color: var(--ok); } .tile.bad b { color: var(--bad); } .tile.warn b { color: var(--warn); }
 .ov-cols { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
 .ov-cols > .stack { gap: 14px; }
 .ov-pair { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; align-items: start; }

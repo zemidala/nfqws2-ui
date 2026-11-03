@@ -3,7 +3,7 @@
 /* ---------- колонка обзора ---------- */
 .svc { display: flex; align-items: center; gap: 8px; }
 .svc-state { font-size: var(--fs-lg); font-weight: 700; display: flex; align-items: center; gap: 8px; flex: 1; }
-.svc-state.ok { color: var(--ok); } .svc-state.bad { color: var(--bad); }
+.svc-state.ok { color: var(--ok); } .svc-state.bad { color: var(--bad); } .svc-state.warn { color: var(--warn); }
 .svc-state .dot { width: 10px; height: 10px; }
 .search { display: flex; gap: 8px; min-width: 0; } .search .input { flex: 1; min-width: 0; width: 0; }
 .routes { border: 1px solid var(--line); border-radius: calc(var(--radius) * .8 + 2px); }

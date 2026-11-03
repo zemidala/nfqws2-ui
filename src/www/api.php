@@ -962,8 +962,12 @@ switch ($cmd) {
         $extra[] = $h;
       }
     }
+    $only = !empty($in['only']);
+    if ($only && !$extra && !$ips) {
+      fail('«Только свои»: впишите хотя бы один свой сайт или адрес');
+    }
     curlRequire();
-    testLaunch(['type' => 'freeze', 'host' => 'опорные сети', 'sets' => [], 'extra' => $extra, 'ips' => $ips]);
+    testLaunch(['type' => 'freeze', 'host' => $only ? 'свои адреса' : 'опорные сети', 'sets' => [], 'extra' => $extra, 'ips' => $ips, 'only' => $only]);
     respond(['ok' => true]);
 
   case 'freeze_get':
@@ -1265,7 +1269,7 @@ switch ($cmd) {
       $s['auto']['fails'] = max(2, min(4, (int)$in['fails']));
     }
     if (isset($in['pause'])) {
-      $s['auto']['pause'] = in_array((int)$in['pause'], [6, 12, 24], true) ? (int)$in['pause'] : 12;
+      $s['auto']['pause'] = max(1, min(168, (int)$in['pause'] ?: 12));   // hours: 6, 12, 24 or own, up to a week
     }
     saveUiSettings($s);
     respond(['ok' => true]);
@@ -1493,13 +1497,19 @@ switch ($cmd) {
       }
       $s = uiSettings();
       $s['dns_own'] = array_values(array_filter(array_map(fn($v) => trim((string)$v), array_slice($in['own'], 0, DNS_OWN_MAX)), 'strlen'));
+      if (isset($in['only'])) {
+        if ($in['only'] && !$s['dns_own']) {
+          fail('«Только свои»: впишите хотя бы один свой сервер');
+        }
+        $s['dns_only'] = (bool)$in['only'];
+      }
       saveUiSettings($s);
     }
     dnsStart();
     respond(dnsData());
 
   case 'dns_get':
-    respond(dnsData() + ['own_servers' => uiSettings()['dns_own']]);
+    respond(dnsData() + ['own_servers' => uiSettings()['dns_own'], 'own_only' => !empty(uiSettings()['dns_only'])]);
 
   case 'dnsx_start':
     dnsxStart();

@@ -64,6 +64,9 @@ const FEATURES = [
   ['learn', '1.31.0', '«Что выучил роутер»: профили с обучением (learn) сами выбирают стратегию для каждого сайта по тому, какая его открывала'],
   ['learn:convert', '1.31.0', 'Кнопка «Перевести на обучение» у профиля с circular'],
   ['comm:share', '1.31.0', '«Поделиться» без аккаунта GitHub, «Помогать базе» и счётчик «Ваш вклад»'],
+  ['dns:only', '1.31.0', '«DNS-серверы»: галочка «Только свои» — проверить свои серверы без публичных'],
+  ['frz:only', '1.31.0', '«Обрыв на 16 КБ»: галочка «Только свои» — проверить свои сайты и адреса без опорных'],
+  ['auto:pause', '1.31.0', '«Автоподбор»: своя пауза между попытками — от 1 до 168 часов'],
   ['mon:ivl', '1.30.0', '«Мониторинг»: свой интервал проверки — в минутах или часах'],
   ['cfg:mine', '1.30.0', '«Чужой конфиг»: проверку своего конфига для сравнения можно выключить'],
   ['raw:nowarn', '1.30.0', '«Оформление»: не показывать предупреждения и советы в «Конфиге целиком»'],
@@ -337,8 +340,9 @@ function updateChrome() {
     ? h('a', { class: 'btn ghost small https-link', href: httpsUrl, title: 'Открыть по HTTPS: пароль и данные идут в зашифрованном виде', 'aria-label': 'Открыть по HTTPS' }, '🔒', h('span', { text: ' Открыть по HTTPS' }))
     : simple() && httpsUrl ? h('a', { href: httpsUrl, role: 'menuitem', title: 'Пароль и данные идут в зашифрованном виде' }, h('span', { class: 'mi', text: '🔒' }), 'Открыть по HTTPS') : []);
   const svc = document.getElementById('svc');
-  svc.className = 'pill ' + (st.running ? 'ok' : 'bad');
-  svc.replaceChildren(h('span', { class: 'dot' }), st.running ? 'работает' : 'остановлен');
+  const [svcLvl, svcText] = svcState(st);
+  svc.className = 'pill ' + svcLvl;
+  svc.replaceChildren(h('span', { class: 'dot' }), svcText.toLowerCase());
   // Управление сервисом — всегда в верхней панели
   const busy = pendingActive();
   document.getElementById('svc-ctl').replaceChildren(
@@ -422,6 +426,11 @@ async function svcBusy(action, fn) {
     updateChrome();
     updateSide();
   }
+}
+// the service state for badges: while a restart / stop / start runs — its name in the warning colour, not the old state
+function svcState(st) {
+  const busy = { restart: 'Перезапуск', stop: 'Остановка', start: 'Запуск' }[S.svcAction];
+  return busy ? ['warn', busy] : st.running ? ['ok', 'Работает'] : ['bad', 'Остановлен'];
 }
 // a service button: while its action runs — a spinning arrow instead of the icon (same size, the label stays)
 function svcBtn(label, action, onclick, cls, ic, attrs = {}) {

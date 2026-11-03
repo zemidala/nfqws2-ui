@@ -137,7 +137,7 @@ function renderSideService(el) {
   el.replaceChildren(
     h('div', { class: 'blk-h' }, h('h2', { text: 'Сервис' })),
     h('div', { class: 'svc' },
-      h('div', { class: 'svc-state ' + (st.running ? 'ok' : 'bad') }, h('span', { class: 'dot' }), st.running ? 'Работает' : 'Остановлен')),
+      h('div', { class: 'svc-state ' + svcState(st)[0] }, h('span', { class: 'dot' }), svcState(st)[1])),
     // restart / stop live in the top bar; here only where the bar has none of them — «Вкладки» on a wide screen
     layout() !== 'tabs' || !isWide() ? null : h('div', { class: 'svc-buttons' },
       st.running
@@ -664,7 +664,7 @@ function overviewTiles() {
   const bad = profs.filter((p) => worst(profIssues(p)) === 'error' || ['dead', 'excludes-only'].includes(p.state)).length;
   const used = st.lists.filter((l) => l.used.length);
   return h('div', { class: 'tiles' },
-    tile(st.running ? 'ok' : 'bad', '#/', 'Сервис', st.running ? 'Работает' : 'Остановлен', st.running && st.process?.started ? 'запущен ' + fmtAgo(st.now - st.process.started) : 'обход не работает'),
+    tile(svcState(st)[0], '#/', 'Сервис', svcState(st)[1], st.running && st.process?.started ? 'запущен ' + fmtAgo(st.now - st.process.started) : 'обход не работает'),
     tile(!m.length ? '' : okN === m.length ? 'ok' : 'bad', PAGES.mon[0], 'Сайты', m.length ? `${okN} из ${m.length}` : '—', m.length ? (st.monitor.last ? 'проверены ' + fmtAgo(st.now - st.monitor.last) : 'ещё не проверялись') : 'мониторинг пуст'),
     tile(problems.length ? 'bad' : 'ok', problems[0]?.href || PAGES.raw[0], 'Проблемы', String(problems.length), problems.length ? problems[0].title : 'конфиг и списки в порядке'),
     tile(bad ? 'bad' : '', PAGES.prof[0], 'Профили', String(profs.length), bad ? `${bad} с проблемами` : 'все срабатывают'),

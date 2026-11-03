@@ -16,19 +16,21 @@ async function viewDns(main) {
   const out = h('div', { class: 'stack', style: 'gap:14px' }, skel(1, 4));
   // own servers: checked with the public ones and kept on the router for the next checks
   const ownIn = h('input', { class: 'input mono grow', placeholder: '1.2.3.4, dns.example.com, https://dns.example.com/dns-query', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Свои DNS-серверы' });
+  const onlyIn = h('input', { type: 'checkbox' });
   main.append(
     h('div', { class: 'vh' }, h('h1', { text: 'DNS-серверы' }), h('span', { class: 'grow' }), startBtn),
     h('p', { class: 'muted dns-lead' }, 'Какие DNS-серверы отвечают с этого роутера, не перехватывает ли провайдер обычный DNS и не подменяет ли адреса закрытых сайтов. ', when,
       'Настройки DNS роутера страница не меняет — только показывает и советует.'),
     h('div', { class: 'frow dns-own' }, h('span', { class: 'lbl', text: 'Свои серверы' }),
       h('div', { class: 'stack', style: 'gap:6px' }, h('div', { class: 'row' }, ownIn, newTag('dns:own')),
-        h('span', { class: 'sm muted', text: 'Необязательно, через запятую, до пяти. Адрес — проверяется обычный DNS (порт 53), имя — DoT, ссылка https://… — DoH. Проверяются вместе с публичными и стоят в таблице первыми; список запоминается.' }))),
+        h('span', { class: 'sm muted', text: 'Необязательно, через запятую, до пяти. Адрес — проверяется обычный DNS (порт 53), имя — DoT, ссылка https://… — DoH. Проверяются вместе с публичными и стоят в таблице первыми; список запоминается.' }),
+        h('label', { class: 'chk' }, onlyIn, 'Только свои — без публичных серверов', newTag('dns:only')))),
     out);
   let q = {}, x = {}, sort = { key: 'best', dir: 1 }, all = false;
   const busy = () => !!(q.running || x.running);
   async function start() {
     const own = ownIn.value.split(/[\s,;]+/).map((v) => v.trim()).filter(Boolean);
-    const s = await guarded(() => api('dns_start', { own }));
+    const s = await guarded(() => api('dns_start', { own, only: onlyIn.checked }));
     if (!s) return;
     q = s; x = await api('dnsx_get').catch(() => ({})); all = false; sort = { key: 'best', dir: 1 };
     draw(); poll();
@@ -277,6 +279,7 @@ async function viewDns(main) {
   const [a0, b0] = [await api('dns_get').catch(() => ({})), await api('dnsx_get').catch(() => ({}))];
   q = a0; x = b0;
   ownIn.value = (a0.own_servers || []).join(', ');
+  onlyIn.checked = !!a0.own_only;
   draw();
   if (busy()) poll();
 }

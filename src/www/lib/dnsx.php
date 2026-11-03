@@ -106,9 +106,16 @@ function dnsxList(): array
   static $list = null;
   if ($list === null) {
     $own = dnsOwnParse(uiSettings()['dns_own']);
-    $list = array_merge(is_array($own) ? array_map(fn($r) => $r + ['own' => true], $own) : [], DNSX);
+    $list = array_merge(is_array($own) ? array_map(fn($r) => $r + ['own' => true], $own) : [], dnsOnly() ? [] : DNSX);
   }
   return $list;
+}
+
+// «only own» is on and there are own servers to check: the public ones are skipped in both parts of the check
+function dnsOnly(): bool
+{
+  $s = uiSettings();
+  return !empty($s['dns_only']) && is_array(dnsOwnParse($s['dns_own'])) && $s['dns_own'];
 }
 
 function dnsxData(): array

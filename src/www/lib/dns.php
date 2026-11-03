@@ -195,7 +195,7 @@ function dnsJob(): void
     $d['servers'][] = ['name' => 'DNS провайдера', 'ip' => $loc['isp'], 'kind' => 'isp', 'udp' => dnsPlain($loc['isp'])];
     $save();
   }
-  foreach (DNS_SERVERS as [$name, $ip, $host, $expect]) {
+  foreach (dnsOnly() ? [] : DNS_SERVERS as [$name, $ip, $host, $expect]) {
     if (is_file(DNSX_STOP)) {
       break;
     }
