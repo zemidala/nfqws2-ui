@@ -51,8 +51,8 @@
    for hover and focus. The chosen fill: the accent itself in the light theme, a darker accent in the dark one — white
    text on it stays readable (APCA ≥ 75 at 13 px) */
 :root[data-variant="c"] { --c-sel: var(--accent); --c-selfg: var(--accent-fg); --c-track: color-mix(in srgb, var(--fg) 72%, var(--bg)); --c-raise: rgb(0 0 0 / .12); }
-@media (prefers-color-scheme: dark) { :root[data-variant="c"]:not([data-mode="light"]) { --c-sel: color-mix(in srgb, var(--accent) 58%, #000); --c-selfg: #fff; --c-track: color-mix(in srgb, var(--fg) 86%, var(--bg)); --c-raise: rgb(0 0 0 / .35); } }
-:root[data-variant="c"][data-mode="dark"] { --c-sel: color-mix(in srgb, var(--accent) 58%, #000); --c-selfg: #fff; --c-track: color-mix(in srgb, var(--fg) 86%, var(--bg)); --c-raise: rgb(0 0 0 / .35); }
+@media (prefers-color-scheme: dark) { :root[data-variant="c"]:not([data-mode="light"]) { --c-sel: color-mix(in srgb, var(--accent) 54%, #000); --c-selfg: #fff; --c-track: color-mix(in srgb, var(--fg) 92%, var(--bg)); --c-raise: rgb(0 0 0 / .35); } }
+:root[data-variant="c"][data-mode="dark"] { --c-sel: color-mix(in srgb, var(--accent) 54%, #000); --c-selfg: #fff; --c-track: color-mix(in srgb, var(--fg) 92%, var(--bg)); --c-raise: rgb(0 0 0 / .35); }
 :root[data-variant="c"] .btn:not(.primary):not(.ghost):not(.tog) { background: var(--soft); border-color: color-mix(in srgb, var(--fg) 16%, var(--surface)); color: var(--fg); box-shadow: 0 1px 0 var(--c-raise); }
 :root[data-variant="c"] .btn:not(.primary):not(.ghost):not(.tog):hover:not(:disabled) { background: color-mix(in srgb, var(--accent) 14%, var(--soft)); border-color: var(--accent); }
 :root[data-variant="c"] .btn.primary { background: var(--c-sel); border-color: var(--c-sel); color: var(--c-selfg); box-shadow: 0 1px 0 var(--c-raise); }
@@ -66,6 +66,24 @@
 :root[data-variant="c"] .btn.tog > svg { display: none; }   /* the dot says what the button is; no second picture */
 :root[data-variant="c"] .btn.tog:hover { color: var(--fg); border-color: var(--accent); }
 :root[data-variant="c"] .btn.tog.on { color: var(--fg); }
+/* C: small text (12–13 px) readable at APCA 75 on every background it sits on (pages, panels, tinted notes, log lines):
+   greys from the scheme's own text colour, links from its accent, status colours fixed (no scheme changes them).
+   Above the scheme's rules (look.js schemeCss: :root×3 + :is(…) that counts as two attributes) */
+:root:root:root:root:root[data-variant="c"] {
+  --muted: color-mix(in srgb, var(--fg) 82%, var(--surface)); --faint: var(--muted);
+  --accent-ink: color-mix(in srgb, var(--accent) 76%, #000); --tk-opt: var(--accent-ink);
+  --ok: #116333; --bad: #951e23; --warn: #7f4b00; --tk-key: #911b4e; --tk-var: #7f4b00;
+}
+@media (prefers-color-scheme: dark) { :root:root:root:root:root[data-variant="c"]:not([data-mode="light"]) {
+  --muted: color-mix(in srgb, var(--fg) 92%, var(--surface)); --faint: var(--muted);
+  --accent-ink: color-mix(in srgb, var(--accent) 45%, #fff); --tk-opt: var(--accent-ink);
+  --ok: #96e4ba; --bad: #ffc3c0; --warn: #f5cd8c; --tk-key: #ffc2da; --tk-var: #f5cd8c; --tk-fn: #96e4ba;
+} }
+:root:root:root:root:root[data-variant="c"][data-mode="dark"] {
+  --muted: color-mix(in srgb, var(--fg) 92%, var(--surface)); --faint: var(--muted);
+  --accent-ink: color-mix(in srgb, var(--accent) 45%, #fff); --tk-opt: var(--accent-ink);
+  --ok: #96e4ba; --bad: #ffc3c0; --warn: #f5cd8c; --tk-key: #ffc2da; --tk-var: #f5cd8c; --tk-fn: #96e4ba;
+}
 :root[data-variant="c"] .btn.tog.on::before { background: var(--accent); box-shadow: 0 0 0 3px var(--accent-soft); }
 :root[data-variant="c"] .tbl th { color: var(--accent-ink); font-weight: 600; border-bottom: 1.5px solid var(--accent); }
 :root[data-variant="c"] .tbl td { border-bottom-style: dashed; }

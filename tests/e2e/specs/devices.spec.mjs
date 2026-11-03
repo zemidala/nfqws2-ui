@@ -32,7 +32,10 @@ for (const vp of [{ width: 1366, height: 600 }, { width: 390, height: 640 }]) {
     await last.scrollIntoViewIfNeeded();
     await last.click();
     await expect(last).toHaveAttribute('aria-checked', 'true');
-    await page.mouse.wheel(0, 2000);
+    // the user scrolls down to the save bar: the page itself (a wheel over the table's own box, when that box has
+    // nothing to scroll, does not reach the page in every browser build — so not by the wheel)
+    await expect(page.locator('.savebar')).toBeVisible();
+    await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
     await page.waitForTimeout(300);
     // the page and the table's own scroll box (a long table scrolls inside it): neither may jump back to the top
     const scrolled = () => page.evaluate(() => {
