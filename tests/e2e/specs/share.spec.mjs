@@ -4,7 +4,7 @@ import { test, expect } from '../fixtures.mjs';
 
 test.afterEach(async ({ page }) => { await page.unrouteAll({ behavior: 'ignoreErrors' }); });
 
-const INFO = { relay: true, asn: 60840, provider: 'Telecom-Service', target_asn: 24940, host_known: false, name: '', auto: false, repo: 'https://github.com/zemidala/nfqws2-strategies' };
+const INFO = { relay: true, asn: 64500, provider: 'Example ISP', target_asn: 24940, host_known: false, name: '', auto: false, repo: 'https://github.com/zemidala/nfqws2-strategies' };
 const X = { name: 'hostfakesplit ×4', steps: ['--lua-desync=hostfakesplit:repeats=4:host=ya.ru'], ok: 3, tries: 3 };
 const S = { host: 'king.hr', proto: 'tls' };
 
@@ -48,7 +48,7 @@ test('«Поделиться» через приёмник: что уходит,
   await page.locator('#sb').click();
   const dlg = page.locator('.modal');
   await expect(dlg).toContainText('Отправить стратегию в общую базу?');
-  await expect(dlg).toContainText('AS60840');
+  await expect(dlg).toContainText('AS64500');
   await expect(dlg).toContainText('сеть сайта — AS24940');
   await expect(dlg).toContainText('Имя сайта не уходит');
   await expect(dlg).toContainText('Дальше помогать базе самому');
