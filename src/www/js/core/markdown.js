@@ -62,7 +62,7 @@ function md(text, onAnchor) {
       i--;
       const body = rows.filter((r) => !r.every((c) => /^:?-+:?$/.test(c)));
       const head = rows.length > 1 && rows[1].every((c) => /^:?-+:?$/.test(c)) ? body.shift() : null;
-      root.append(h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
+      root.append(h('div', { class: 'scroll md-tbl' }, h('table', { class: 'tbl' },
         head && head.some(Boolean) ? h('thead', {}, h('tr', {}, head.map((c) => h('th', {}, inl(c))))) : null,
         h('tbody', {}, body.map((r) => h('tr', {}, r.map((c) => h('td', {}, inl(c)))))))));
       continue;
