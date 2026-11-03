@@ -34,7 +34,13 @@ for (const vp of [{ width: 1366, height: 600 }, { width: 390, height: 640 }]) {
     await expect(last).toHaveAttribute('aria-checked', 'true');
     await page.mouse.wheel(0, 2000);
     await page.waitForTimeout(300);
-    const before = await page.evaluate(() => window.scrollY);
+    // the page and the table's own scroll box (a long table scrolls inside it): neither may jump back to the top
+    const scrolled = () => page.evaluate(() => {
+      const box = document.querySelector('table.devs').closest('.scroll');
+      const de = document.documentElement;
+      return [window.scrollY + (box ? box.scrollTop : 0), de.scrollHeight - innerHeight + (box ? box.scrollHeight - box.clientHeight : 0)];
+    });
+    const [before] = await scrolled();
     expect(before).toBeGreaterThan(0);
     await page.locator('.savebar').getByRole('button', { name: 'Сохранить' }).click();
     await expect.poll(() => sent.length).toBe(1);
@@ -42,7 +48,7 @@ for (const vp of [{ width: 1366, height: 600 }, { width: 390, height: 640 }]) {
     await expect(page.locator('.savebar')).toBeHidden();
     await page.waitForTimeout(500);
     // stays put; only when it was at the very bottom the page gets shorter by the save bar and the browser clamps
-    const [after, maxY] = await page.evaluate(() => [window.scrollY, document.documentElement.scrollHeight - window.innerHeight]);
+    const [after, maxY] = await scrolled();
     expect(after).toBeGreaterThanOrEqual(Math.min(before, maxY) - 5);
     expect(after).toBeGreaterThan(0);
   });

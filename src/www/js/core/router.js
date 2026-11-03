@@ -40,6 +40,8 @@ async function route(refresh = false) {
   S.newHere = new Set(pageFeatures(pageOf(r)));
   const page = pageOf(r);
   const other = S.shownPageId !== page;
+  // the same page again (a save, a refresh): long tables scroll inside their own box — keep where each one was
+  const boxTops = other ? [] : [...main.querySelectorAll('.scroll')].map((b) => b.scrollTop);
   // While the next page loads, the browser keeps a still picture of what was on screen (View Transitions) and the
   // new page is built under it — no empty frame, no skeleton, nothing jumps, and no second copy in the page (a cloned
   // copy made every search of the page find things twice for a moment). Then: another page fades in over the old one
@@ -86,6 +88,7 @@ async function route(refresh = false) {
     }
   }
   if (seq === routeSeq) { seenPage(page); S.shownPageId = page; }
+  if (seq === routeSeq && boxTops.some(Boolean)) main.querySelectorAll('.scroll').forEach((b, i) => { if (boxTops[i]) b.scrollTop = boxTops[i]; });
   if (!r.q.get('var') && !r.q.get('hl')) window.scrollTo(0, 0);
 }
 
