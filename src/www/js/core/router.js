@@ -43,6 +43,8 @@ async function route(refresh = false) {
   const other = S.shownPageId !== page;
   // the same page again (a save, a refresh): long tables scroll inside their own box — keep where each one was
   const boxTops = other ? [] : [...main.querySelectorAll('.scroll')].map((b) => b.scrollTop);
+  // only a new address starts from the top: a redraw of this one (a saved form, another theme) stays where it was
+  const pageTop = S.shownHash === location.hash ? window.scrollY : 0;
   // While the next page loads, the browser keeps a still picture of what was on screen (View Transitions) and the
   // new page is built under it — no empty frame, no skeleton, nothing jumps, and no second copy in the page (a cloned
   // copy made every search of the page find things twice for a moment). Then: another page fades in over the old one
@@ -88,9 +90,9 @@ async function route(refresh = false) {
       target.classList.add('pg-in');
     }
   }
-  if (seq === routeSeq) { seenPage(page); S.shownPageId = page; }
+  if (seq === routeSeq) { seenPage(page); S.shownPageId = page; S.shownHash = location.hash; }
   if (seq === routeSeq && boxTops.some(Boolean)) main.querySelectorAll('.scroll').forEach((b, i) => { if (boxTops[i]) b.scrollTop = boxTops[i]; });
-  if (!r.q.get('var') && !r.q.get('hl')) window.scrollTo(0, 0);
+  if (!r.q.get('var') && !r.q.get('hl')) window.scrollTo(0, pageTop);
 }
 
 // unsaved edits: the address goes back at once, and on «Уйти» the page moves on (hashchange again, now clean)
