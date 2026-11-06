@@ -46,8 +46,37 @@
 :root[data-palette="zd"] main .panel, :root[data-palette="zd"] main .panel + .panel { background: var(--surface); border: 1px solid var(--line); padding: 18px 22px 22px; border-radius: var(--radius); }
 @media (max-width: 479px) { :root[data-palette="zd"] main .panel, :root[data-palette="zd"] main .panel + .panel { padding: 14px 14px 16px; } }
 :root[data-palette="zd"] :is(.blk, .tile) { border: 1px solid var(--line); border-radius: var(--radius); }
-:root[data-palette="zd"] .notice.info { background: var(--zd-blue-soft); color: var(--fg); box-shadow: inset 3px 0 var(--zd-blue); }
+/* no coloured stripe down the side of a block, no spaced capitals: a fill says what a note is, and the menu alone
+   keeps a bar, as the mark of the current page */
+:root[data-palette="zd"] .notice.info { background: var(--zd-blue-soft); color: var(--fg); }
 :root[data-palette="zd"] .notice.info > svg { color: var(--zd-blue); }
+:root[data-palette="zd"] .md blockquote { border-left: 0; border-radius: var(--radius); }
+:root[data-palette="zd"] .cfg-card.best { box-shadow: none; }
+:root[data-palette="zd"] .logv .lg { border-left-color: transparent; }
+:root[data-palette="zd"] :is(.blk-h h2, .pill, .tag, .dd-g, .mnav .nav-h, .mfly-h, .tbl th) { text-transform: none; letter-spacing: 0; }
+:root[data-palette="zd"] .blk-h h2 { font-size: var(--fs-md); }
+/* status colours above are for text; small bars need a stronger fill, or a failure hardly differs from a success */
+:root[data-palette="zd"] { --ok-fill: #1f9d55; --warn-fill: #c98a00; --bad-fill: #d8343b; --sel: #ff6a14; --sel-fg: #14161b; }
+:root[data-palette="zd"][data-mode="dark"] { --ok-fill: #4cc98a; --warn-fill: #f0b04a; --bad-fill: #ff7d73; }
+@media (prefers-color-scheme: dark) { :root[data-palette="zd"]:not([data-mode="light"]) { --ok-fill: #4cc98a; --warn-fill: #f0b04a; --bad-fill: #ff7d73; } }
+:root[data-palette="zd"] :is(.ch-ticks, .ch-cols, .ch-blocks, .ch-hours, .ch-hmini, .mtl-dot, .mtl-legend, .lbar, .tile-bars) { --ok: var(--ok-fill); --warn: var(--warn-fill); --bad: var(--bad-fill); }
+/* «Открыть» stands in every block: a link, so that only real actions look like buttons */
+:root[data-palette="zd"] .blk-h > a.btn.small { border-color: transparent; background: none; color: var(--accent-ink); box-shadow: none; padding: 0 2px; font-weight: 600; }
+:root[data-palette="zd"] .blk-h > a.btn.small:hover { background: none; border-color: transparent; text-decoration: underline; }
+/* long names fit the menu; a tile's note wraps instead of being cut */
+:root[data-palette="zd"] .mnav a:not(.mtop > a) { padding-left: 46px; padding-right: 10px; }
+:root[data-palette="zd"] .tile span { white-space: normal; }
+/* «Сервис»: the state beside the title, three gauges, one line about nfqws2; two buttons go one under the other,
+   side by side they had no room for their text */
+:root[data-palette="zd"] .blk-h > .pill { flex: none; }
+.svc-cells { display: grid; grid-template-columns: repeat(auto-fit, minmax(0, 1fr)); grid-auto-flow: column; gap: 8px; }
+.svc-cell { background: var(--soft); border-radius: var(--radius); padding: 8px 10px; display: grid; gap: 4px; min-width: 0; }
+.svc-cell span { color: var(--muted); font-size: var(--fs-sm); font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.svc-cell b { font: 700 var(--fs-lg, 18px)/1.2 var(--head); font-variant-numeric: tabular-nums; }
+.svc-m { height: 6px; border-radius: 3px; background: var(--surface); overflow: hidden; }
+.svc-m i { display: block; height: 100%; border-radius: 3px; background: #ff6a14; }
+.svc-m i.hot { background: var(--bad-fill); }
+:root[data-palette="zd"] .svc-buttons { grid-auto-flow: row; }
 /* overview tiles: the figure in the heading face and, where the data is there, one mark per site or profile */
 :root[data-palette="zd"] .tile small { font-size: var(--fs-sm); text-transform: none; letter-spacing: 0; }
 :root[data-palette="zd"] .tile b { font-family: var(--head); font-weight: 700; font-variant-numeric: tabular-nums; }
@@ -66,6 +95,13 @@
    styles size fields and buttons separately and they ended up 4–8 px apart; plain text in the row stays centred */
 /* exactly the control height, not «the tallest»: a three-line hint in the same row stretched the button to its size */
 :is(.row, .quick, .search):has(> .input) > :is(input.input, .btn, .dd-btn) { align-self: center; height: var(--ctl-h); min-height: var(--ctl-h); }
+/* a row of chips with a field or a dropdown in it: everything one height, in every style */
+.chips:has(> .input, > .dd-btn) { --chips-h: 30px; align-items: center; }
+@media (max-width: 759px) { .chips:has(> .input, > .dd-btn) { --chips-h: var(--ctl-h); } }
+:root:root .chips:has(> .input, > .dd-btn) > :is(.chip, input.input, .btn, .dd-btn) { height: var(--chips-h); min-height: var(--chips-h); }
+/* an icon alone in a table cell sits on the first line of the row, next to the text it belongs to */
+.tbl tr:has(> td > .lvl:only-child) > td { vertical-align: top; }
+.tbl td > .lvl:only-child { display: flex; align-items: center; height: 1lh; margin-top: 0; }
 /* an icon button is a square: as wide as it is tall in every style (K made them 28 × 34) */
 :root .btn.icon { width: var(--ctl-h); min-height: var(--ctl-h); padding: 0; flex: none; }
 :root .btn.small.icon { width: var(--ctl-hs); min-height: var(--ctl-hs); }

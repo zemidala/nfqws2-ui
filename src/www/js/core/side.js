@@ -131,13 +131,25 @@ function renderSideMonitor(el) {
       levelIcon(!s.last ? 'info' : s.last[1] ? 'ok' : 'error'), h('span', { class: 'ellipsis mono sm', text: s.host }), uptimeBar(s.recent)))));
 }
 
+// Z: three gauges of the router under the head of «Сервис». Load average has no fixed top, a full bar means 2
+function svcGauges(l) {
+  if (!l) return null;
+  const mem = l.mem_total && l.mem_free != null ? Math.round(100 * (1 - l.mem_free / l.mem_total)) : null;
+  const cell = (label, val, pct, hot) => h('div', { class: 'svc-cell' }, h('span', { text: label }), h('b', { text: val }),
+    h('div', { class: 'svc-m' }, h('i', { class: hot ? 'hot' : '', style: `width:${Math.min(100, Math.max(0, pct))}%` })));
+  return h('div', { class: 'svc-cells' },
+    l.cpu != null ? cell('ЦП', l.cpu + ' %', l.cpu, l.cpu > 80) : null,
+    mem != null ? cell('Память', mem + ' %', mem, mem > 85) : null,
+    l.la ? cell('Нагрузка', String(l.la[0]).replace('.', ','), l.la[0] * 50, l.la[0] > 2) : null);
+}
 function renderSideService(el) {
   const st = S.state;
   const need = st.running && (st.restart_needed || !st.in_sync);
+  const z = getLook().variant === 'z';
+  const [stCls, stText] = svcState(st);
   el.replaceChildren(
-    h('div', { class: 'blk-h' }, h('h2', { text: 'Сервис' })),
-    h('div', { class: 'svc' },
-      h('div', { class: 'svc-state ' + svcState(st)[0] }, h('span', { class: 'dot' }), svcState(st)[1])),
+    h('div', { class: 'blk-h' }, h('h2', { text: 'Сервис' }), z ? h('span', { class: 'pill ' + stCls, text: stText.toLowerCase() }) : null),
+    z ? svcGauges(st.load) : h('div', { class: 'svc' }, h('div', { class: 'svc-state ' + stCls }, h('span', { class: 'dot' }), stText)),
     // restart / stop live in the top bar; here only where the bar has none of them — «Вкладки» on a wide screen
     layout() !== 'tabs' || !isWide() ? null : h('div', { class: 'svc-buttons' },
       st.running

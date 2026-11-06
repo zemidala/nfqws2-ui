@@ -298,7 +298,7 @@ async function viewProfile(content, index, r) {
     const portRow = (key, label) => {
       const arr = model[key];
       if (arr === null) return h('div', { class: 'frow' }, h('span', { class: 'lbl', text: label }), h('div', {}, h('button', { class: 'chip add', type: 'button', text: '+ добавить фильтр ' + label, onclick: () => { model[key] = []; touch(); draw(); } })));
-      const inp = h('input', { class: 'input mono', style: 'width:130px;min-height:26px;padding:1px 8px', placeholder: '443 или 5000-5010', 'data-fk': 'port-' + key, 'aria-label': 'Добавить порт ' + label });
+      const inp = h('input', { class: 'input mono', style: 'width:170px;padding:1px 8px', placeholder: '443 или 5000-5010', 'data-fk': 'port-' + key, 'aria-label': 'Добавить порт ' + label });
       const addPort = () => {
         const val = inp.value.trim();
         if (!val) return;

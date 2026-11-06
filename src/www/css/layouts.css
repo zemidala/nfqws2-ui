@@ -121,8 +121,8 @@ a.over-row:hover { background: var(--soft); }
 .lsec-h .pnum ~ .cnt { flex: none; overflow: visible; }
 .lrole { font-size: var(--fs-xs); color: var(--warn); }
 /* own tooltip (shared handler in app.js): graphite with an orange line, the same in every theme */
-.ui-tip { position: fixed; z-index: 1000; max-width: min(320px, calc(100vw - 16px)); padding: 7px 10px 7px 13px; border-radius: 6px;
-  background: #23262e; color: #eceef3; border: 1px solid #3a3e48; box-shadow: inset 3px 0 #ff6a14, 0 6px 18px rgba(0, 0, 0, .28);
+.ui-tip { position: fixed; z-index: 1000; max-width: min(320px, calc(100vw - 16px)); padding: 7px 10px; border-radius: 6px;
+  background: #23262e; color: #eceef3; border: 1px solid #3a3e48; box-shadow: 0 6px 18px rgba(0, 0, 0, .28);
   font: 400 var(--fs-sm)/1.4 var(--sans, system-ui); font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0;   /* "--new" stays two hyphens */
   white-space: pre-line; overflow-wrap: anywhere; pointer-events: none; }
 .ui-tip::before { content: ""; position: absolute; left: var(--ax, 50%); top: -6px; width: 10px; height: 10px; transform: translateX(-50%) rotate(45deg);
@@ -345,7 +345,7 @@ details.dns-more-panel > summary { cursor: pointer; color: var(--accent-ink); }
 .svc-box { display: inline-flex; align-items: center; gap: 8px; white-space: nowrap; }
 /* router load: small chips before nfqws2 */
 .load { display: inline-flex; align-items: center; gap: 6px; }
-.load[hidden] { display: none; }
+.load[hidden], .load.nofit { display: none; }
 .lchip { display: inline-flex; align-items: center; height: 24px; padding: 0 8px; border: 1px solid var(--line); border-radius: 12px; background: var(--soft); color: var(--muted); font-size: var(--fs-xs); white-space: nowrap; }
 .lchip > span { display: block; text-box: trim-both cap alphabetic; }
 .lchip b { color: var(--fg); font-weight: 600; font-variant-numeric: tabular-nums; }

@@ -210,7 +210,7 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 /* without its label the button is a square icon button; with the label (wide screens below) it takes its width */
 :root .svc-ctl .btn { width: var(--ctl-h); padding: 0; }
 /* the narrowest phones (360 px): the top bar's icon buttons a little smaller, or the bar is 10 px wider than the screen */
-@media (max-width: 419px) { :root:root .top-in .btn.icon, :root:root .svc-ctl .btn { width: 34px; min-height: 34px; } .svc-ctl { gap: 2px; } }
+@media (max-width: 419px) { :root:root .top-in .btn.icon, :root:root .svc-ctl .btn { width: 34px; min-height: 34px; } :root:root .top-in .btn.small { min-height: 34px; } .svc-ctl { gap: 2px; } }
 /* with «Отменить» and the new version mark at once the bar is full: the program's name goes first, then its mark */
 @media (max-width: 519px) { :root .brand > span { display: none; } }
 @media (max-width: 379px) { .top-in .brand { display: none; } }

@@ -275,7 +275,19 @@ function drawLoad() {
   if (elM) elM.replaceChildren(...[...el.children].map((c) => c.cloneNode(true)));
   el.dataset.tip = [l.mem_total ? `свободно ${Math.round(l.mem_free / 1024)} из ${Math.round(l.mem_total / 1024)} МБ` : '',
     l.la ? 'нагрузка ' + l.la.map((x) => String(x).replace('.', ',')).join(' ') : '', up ? 'работает ' + up : ''].filter(Boolean).join(' · ');
+  fitLoad();
 }
+// the numbers stay in the bar only while there is room: they must not squeeze the site field or run over it
+function fitLoad() {
+  const el = document.getElementById('load');
+  const top = el?.closest('.top-in');
+  if (!top || el.hidden) return;
+  el.classList.remove('nofit');
+  const q = top.querySelector('.quick .input');
+  if (top.scrollWidth > top.clientWidth + 1 || (q?.offsetParent && q.clientWidth < 140)) el.classList.add('nofit');
+}
+addEventListener('resize', debounce(fitLoad, 150));
+document.fonts?.addEventListener('loadingdone', fitLoad);   // the web fonts come later and are wider than the system ones
 // a light request every 10 s while the numbers are shown; on a weak router (lowmem) every request is a php-cgi
 // process, so there only when the usual state has not brought fresh numbers for 30 s (it skips while one types)
 setInterval(async () => {
