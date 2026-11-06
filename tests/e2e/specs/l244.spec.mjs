@@ -15,7 +15,7 @@ test('«Оформление»: смена темы и стиля не прок�
     // a slow device is still rebuilding the page for a moment: the place comes back when it is done
     await expect.poll(() => page.evaluate(() => Math.round(window.scrollY)), { timeout: 10_000 }).toBe(was);
   }
-  await page.evaluate(() => document.querySelectorAll('label.look input[name="look"]')[1].click());   // a real click would scroll to it
+  await page.locator('label.look input[name="look"]').nth(1).evaluate((e) => e.click(), null, { timeout: 15_000 });   // a real click would scroll to it
   // another style has another height, so the page may rest on its new bottom, but it does not go back to the top
   await expect.poll(() => page.evaluate(() => window.scrollY), { timeout: 10_000 }).toBeGreaterThan(was - 200);
 });

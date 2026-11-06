@@ -10,6 +10,7 @@ const even = () => {
   for (const svg of document.querySelectorAll('main svg, main .lvl')) {
     const b = svg.getBoundingClientRect();
     if (!b.width || b.width > 30 || svg.closest('.chips')) continue;   // the cross of a chip and the plus button stand apart from any text
+    if (svg.closest('td') && getComputedStyle(svg.closest('td')).display !== 'table-cell') continue;   // a table as cards on a phone: the mark has its own line
     let host = svg.parentElement, t = null;
     const cell = svg.closest('td');
     if (cell && !firstText(cell) && cell.nextElementSibling) t = firstText(cell.nextElementSibling);
