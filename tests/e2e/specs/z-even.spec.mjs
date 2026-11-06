@@ -9,7 +9,7 @@ const even = () => {
   const firstText = (e) => { const w = document.createTreeWalker(e, NodeFilter.SHOW_TEXT); let n; while ((n = w.nextNode())) if (n.textContent.trim()) return n; return null; };
   for (const svg of document.querySelectorAll('main svg, main .lvl')) {
     const b = svg.getBoundingClientRect();
-    if (!b.width || b.width > 30) continue;
+    if (!b.width || b.width > 30 || svg.closest('.chips')) continue;   // the cross of a chip and the plus button stand apart from any text
     let host = svg.parentElement, t = null;
     const cell = svg.closest('td');
     if (cell && !firstText(cell) && cell.nextElementSibling) t = firstText(cell.nextElementSibling);

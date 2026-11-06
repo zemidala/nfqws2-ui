@@ -131,6 +131,7 @@ test('«Не показывать»: замечание пропадает из 
 });
 
 test('нагрузка роутера в шапке: только с галочкой, цифры похожи на правду', async ({ app }) => {
+  await app.page.setViewportSize({ width: 1920, height: 900 });   // on a narrower window the numbers leave the bar when it is full
   await app.open('#/settings/look');
   await expect(app.page.locator('#load')).toBeHidden();
   await lookBox(app, 'Показывать нагрузку роутера').check();

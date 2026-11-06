@@ -16,6 +16,8 @@ test('колесо над таблицей двигает страницу', asy
   await box.scrollIntoViewIfNeeded();
   const b = await box.boundingBox();
   await page.mouse.move(b.x + 80, b.y + Math.min(b.height / 2, 40));
+  await box.evaluate((e) => { e.scrollTop = e.scrollHeight; });   // at the table's end the wheel belongs to the page
+  await page.waitForTimeout(200);
   const y0 = await page.evaluate(() => window.scrollY);
   for (let i = 0; i < 12; i++) { await page.mouse.wheel(0, 200); await page.waitForTimeout(60); }
   const r = await page.evaluate(() => { const e = document.querySelector('main .scroll:has(> table.tbl)'); return { y: window.scrollY, inner: e.scrollTop, room: e.scrollHeight - e.clientHeight }; });
