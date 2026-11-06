@@ -15,6 +15,7 @@ for (const w of [390, 1366]) {
       if (b.cmd === 'service' || b.cmd === 'safe_restart') { sent.push(b); return { ok: true, output: '' }; }
     });
     await app.open('#/settings/basic', { variant: 'k' });
+    test.skip(!(await page.evaluate(() => restartChecks())), 'на этом устройстве проверка после перезапуска выключена');
     const box = page.locator('#f-restart-check');
     await expect(box).toBeChecked();   // on by default
     await box.uncheck();

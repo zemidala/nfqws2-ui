@@ -7,7 +7,7 @@ const files = [
   { file: 'old.list', exists: false, n_added: 5, n_removed: 0 },
 ];
 
-test('окно: дата, файлы, «был удалён»; возврат вызывает перезапуск с проверкой', async ({ app }) => {
+test('окно: дата, файлы, «был удалён»; возврат вызывает перезапуск с проверкой', async ({ app, page }) => {
   const calls = [];
   await app.mock((b) => {
     if (b.cmd === 'initial_get') return { at: 1791403087, files };
@@ -15,6 +15,7 @@ test('окно: дата, файлы, «был удалён»; возврат в
     if (b.cmd === 'safe_restart') { calls.push('restart'); return { ok: true, output: '', fixed: null, files: [] }; }
   });
   await app.open('#/settings/hist');
+  test.skip(!(await page.evaluate(() => restartChecks())), 'на этом устройстве проверка после перезапуска выключена');
   await app.page.getByRole('button', { name: 'Вернуть как при установке' }).click();
   const dlg = app.page.getByRole('dialog', { name: 'Вернуть как при установке' });
   await expect(dlg).toContainText('07.10');

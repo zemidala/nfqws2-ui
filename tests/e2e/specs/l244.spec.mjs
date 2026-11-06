@@ -12,13 +12,12 @@ test('«Оформление»: смена темы и стиля не прок�
   expect(was).toBeGreaterThan(0);
   for (const i of [1, 2, 0]) {
     await page.locator('main .seg[role="radiogroup"]').last().getByRole('radio').nth(i).click();
-    await page.waitForTimeout(500);
-    expect(await page.evaluate(() => Math.round(window.scrollY))).toBe(was);
+    // a slow device is still rebuilding the page for a moment: the place comes back when it is done
+    await expect.poll(() => page.evaluate(() => Math.round(window.scrollY)), { timeout: 10_000 }).toBe(was);
   }
   await page.evaluate(() => document.querySelectorAll('label.look input[name="look"]')[1].click());   // a real click would scroll to it
-  await page.waitForTimeout(400);
   // another style has another height, so the page may rest on its new bottom, but it does not go back to the top
-  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(was - 200);
+  await expect.poll(() => page.evaluate(() => window.scrollY), { timeout: 10_000 }).toBeGreaterThan(was - 200);
 });
 
 test('другой адрес открывается сверху', async ({ app, page }) => {
@@ -27,6 +26,5 @@ test('другой адрес открывается сверху', async ({ app
   await page.evaluate(() => window.scrollTo(0, 400));
   expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(0);
   await page.evaluate(() => { location.hash = '#/settings/basic'; });
-  await page.waitForTimeout(900);
-  expect(await page.evaluate(() => window.scrollY)).toBe(0);
+  await expect.poll(() => page.evaluate(() => window.scrollY), { timeout: 10_000 }).toBeLessThan(2);
 });

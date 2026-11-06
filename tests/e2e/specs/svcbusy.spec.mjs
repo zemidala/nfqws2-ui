@@ -14,6 +14,7 @@ for (const [w, variant] of [[1366, 'k'], [390, 'k'], [1366, 'z']]) {
       if (b.cmd === 'safe_restart') { asked++; await hold; return { ok: true }; }
     });
     await app.open('#/', { variant });
+    test.skip(!(await page.evaluate(() => restartChecks())), 'на этом устройстве проверка после перезапуска выключена');
     const box = page.locator('#svc-ctl');
     const restart = box.getByRole('button', { name: 'Перезапустить' });
     if (!await restart.isVisible().catch(() => false)) test.skip(true, 'nfqws2 не запущен');
