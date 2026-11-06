@@ -1,46 +1,61 @@
 /* Interface styles: style Z: the K layout with the brand palette. Loaded by index.html in a fixed order (see the list there) — the order matters. */
 
 /* ---------- Z · zemidala: the K layout with the brand palette (data-variant="k" data-palette="zd") ----------
-   Orange #ff6a14 fills (buttons, switches, markers) carry black text (7:1); orange as text is darker on light
-   (#c2490a) and lighter on dark (#ff8a45) — the pure brand orange reads at 2.9:1 as text. Black #07080b and
-   graphite surfaces, brand grey #9aa1b5 for captions in the black menu, blue #1d4dff as the second colour.
+   «Сумерки»: a slate blue base, far from black, with clear steps page → card → raised → line, so blocks are told
+   apart at a glance. Orange #ff6a14 fills (buttons, switches, markers) carry dark text; orange as text is a tint
+   (#ffd0b0 on dark, #8f3205 on light), the pure brand orange is hard to read as text. Text colours pass APCA Lc 75
+   on every surface they stand on. Headings Geologica, text Golos Text.
    The selectors carry data-variant too, so they outrank every K colour block above (and its later overrides). */
+:root:root:root:root[data-palette="zd"] { --sans: "Golos Text", "Segoe UI", system-ui, -apple-system, sans-serif; --mono: "JetBrains Mono", ui-monospace, Consolas, monospace; }
 :root[data-variant="k"][data-palette="zd"] {
-  --bg: #f4f4f6; --surface: #ffffff; --line: #e2e3e8; --fg: #07080b; --muted: #5d6270; --faint: #737888;
-  --accent: #ff6a14; --accent-ink: #c2490a; --accent-fg: #07080b; --accent-soft: #fff1e8; --soft: #f1f2f5;
-  --k-side: #07080b; --k-active: #1a1208; --k-field: #8f939c; --zd-blue: #1d4dff; --zd-blue-soft: #eef2ff;
+  --radius: 6px; --head: "Geologica", var(--sans);
+  --bg: #e8ecf3; --surface: #ffffff; --soft: #eef1f6; --line: #bcc5d6; --fg: #141a28; --muted: #3f4a60; --faint: #414c62;
+  --accent: #ff6a14; --accent-ink: #8f3205; --accent-fg: #14161b; --accent-soft: #fdeadd;
+  --ok: #0a5a2c; --ok-soft: #dff5e8; --warn: #6e4000; --warn-soft: #fbeccf; --bad: #8f1419; --bad-soft: #fbe3e3;
+  --k-side: #ffffff; --k-active: #fdeadd; --k-field: #7d8799; --zd-blue: #1d4dff; --zd-blue-soft: #e6ecff;
+  --tk-opt: #8f3205; --tk-fn: #0a5a2c; --tk-key: #6d2aa3; --tk-p: #414c62; --tk-var: #6e4000;
 }
 :root[data-variant="k"][data-palette="zd"][data-mode="dark"] {
-  --bg: #07080b; --surface: #111318; --line: #23262e; --fg: #eceef3; --muted: #b4bacb; --faint: #a3a9bb;
-  --accent: #ff6a14; --accent-ink: #ff8a45; --accent-fg: #07080b; --accent-soft: #2a1709; --soft: #191c22;
-  --k-side: #07080b; --k-active: #1a1208; --k-field: #5f636c; --zd-blue: #8ea4ff; --zd-blue-soft: #121a3a; --shadow: none;
+  --bg: #1b2130; --surface: #252d3f; --soft: #2f384d; --line: #475370; --fg: #f1f4fa; --muted: #d4dae8; --faint: #d8deeb;
+  --accent: #ff6a14; --accent-ink: #ffd0b0; --accent-fg: #14161b; --accent-soft: #3a3038;
+  --ok: #aef2ca; --ok-soft: #24463a; --warn: #ffe0a3; --warn-soft: #4a3c1f; --bad: #ffcdc8; --bad-soft: #4f2c2c;
+  --k-side: #252d3f; --k-active: #3a3038; --k-field: #7b88a6; --zd-blue: #b4c2ff; --zd-blue-soft: #2b3654; --shadow: none;
+  --tk-opt: #ffd0b0; --tk-fn: #aef2ca; --tk-key: #e6dcff; --tk-p: #d8deeb; --tk-var: #ffe0a3;
 }
 @media (prefers-color-scheme: dark) {
   :root[data-variant="k"][data-palette="zd"]:not([data-mode="light"]) {
-    --bg: #07080b; --surface: #111318; --line: #23262e; --fg: #eceef3; --muted: #b4bacb; --faint: #a3a9bb;
-    --accent: #ff6a14; --accent-ink: #ff8a45; --accent-fg: #07080b; --accent-soft: #2a1709; --soft: #191c22;
-    --k-side: #07080b; --k-active: #1a1208; --k-field: #5f636c; --zd-blue: #8ea4ff; --zd-blue-soft: #121a3a; --shadow: none;
+    --bg: #1b2130; --surface: #252d3f; --soft: #2f384d; --line: #475370; --fg: #f1f4fa; --muted: #d4dae8; --faint: #d8deeb;
+    --accent: #ff6a14; --accent-ink: #ffd0b0; --accent-fg: #14161b; --accent-soft: #3a3038;
+    --ok: #aef2ca; --ok-soft: #24463a; --warn: #ffe0a3; --warn-soft: #4a3c1f; --bad: #ffcdc8; --bad-soft: #4f2c2c;
+    --k-side: #252d3f; --k-active: #3a3038; --k-field: #7b88a6; --zd-blue: #b4c2ff; --zd-blue-soft: #2b3654; --shadow: none;
+    --tk-opt: #ffd0b0; --tk-fn: #aef2ca; --tk-key: #e6dcff; --tk-p: #d8deeb; --tk-var: #ffe0a3;
   }
 }
-/* the menu is black in both themes: its own text colours, scoped to it */
-:root[data-palette="zd"] #side:has(.mnav), :root[data-palette="zd"] .mnav {
-  --fg: #e8e9ee; --muted: #9aa1b5; --faint: #9aa1b5; --accent-ink: #ff8a45; --line: #23262e; color: var(--fg);
-}
-:root[data-palette="zd"] .mnav a.on { color: #ff8a45; font-weight: 600; box-shadow: inset 3px 0 #ff6a14; }
-:root[data-palette="zd"] .mnav a:hover { color: #ff8a45; }
-:root[data-palette="zd"] .mnav .tag.new { background: #1d4dff; }
-/* K paints table heads and the overview backdrop with the menu colour — black here, so they get their own */
-:root[data-palette="zd"] .tbl th { background: var(--soft); }
+:root[data-palette="zd"] :is(main h1, .vh h1, .blk-h h2, .panel-h h2, .ogrp h3) { font-family: var(--head); font-weight: 700; }
+/* the menu: a card of its own; the current item has a bar, a fill and a heavier weight, not a colour alone,
+   and hover is a plain step of the surface, so it never looks selected */
+:root[data-palette="zd"] #side:has(.mnav) { border-right: 1px solid var(--line); }
+:root[data-palette="zd"] .mnav a { color: var(--muted); }
+:root[data-palette="zd"] .mnav a:hover { background: var(--soft); color: var(--fg); }
+:root[data-palette="zd"] .mnav a.on { background: var(--k-active); color: var(--fg); font-weight: 700; box-shadow: inset 3px 0 #ff6a14; }
+:root[data-palette="zd"] .mnav .tag.new { background: var(--zd-blue-soft); color: var(--fg); }
+/* K paints table heads and the overview backdrop with the menu colour, so they get their own */
+:root[data-palette="zd"] .tbl th { background: var(--soft); color: var(--muted); }
 :root[data-palette="zd"] .ov { background: transparent; }
-/* every block gets the orange line on top; information notes use the blue second colour */
-:root[data-palette="zd"] main .panel { border-top: 2px solid #ff6a14; }
-/* K panels are flat and flush with the page; in Z a panel is a visible card, so its content needs room inside */
-:root[data-palette="zd"] main .panel, :root[data-palette="zd"] main .panel + .panel { padding: 18px 22px 22px; border-radius: 4px; }
+/* K panels are flat and flush with the page; in Z every block is a visible card with room inside */
+:root[data-palette="zd"] main .panel, :root[data-palette="zd"] main .panel + .panel { background: var(--surface); border: 1px solid var(--line); padding: 18px 22px 22px; border-radius: var(--radius); }
 @media (max-width: 479px) { :root[data-palette="zd"] main .panel, :root[data-palette="zd"] main .panel + .panel { padding: 14px 14px 16px; } }
+:root[data-palette="zd"] :is(.blk, .tile) { border: 1px solid var(--line); border-radius: var(--radius); }
 :root[data-palette="zd"] .notice.info { background: var(--zd-blue-soft); color: var(--fg); box-shadow: inset 3px 0 var(--zd-blue); }
 :root[data-palette="zd"] .notice.info > svg { color: var(--zd-blue); }
-.th-z { background: #f4f4f6; } .th-z .tl { background: #07080b; padding: 4px; } .th-z i { background: #3a3d45; height: 5px; }
-.th-z .acc { background: #ff6a14; width: 70%; } .th-z i.card { background: #fff; height: 30px; border: 1px solid #e2e3e8; border-top: 2px solid #ff6a14; }
+/* overview tiles: the figure in the heading face and, where the data is there, one mark per site or profile */
+:root[data-palette="zd"] .tile small { font-size: var(--fs-sm); text-transform: none; letter-spacing: 0; }
+:root[data-palette="zd"] .tile b { font-family: var(--head); font-weight: 700; font-variant-numeric: tabular-nums; }
+.tile-bars { display: flex; gap: 2px; height: 8px; margin-top: 6px; }
+.tile-bars i { flex: 1 1 0; min-width: 2px; border-radius: 1px; background: var(--ok); }
+.tile-bars i.x { background: var(--bad); }
+.th-z { background: #1b2130; } .th-z .tl { background: #252d3f; padding: 4px; } .th-z i { background: #475370; height: 5px; }
+.th-z .acc { background: #ff6a14; width: 70%; } .th-z i.card { background: #2f384d; height: 30px; border: 1px solid #475370; }
 .look-new { display: grid; position: relative; }
 .look-new > .tag.new { position: absolute; top: 8px; right: 8px; }
 

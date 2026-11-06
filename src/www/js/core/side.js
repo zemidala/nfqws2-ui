@@ -577,7 +577,7 @@ const OVERVIEWS = [['brief', 'Кратко'], ['groups', 'Группы'], ['tile
 async function viewOverview(main, r) {
   sideBlocks();
   const look = getLook();
-  const view = OVERVIEWS.some(([v]) => v === look.overview) ? look.overview : simple() ? 'brief' : isKLike(look.variant) ? 'masonry' : 'groups';   // в стиле K — отдельные карточки, как «Системный монитор»
+  const view = OVERVIEWS.some(([v]) => v === look.overview) ? look.overview : simple() ? 'brief' : look.variant === 'z' ? 'tiles' : isKLike(look.variant) ? 'masonry' : 'groups';   // в стиле K — отдельные карточки, как «Системный монитор»
   const B = { svc: SIDE.service, check: S.check.el, prob: SIDE.problems, mon: SIDE.monitor, backup: SIDE.backup, traffic: SIDE.traffic, ...overviewExtra() };
   const grp = (title, ...blocks) => h('div', { class: 'ogrp' }, h('h3', { text: title }), ...blocks);
   const body = {
@@ -656,7 +656,9 @@ function overviewBrief(B) {
 // Плитки с главными цифрами — состояние читается с одного взгляда
 function overviewTiles() {
   const st = S.state;
-  const tile = (cls, href, label, value, sub) => h('a', { class: 'tile ' + cls, href }, h('small', { text: label }), h('b', { text: value }), h('span', { text: sub }));
+  // in Z a tile also shows what stands behind its figure: one mark per site or profile, red where it fails
+  const tile = (cls, href, label, value, sub, marks) => h('a', { class: 'tile ' + cls, href }, h('small', { text: label }), h('b', { text: value }), h('span', { text: sub }),
+    marks?.length && getLook().variant === 'z' ? h('div', { class: 'tile-bars' }, marks.map((ok) => h('i', { class: ok ? '' : 'x' }))) : null);
   const m = st.monitor?.sites || [];
   const okN = m.filter((x) => x.last && x.last[1]).length;
   const problems = problemItems().filter((x) => x.level !== 'info');
@@ -665,9 +667,9 @@ function overviewTiles() {
   const used = st.lists.filter((l) => l.used.length);
   return h('div', { class: 'tiles' },
     tile(svcState(st)[0], '#/', 'Сервис', svcState(st)[1], st.running && st.process?.started ? 'запущен ' + fmtAgo(st.now - st.process.started) : 'обход не работает'),
-    tile(!m.length ? '' : okN === m.length ? 'ok' : 'bad', PAGES.mon[0], 'Сайты', m.length ? `${okN} из ${m.length}` : '—', m.length ? (st.monitor.last ? 'проверены ' + fmtAgo(st.now - st.monitor.last) : 'ещё не проверялись') : 'мониторинг пуст'),
+    tile(!m.length ? '' : okN === m.length ? 'ok' : 'bad', PAGES.mon[0], 'Сайты', m.length ? `${okN} из ${m.length}` : '—', m.length ? (st.monitor.last ? 'проверены ' + fmtAgo(st.now - st.monitor.last) : 'ещё не проверялись') : 'мониторинг пуст', m.map((x) => x.last && x.last[1])),
     tile(problems.length ? 'bad' : 'ok', problems[0]?.href || PAGES.raw[0], 'Проблемы', String(problems.length), problems.length ? problems[0].title : 'конфиг и списки в порядке'),
-    tile(bad ? 'bad' : '', PAGES.prof[0], 'Профили', String(profs.length), bad ? `${bad} с проблемами` : 'все срабатывают'),
+    tile(bad ? 'bad' : '', PAGES.prof[0], 'Профили', String(profs.length), bad ? `${bad} с проблемами` : 'все срабатывают', profs.map((p) => worst(profIssues(p)) !== 'error' && !['dead', 'excludes-only'].includes(p.state))),
     tile('', PAGES.lists[0], 'Списки', `${used.length} из ${st.lists.length}`, fmtNum(used.reduce((a, l) => a + l.entries, 0)) + ' записей'),
     tile('', PAGES.backup[0], 'Копии', String(st.snap?.count || 0), st.snap?.last ? 'последняя ' + fmtAgo(st.now - st.snap.last) : 'снимков нет'));
 }

@@ -127,7 +127,7 @@ async function paneLook(content) {
         card('b', 'B · Карточки', 'Мягкие карточки и воздух. Удобнее на телефоне.', h('span', { class: 'thumb th-b' }, h('span', { class: 'tl' }, i(), i(), i('acc')), h('span', { class: 'tr' }, i(), i()))),
         card('c', 'C · Схема', 'Путь соединения через профили — главный объект.', h('span', { class: 'thumb th-c' }, h('span', { class: 'tl' }, i(), i(), i()), h('span', { class: 'tr' }, [0, 1, 2].map((k) => h('span', { class: 'pl' }, h('span', { class: 'nd' }), i(k === 0 ? 'acc' : '')))))),
         card('k', 'K · Keenetic', 'Как веб-интерфейс Keenetic: светлое меню с разделами, белые карточки, синие кнопки.', h('span', { class: 'thumb th-k' }, h('span', { class: 'tl' }, i('acc'), i(), i(), i('acc'), i()), h('span', { class: 'tr' }, i('card'), i('card')))),
-        h('div', { class: 'look-new' }, card('z', 'Z · zemidala', 'Фирменные цвета: чёрное меню, графит, оранжевые кнопки и отметки. Раскладка как у K.', h('span', { class: 'thumb th-z' }, h('span', { class: 'tl' }, i('acc'), i(), i(), i('acc'), i()), h('span', { class: 'tr' }, i('card'), i('card')))), newTag('look:zd'))),
+        h('div', { class: 'look-new' }, card('z', 'Z · zemidala', 'Фирменный стиль: спокойный сине-серый фон, заметные блоки, оранжевые кнопки и отметки. Раскладка как у K.', h('span', { class: 'thumb th-z' }, h('span', { class: 'tl' }, i('acc'), i(), i(), i('acc'), i()), h('span', { class: 'tr' }, i('card'), i('card')))), newTag('look:zd'))),
       tintRow,
       h('div', { class: 'look-sub' }, h('span', { class: 'sm muted', text: 'Тема' }),
         h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Тема' }, [['auto', 'Как в системе'], ['light', 'Светлая'], ['dark', 'Тёмная']].map(([m, t]) =>
