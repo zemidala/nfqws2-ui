@@ -146,7 +146,7 @@ function renderSideService(el) {
         : svcBtn('Запустить', 'start', () => service('start'), 'small primary', 'play')),
     h('p', { class: 'muted sm num', text: [st.version && 'nfqws2 v' + st.version, st.running && st.process.started && 'запущен ' + fmtAgo(st.now - st.process.started), st.running && st.process.rss_kb && (st.process.rss_kb / 1024).toFixed(1).replace('.', ',') + ' МБ'].filter(Boolean).join(' · ') }),
     !st.running && st.stop ? stopNote(st.stop) : null,
-    need && !pendingActive() ? notice('warn', 'Нужен перезапуск', 'Конфиг изменён после запуска nfqws2. После перезапуска интерфейс проверит сайты и откатит изменения, если вы их не подтвердите.'
+    need && !pendingActive() ? notice('warn', 'Нужен перезапуск', 'Конфиг изменён после запуска nfqws2.' + (restartChecks() ? ' После перезапуска интерфейс проверит сайты и откатит изменения, если вы их не подтвердите.' : '')
       + (st.restart_why?.length ? ' Что отличается: ' + st.restart_why.join('; ') + '.' : ''), btn(restartLabel(), safeRestart, 'small warn')) : null,
     st.rollback?.files.length && !pendingActive() ? h('div', { class: 'row sm' },
       h('span', { class: 'muted', text: `С ${fmtDate(st.rollback.since)} изменено: ${st.rollback.files.join(', ')}` }),
@@ -688,7 +688,7 @@ function overviewExtra() {
   out.profs = blk('Профили', PAGES.prof[0],
       h('p', { class: 'sm' }, plural(profs.length, 'профиль', 'профиля', 'профилей'), bad ? h('span', { class: 'status-bad', text: ` · ${bad} с проблемами` }) : h('span', { class: 'status-ok', text: ' · все в порядке' })),
       h('div', { class: 'over-rows' }, profs.map((p) => h('a', { class: 'over-row', href: `#/settings/p${p.index}`, title: profScope(p) },
-        h('span', { class: 'pn ' + (worst(profIssues(p)) === 'error' ? 'err' : p.state), text: p.index }),
+        h('span', { class: 'pn ' + (worst(profIssues(p)) === 'error' && p.state !== 'off' ? 'err' : p.state), text: p.index }),
         h('span', { class: 'ellipsis', text: profName(p) }), h('span', { class: 'sm faint ellipsis', text: strategyText(p) })))));
   out.lists = blk('Списки', PAGES.lists[0],
       h('p', { class: 'sm' }, `${used.length} из ${st.lists.length} используются · ${fmtNum(used.reduce((a, l) => a + l.entries, 0))} записей`,

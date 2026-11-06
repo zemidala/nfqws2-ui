@@ -72,7 +72,10 @@ async function viewDiag(main, r, bare = false) {
   const KEY = 'nfqws-ui-recent';
   const recentGet = () => { try { return JSON.parse(localStorage.getItem(KEY)) || []; } catch { return []; } };
   const input = h('input', { class: 'input mono grow', id: 'd-host', value: r.q.get('host') || '', placeholder: 'rutracker.org', autocapitalize: 'off', autocorrect: 'off', spellcheck: 'false', inputmode: 'url', enterkeyhint: 'go', 'aria-label': 'Сайт для диагноза' });
-  const verdictBox = h('div', {});
+  // «as old devices»: every request of the diagnosis over TLS 1.2, and «Подобрать стратегию» opens the pick the same way
+  const tls12 = h('input', { type: 'checkbox', id: 'd-tls12', checked: r.q.get('tls12') === '1' });
+  const tlsHref = (href, on) => on ? href + (href.includes('?') ? '&' : '?') + 'tls12=1' : href;
+  const verdictBox = h('div', { class: 'stack' });
   const rows = {};
   const stepsEl = h('div', { class: 'dsteps' }, DIAG_STEPS.map(([id, title]) => (rows[id] = h('div', { class: 'dstep' }, h('span', { class: 'lvl' }), h('b', { text: title }), h('span', { class: 'sm muted' })))));
   const panelEl = panel('Что проверено', null, stepsEl);
@@ -90,9 +93,11 @@ async function viewDiag(main, r, bare = false) {
     verdictBox.replaceChildren();
     DIAG_STEPS.forEach(([id]) => set(id, 'skip', 'ожидает'));
     const R = { host };   // the name — for the verdict text («Страница … открывается»)
+    const old = tls12.checked;
+    panelEl.querySelector('.panel-h h2').textContent = old ? 'Что проверено — по TLS 1.2' : 'Что проверено';
     const step = async (id, data) => {
       set(id, 'run', 'проверяю…');
-      const res = await api('diag', { step: id, host, ...data });
+      const res = await api('diag', { step: id, host, tls12: old, ...data });
       if (my !== seq || !stepsEl.isConnected) throw new Error('cancelled');
       return res;
     };
@@ -122,7 +127,7 @@ async function viewDiag(main, r, bare = false) {
         // закрыты все адреса от своего DNS — может быть, другой DNS выдаёт рабочий (у Meta, Google, CDN так бывает)
         if (!up.length && !d.podkop) {
           set('tcp', 'run', 'Нет ответа. Спрашиваю адреса у других DNS…');
-          const o = R.other = await api('diag', { step: 'other', host, tried: [...new Set([...d.system, ...d.ref, ...d.ips])] });
+          const o = R.other = await api('diag', { step: 'other', host, tls12: old, tried: [...new Set([...d.system, ...d.ref, ...d.ips])] });
           if (my !== seq || !stepsEl.isConnected) throw new Error('cancelled');
           set('tcp', o.ok ? 'warn' : 'bad', `Нет ответа ни от одного из ${plural(tcp.length, 'адреса', 'адресов', 'адресов')}. `
             + (o.ok ? `Но адрес ${o.ip} (его выдаёт DNS ${o.from}) отвечает` + (o.open ? ' — и сайт по нему открывается даже без обхода.' : '.')
@@ -171,14 +176,14 @@ async function viewDiag(main, r, bare = false) {
       } else {
         DIAG_STEPS.slice(1).forEach(([id]) => set(id, 'skip', 'Не проверялось.'));
       }
-      R.verdict = await api('diag', { step: 'verdict', host, r: R });
+      R.verdict = await api('diag', { step: 'verdict', host, tls12: old, r: R });
       if (my !== seq) return;
       const [lvl, title, text] = diagVerdictText(R);
       const prof = R.verdict.profile;
       verdictBox.replaceChildren(notice(lvl, title, text, h('div', { class: 'notice-actions' },
         prof && R.verdict.code === 'broken_by_nfqws' ? btn(`Исключить из профиля #${prof}`, () => excludeDialog(host, prof), 'small primary') : null,
         prof && R.verdict.code === 'broken_by_nfqws' ? newTag('diag:exclude') : null,
-        R.verdict.pick ?btn('Подобрать стратегию', () => go(pickHref(host)), 'small primary', 'tests') : null,
+        R.verdict.pick ? btn('Подобрать стратегию', () => go(tlsHref(pickHref(host), old)), 'small primary', 'tests', old ? { title: 'Подбор тоже по TLS 1.2 — как для старых устройств' } : {}) : null,
         R.quic?.blocked ? btn('Подобрать для QUIC', () => go('#/tests?host=' + encodeURIComponent(host) + '&proto=quic'), 'small', 'tests', { title: 'По QUIC (HTTP/3) сайт не отвечает ни без обхода, ни через nfqws2 — подобрать стратегию для UDP 443' }) : null,
         prof && ['broken_by_nfqws', 'sni_block', 'tls_block', 'fixed'].includes(R.verdict.code) ? h('a', { class: 'btn small', href: `#/settings/p${prof}`, text: `Профиль #${prof}` }) : null,
         btn('Ещё раз', () => run(host), 'small ghost', 'refresh'))),
@@ -194,13 +199,16 @@ async function viewDiag(main, r, bare = false) {
   const start = () => {
     const v = input.value.trim();
     if (!v) return;
-    if (bare || r.q.get('host') === v) run(v); else go(diagHref(v.replace(/^[a-z]+:\/\//i, '').replace(/[/?#].*$/, '')));
+    if (bare || (r.q.get('host') === v && (r.q.get('tls12') === '1') === tls12.checked)) run(v);
+    else go(tlsHref(diagHref(v.replace(/^[a-z]+:\/\//i, '').replace(/[/?#].*$/, '')), tls12.checked));
   };
   main.append(
     bare ? null : h('div', { class: 'vh' }, h('h1', { text: 'Диагноз блокировки' })),
     panel(null, null,
       h('form', { class: 'row', onsubmit: (e) => { e.preventDefault(); start(); } }, input, h('button', { class: 'btn primary', type: 'submit' }, 'Проверить', icon('arrow'))),
-      bare ? null : h('div', { class: 'recent' }, recentGet().map((x) => h('button', { class: 'chip', type: 'button', text: x, onclick: () => go(diagHref(x)) }))),
+      h('label', { class: 'chk' }, tls12, 'проверять как старые устройства (TLS 1.2)', newTag('diag:tls12'),
+        h('span', { class: 'sm muted', text: ' — для смарт-ТВ и приставок' })),
+      bare ? null : h('div', { class: 'recent' }, recentGet().map((x) => h('button', { class: 'chip', type: 'button', text: x, onclick: () => go(tlsHref(diagHref(x), tls12.checked)) }))),
       h('p', { class: 'sm muted', text: 'Роутер по шагам выясняет, почему сайт не открывается: DNS, блокировка по имени или по адресу, заморозка — и поможет ли подбор стратегии. Занимает 10–30 секунд. Ваш трафик и основной nfqws2 не затрагиваются.' })),
     verdictBox, panelEl);
   if (r.q.get('host')) run(r.q.get('host'));
@@ -218,8 +226,9 @@ async function viewSite(main, r) {
     h('nav', { class: 'subtabs', 'aria-label': 'Сайт' },
       [['check', 'Проверка'], ['diag', 'Диагноз'], ['pick', 'Подбор стратегии'], ['trace', 'Трассировка'], ['hist', 'История подборов']].map(([s, t]) => h('a', { href: href(s), class: s === sub ? 'on' : null, text: t }))));
   if (sub === 'hist') return viewPickHist(main, { q: new URLSearchParams({ host }) }, true);
-  if (sub === 'diag') return viewDiag(main, { q: new URLSearchParams({ host }) }, true);
-  if (sub !== 'check') return viewTests(main, { arg: sub, q: new URLSearchParams({ host }) }, true);
+  const q = new URLSearchParams({ host, ...(r.q?.get('tls12') === '1' ? { tls12: '1' } : {}) });   // «as old devices» from the diagnosis
+  if (sub === 'diag') return viewDiag(main, { q }, true);
+  if (sub !== 'check') return viewTests(main, { arg: sub, q }, true);
   if (overviewCol()) main.append(h('p', { class: 'muted', text: 'Результат проверки — в колонке слева.' }));
   else main.append(S.check.el);
   if (S.check.shown() !== host) S.check.run(host);

@@ -297,7 +297,7 @@ function reportText(array $sites, bool $hide, string $build): string
   $L[] = '';
   $L[] = '== Профили (в порядке проверки) ==';
   foreach ($st['conf_profiles'] as $p) {
-    $L[] = '#' . $p['index'] . ' [' . ($p['source']['source'] ?? '?') . ']' . (in_array($p['state'] ?? '', ['dead', 'excludes-only'], true) ? ' (не срабатывает)' : '');
+    $L[] = '#' . $p['index'] . ' [' . ($p['source']['source'] ?? '?') . ']' . (in_array($p['state'] ?? '', ['dead', 'excludes-only'], true) ? ' (не срабатывает)' : (($p['state'] ?? '') === 'off' ? ' (выключен)' : ''));
     $L[] = '  ' . implode(' ', $p['args'] ?? []);
   }
   $L[] = '';

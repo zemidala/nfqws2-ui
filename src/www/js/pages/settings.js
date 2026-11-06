@@ -33,7 +33,8 @@ function drawSettingsNav(nav, current) {
       const iss = profIssues(p);
       const lvl = worst(iss);
       const isCustom = p.source?.source === 'NFQWS_ARGS_CUSTOM';
-      const a = item('p' + p.index, [h('span', { class: 'pn ' + (lvl === 'error' ? 'err' : p.state) , text: p.index }), h('span', { class: 'nm', text: profName(p) })],
+      const off = p.state === 'off';
+      const a = item('p' + p.index, [h('span', { class: 'pn ' + (lvl === 'error' && !off ? 'err' : p.state), text: p.index }), h('span', { class: 'nm' + (off ? ' muted' : ''), text: profName(p), title: off ? 'Выключен' : null })],
         [lvl === 'error' ? h('span', { class: 'errdot', title: 'Есть ошибки' }) : lvl === 'warning' ? h('span', { class: 'warndot', title: 'Есть предупреждения' }) : null, isCustom ? h('span', { class: 'grip', title: 'Перетащите, чтобы изменить порядок', text: '⋮⋮' }) : h('span', { title: 'Порядок задаёт скрипт запуска', text: '🔒︎' })]);
       if (isCustom && customs.length > 1) {
         a.draggable = true;

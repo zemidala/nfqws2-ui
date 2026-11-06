@@ -301,7 +301,7 @@ function diagCurl(string $args, int $max): array
   [$lo, $hi] = array_map('intval', explode(':', TEST_PORTS));
   $w = '%{http_code}|%{time_connect}|%{time_appconnect}|%{time_total}|%{size_download}|%{redirect_url}|%{errormsg}';
   $out = [];
-  exec('curl -4 -sk --local-port ' . mt_rand($lo, $hi - 50) . '-' . $hi . ' --connect-timeout 5 -m ' . $max . ' -A ' . escapeshellarg(DIAG_UA)
+  exec('curl -4 -sk' . probeTlsOpt() . ' --local-port ' . mt_rand($lo, $hi - 50) . '-' . $hi . ' --connect-timeout 5 -m ' . $max . ' -A ' . escapeshellarg(DIAG_UA)
     . ' -w ' . escapeshellarg($w) . ' ' . $args . ' 2>/dev/null', $out, $rc);
   $f = array_pad(explode('|', (string)end($out), 7), 7, '');
   $code = (int)$f[0];

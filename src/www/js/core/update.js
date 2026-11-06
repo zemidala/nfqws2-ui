@@ -65,14 +65,17 @@ async function autoUpdateCheck() {
 
 // Окно «Что нового» и само обновление с живым журналом установки
 function openUpdate(u, run = false) {
-  const log = h('pre', { class: 'box', style: 'max-height:40vh' });
+  // a fixed height: a growing log would stretch the centred window and move everything in it on every poll
+  const log = h('pre', { class: 'box', style: 'height:40vh' });
   const status = h('div');
+  const about = h('div', { class: 'stack', style: 'gap:12px' },
+    u.notes ? h('div', { class: 'release-notes' }, md(u.notes)) : h('p', { class: 'sm muted', text: 'Описания изменений нет.' }),
+    h('p', { class: 'sm muted' }, 'Обновление ставит пакет с GitHub (с проверкой контрольной суммы) и перезапускает веб-сервер интерфейса. nfqws2, конфиг, списки и доступ в интернет не затрагиваются. Из консоли: ', h('code', { text: 'nfqws-ui update' })));
   const body = h('div', { class: 'modal-b stack', style: 'gap:12px' },
     h('p', {}, `Установлено: `, h('b', { text: u.current }), ` · последняя: `, h('b', { text: u.latest || '—' }), ' · ', h('a', { href: u.url || REPO + '/releases', target: '_blank', rel: 'noopener', text: 'страница релиза' })),
-    u.notes ? h('div', { class: 'release-notes' }, md(u.notes)) : h('p', { class: 'sm muted', text: 'Описания изменений нет.' }),
-    h('p', { class: 'sm muted' }, 'Обновление ставит пакет с GitHub (с проверкой контрольной суммы) и перезапускает веб-сервер интерфейса. nfqws2, конфиг, списки и доступ в интернет не затрагиваются. Из консоли: ', h('code', { text: 'nfqws-ui update' })),
-    status, copyBox(log));
+    about, status, copyBox(log));
   log.hidden = true;
+  const showLog = () => { about.remove(); log.hidden = false; };
   const go = btn('Обновить до ' + u.latest, () => start(), 'primary', 'download', { disabled: !u.can_update || u.running });
   const dlg = modal('nfqws2-ui ' + (u.latest || ''), body, u.available ? go : []);
   let timer = null;
@@ -91,8 +94,8 @@ function openUpdate(u, run = false) {
       return;
     }
     if (r) {
-      log.hidden = false;
-      drawLog(log, r.log.trim().split('\n').filter(Boolean));
+      showLog();
+      drawLog(log, r.log.trim().split('\n').filter(Boolean), 'Запускаю…');
       log.scrollTop = log.scrollHeight;
       if (r.exit !== null || (!r.running && r.version === u.latest)) {
         if (r.exit === 0 || r.version === u.latest) {
@@ -113,6 +116,7 @@ function openUpdate(u, run = false) {
     const r = await guarded(() => api('update_run', { version: u.latest }));
     if (!r) { go.disabled = false; return; }
     status.replaceChildren(h('div', { class: 'row sm' }, h('span', { class: 'spin' }), 'Обновляю… не закрывайте окно'));
+    showLog();
     started = Date.now();
     clearTimeout(timer);
     poll();
@@ -124,7 +128,7 @@ function openUpdate(u, run = false) {
 // Обновление самого nfqws2 (пакет nfqws2-keenetic) и возврат прежней версии
 async function openNfqUpdate() {
   const status = h('div');
-  const log = h('pre', { class: 'box', style: 'max-height:40vh', hidden: true });
+  const log = h('pre', { class: 'box', style: 'height:40vh', hidden: true });   // fixed height — see openUpdate
   const head = h('div', { class: 'stack', style: 'gap:12px' }, spinner('Проверяю…'));
   const body = h('div', { class: 'modal-b stack', style: 'gap:12px' }, head, status, copyBox(log));
   const go = btn('Обновить', null, 'primary', 'download', { hidden: true });
@@ -155,14 +159,8 @@ async function openNfqUpdate() {
     if (!u || !dlg.isConnected) return;
     if (!force && !u.checked) return draw(true);   // ни разу не проверяли (только что обновились) — спросить GitHub сразу
     if (c?.error) toast('GitHub не ответил: ' + c.error, { err: true });
-    head.replaceChildren(
-      !u.installed ? notice('warn', 'nfqws2 стоит не пакетом', 'Пакета nfqws2-keenetic в системе нет — обновляйте nfqws2 тем же способом, каким ставили.') : null,
-      h('p', {}, 'Установлено: ', h('b', { text: u.current || '—' }), ' · последняя: ', h('b', { text: u.latest || '—' }),
-        u.date ? ` · вышла ${fmtDate(u.date).split(',')[0]}` : '', ' · ', h('a', { href: u.url, target: '_blank', rel: 'noopener', text: 'выпуск на GitHub' })),
-      u.available && u.notes ? h('div', { class: 'release-notes' }, md(u.notes.replace(/\r/g, ''))) : null,
-      !u.available && u.latest && !u.rollback ? h('p', { class: 'sm muted', text: 'У вас последняя версия.' }) : null,
-      u.available || u.rollback ? h('p', { class: 'sm muted', text: 'Ставится пакет из выпуска на GitHub, его контрольная сумма сверяется. Перед обновлением делается снимок. Ваши конфиг и списки менеджер пакетов не трогает: если стандартные изменились, рядом появятся файлы -opkg. После установки nfqws2 перезапустится, и интерфейс проверит сайты мониторинга. Прежнюю версию можно вернуть кнопкой — вместе с конфигом и списками из снимка.' }) : null,
-      u.error ? h('p', { class: 'sm muted', text: 'Последняя проверка не удалась: ' + u.error }) : null);
+    if (u.running) { log.hidden = false; go.disabled = back.disabled = recheck.disabled = true; }
+    drawHead();
     go.hidden = !(u.available && u.installed);
     go.replaceChildren(icon('download'), 'Обновить до ' + u.latest);
     go.onclick = () => run(u.latest, false);
@@ -172,7 +170,20 @@ async function openNfqUpdate() {
     if (u.running) poll();
     // итог прошлого обновления — пока можно вернуть прежнюю версию (после возврата он уже не нужен)
     else if (u.result && u.rollback) status.replaceChildren(h('p', { class: 'sm muted', text: `Обновление ${u.result.from} → ${u.result.to}, ${fmtDate(u.result.ts)}:` }), result(u.result));
-    else status.replaceChildren();
+    else if (log.hidden) status.replaceChildren();   // with the log on screen the status holds the outcome of this run
+  };
+
+  // while the log is on screen, only the versions: the release notes would push the log out of the window on a phone
+  const drawHead = () => {
+    const quiet = !log.hidden;
+    head.replaceChildren(
+      !u.installed ? notice('warn', 'nfqws2 стоит не пакетом', 'Пакета nfqws2-keenetic в системе нет — обновляйте nfqws2 тем же способом, каким ставили.') : null,
+      h('p', {}, 'Установлено: ', h('b', { text: u.current || '—' }), ' · последняя: ', h('b', { text: u.latest || '—' }),
+        u.date ? ` · вышла ${fmtDate(u.date).split(',')[0]}` : '', ' · ', h('a', { href: u.url, target: '_blank', rel: 'noopener', text: 'выпуск на GitHub' })),
+      !quiet && u.available && u.notes ? h('div', { class: 'release-notes' }, md(u.notes.replace(/\r/g, ''))) : null,
+      !quiet && !u.available && u.latest && !u.rollback ? h('p', { class: 'sm muted', text: 'У вас последняя версия.' }) : null,
+      !quiet && (u.available || u.rollback) ? h('p', { class: 'sm muted', text: 'Ставится пакет из выпуска на GitHub, его контрольная сумма сверяется. Перед обновлением делается снимок. Ваши конфиг и списки менеджер пакетов не трогает: если стандартные изменились, рядом появятся файлы -opkg. После установки nfqws2 перезапустится, и интерфейс проверит сайты мониторинга. Прежнюю версию можно вернуть кнопкой — вместе с конфигом и списками из снимка.' }) : null,
+      u.error ? h('p', { class: 'sm muted', text: 'Последняя проверка не удалась: ' + u.error }) : null);
   };
 
   const poll = async () => {
@@ -180,8 +191,7 @@ async function openNfqUpdate() {
     const r = await api('nfq_update_status').catch(() => null);
     if (!dlg.isConnected) return;
     if (r) {
-      log.hidden = false;
-      drawLog(log, r.log.trim().split('\n').filter(Boolean));
+      drawLog(log, r.log.trim().split('\n').filter(Boolean), 'Запускаю…');
       log.scrollTop = log.scrollHeight;
       if (r.exit !== null && !r.running) {
         go.disabled = back.disabled = false;
@@ -200,10 +210,12 @@ async function openNfqUpdate() {
       ? `Вернуть nfqws2 ${ver}?\n\nВстанет прежний пакет, конфиг и списки вернутся из снимка перед обновлением. nfqws2 перезапустится — на несколько секунд обход прервётся.`
       : `Обновить nfqws2 до ${ver}?\n\nПеред этим делается снимок. nfqws2 перезапустится — на несколько секунд обход прервётся.`;
     if (!await ask(q, rollback ? 'Вернуть' : 'Обновить')) return;
-    go.disabled = back.disabled = true;
+    go.disabled = back.disabled = recheck.disabled = true;
     const r = await guarded(() => api('nfq_update_run', { version: ver, rollback }));
-    if (!r) { go.disabled = back.disabled = false; return; }
+    if (!r) { go.disabled = back.disabled = recheck.disabled = false; return; }
     status.replaceChildren(h('div', { class: 'row sm' }, h('span', { class: 'spin' }), rollback ? 'Возвращаю… не закрывайте окно' : 'Обновляю… не закрывайте окно'));
+    log.hidden = false;
+    drawHead();
     poll();
   }
   draw();

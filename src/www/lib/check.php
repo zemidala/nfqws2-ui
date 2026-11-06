@@ -99,7 +99,10 @@ function matchRoute(array $profiles, string $host, array $ips, string $proto, in
   foreach ($profiles as $p) {
     $pp = protoPorts($p);
     $s = ['profile' => $p['index'], 'ok' => false, 'why' => ''];
-    if (!inRanges($port, $pp[$proto])) {
+    if (!empty($p['skip'])) {
+      $s['why'] = 'профиль выключен';
+      $s['skip'] = true;
+    } elseif (!inRanges($port, $pp[$proto])) {
       $s['why'] = 'другие порты';
       $s['skip'] = true;
     } elseif ($p['l7'] !== null && !in_array($l7, $p['l7'], true)) {

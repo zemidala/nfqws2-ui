@@ -296,7 +296,7 @@ function buildProfile(int $index, array $args): array
   $p = ['index' => $index, 'args' => $args, 'tcp' => null, 'udp' => null, 'l7' => null,
     'hostlists' => [], 'hostlist_excludes' => [], 'hostlist_domains' => [], 'hostlist_exclude_domains' => [],
     'ipsets' => [], 'ipset_excludes' => [], 'ipset_ips' => [], 'ipset_exclude_ips' => [],
-    'autolist' => null, 'payloads' => [], 'desync' => [], 'other' => [], 'name' => null];
+    'autolist' => null, 'payloads' => [], 'desync' => [], 'other' => [], 'name' => null, 'skip' => false];
   foreach ($args as $a) {
     $name = optName($a);
     $val = str_contains($a, '=') ? substr($a, strpos($a, '=') + 1) : '';
@@ -315,6 +315,7 @@ function buildProfile(int $index, array $args): array
       case 'ipset-exclude-ip': array_push($p['ipset_exclude_ips'], ...explode(',', $val)); break;
       case 'payload': $p['payloads'][] = $val; break;
       case 'name': $p['name'] = $val !== '' ? $val : null; break;
+      case 'skip': $p['skip'] = true; break;   // nfqws2 keeps the profile but does not use it (the «off» switch)
       case 'lua-desync':
         $fn = explode(':', $val, 2);
         $p['desync'][] = ['fn' => $fn[0], 'params' => $fn[1] ?? '', 'payload' => end($p['payloads']) ?: null];
@@ -345,7 +346,7 @@ function analyzeShadowing(array &$profiles): void
     $taken = [];
     for ($i = 0; $i < $j; $i++) {
       $pi = $profiles[$i];
-      if ($pi['has_host_filter'] || $pi['has_ip_filter']) {
+      if (!empty($pi['skip']) || $pi['has_host_filter'] || $pi['has_ip_filter']) {
         continue;
       }
       if ($pi['l7'] !== null && ($pj['l7'] === null || array_diff($pj['l7'], $pi['l7']))) {
@@ -363,7 +364,7 @@ function analyzeShadowing(array &$profiles): void
     $pj['taken'] = $taken;
     $pj['remaining'] = ['tcp' => rangesStr($remaining['tcp']), 'udp' => rangesStr($remaining['udp'])];
     $all = !$remaining['tcp'] && !$remaining['udp'];
-    $pj['state'] = !$taken ? 'active' : ($all ? (array_filter($taken, fn($t) => $t['excludes']) ? 'excludes-only' : 'dead') : 'partial');
+    $pj['state'] = !empty($pj['skip']) ? 'off' : (!$taken ? 'active' : ($all ? (array_filter($taken, fn($t) => $t['excludes']) ? 'excludes-only' : 'dead') : 'partial'));
     $pj['ports'] = ['tcp' => rangesStr($pp['tcp']), 'udp' => rangesStr($pp['udp'])];
   }
   unset($pj);

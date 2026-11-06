@@ -360,6 +360,7 @@ switch ($cmd) {
       fail('Введите имя сайта, например rutracker.org');
     }
     $step = $str('step');
+    $GLOBALS['PROBE_TLS12'] = !empty($in['tls12']);   // «as old devices»: every request of the diagnosis over TLS 1.2
     $ip = is_string($in['ip'] ?? null) ? $in['ip'] : '';
     if (in_array($step, ['direct', 'sni', 'http', 'quic'], true) && !isIp4($ip)) {
       fail('нет адреса сайта');

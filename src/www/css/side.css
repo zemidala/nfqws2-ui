@@ -52,6 +52,7 @@
 .pn { width: 20px; height: 20px; border-radius: 50%; display: block; text-align: center; align-content: center; text-box: trim-both cap alphabetic; font-size: var(--fs-xs); font-weight: 700; border: 2px solid var(--ok); flex: none; font-variant-numeric: tabular-nums lining-nums; }
 .pn.pi { display: grid; place-items: center; text-box: none; color: var(--accent-ink); border-color: currentColor; }   /* «Свой профиль», «Вставить чужой»: an icon in the circle */
 .pn.pi svg { width: 12px; height: 12px; display: block; }
+.pn.off { border-style: dashed; color: var(--muted); }
 .pn.partial { border-color: var(--warn); } .pn.dead, .pn.excludes-only { border-color: var(--bad); } .pn.err { border-color: var(--bad); color: var(--bad); }
 .errdot { width: 7px; height: 7px; border-radius: 50%; background: var(--bad); flex: none; }
 .warndot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); flex: none; }

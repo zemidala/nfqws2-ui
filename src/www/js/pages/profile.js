@@ -9,10 +9,11 @@ function splitTok(t) {
   return eq < 0 ? [t.replace(/^--/, ''), null] : [t.slice(2, eq), t.slice(eq + 1)];
 }
 function parseModel(tokens) {
-  const m = { name: '', tcp: null, udp: null, l7: null, filters: [], lists: [], seq: [] };
+  const m = { name: '', skip: false, tcp: null, udp: null, l7: null, filters: [], lists: [], seq: [] };
   for (const t of tokens) {
     const [n, v] = t.startsWith('--') ? splitTok(t) : [null, null];
     if (n === 'name') m.name = v || '';
+    else if (t === '--skip') m.skip = true;   // the profile is off: nfqws2 keeps it and does not use it
     else if (n === 'filter-tcp') m.tcp = v ? v.split(',') : [];
     else if (n === 'filter-udp') m.udp = v ? v.split(',') : [];
     else if (n === 'filter-l7') m.l7 = v ? v.split(',') : [];
@@ -33,6 +34,7 @@ function serializeModel(m) {
   const owners = [];
   const push = (t, o) => { tokens.push(t); owners.push(o); };
   if (m.name) push('--name=' + m.name, 'name');
+  if (m.skip) push('--skip', 'skip');
   if (m.tcp && m.tcp.length) push('--filter-tcp=' + m.tcp.join(','), 'tcp');
   if (m.udp && m.udp.length) push('--filter-udp=' + m.udp.join(','), 'udp');
   if (m.l7 && m.l7.length) push('--filter-l7=' + m.l7.join(','), 'l7');
@@ -136,12 +138,16 @@ async function viewProfile(content, index, r) {
         isCustom ? [btn('', () => moveCustom(s.part, s.part - 1), 'small icon', 'up', { title: 'Выше', 'aria-label': 'Переместить выше', disabled: s.part === 1 }),
           btn('', () => moveCustom(s.part, s.part + 1), 'small icon', 'down', { title: 'Ниже', 'aria-label': 'Переместить ниже', disabled: s.part === customParts.length }),
           btn('Копия', dupCustom, 'small', 'copy'), btn('Удалить', delCustom, 'small danger', 'trash')] : null,
+        btn(model.skip ? 'Выключен' : 'Включён', toggleSkip, 'small tog' + (model.skip ? '' : ' on'), null,
+          { 'aria-pressed': String(!model.skip), title: model.skip ? 'Включить профиль: строка --skip уберётся' : 'Выключить профиль, не удаляя: строка --skip, nfqws2 пропустит профиль' }),
+        newTag('prof:off'),
         btn('Для чата', () => shareProfile(index, p.args), 'small', 'copy', { title: 'Текст профиля с подписью: версия nfqws2, провайдер, система — чтобы поделиться в чате' }),
         h('div', { class: 'seg', role: 'group', 'aria-label': 'Способ правки' },
           h('button', { type: 'button', class: view === 'build' ? 'on' : '', text: 'Конструктор', onclick: () => setView('build') }),
           h('button', { type: 'button', class: view === 'text' ? 'on' : '', text: 'Текст', onclick: () => setView('text') }))),
       h('p', { class: 'sm muted' }, `${VAR_INFO[s.source][0]} · переменная ${s.source}${isCustom ? `, часть ${s.part}` : ''}` + (shared ? ' — общая с соседним профилем, правка стратегии затронет оба' : '') + ' · ',
         h('span', { text: portsText(p.remaining) ? 'реально доходит: ' + portsText(p.remaining) : 'до профиля ничего не доходит' })),
+      model.skip && !changed() ? notice('info', 'Профиль выключен', 'nfqws2 его пропускает: соединения идут к следующим профилям. Профиль остаётся в конфиге как есть; после «Включён» и перезапуска он снова работает.') : null,
       applied ? notice('info', 'Стратегия подставлена из теста', 'Шаги профиля заменены стратегией, которая сработала в тесте. Проверьте и сохраните — или нажмите «Отменить».') : null,
       issues.filter((x) => x.tok == null || x.msg.startsWith('Профиль #')).map((x) => notice(x.level === 'error' ? 'bad' : x.level === 'warning' ? 'warn' : 'info', x.msg.replace(/^Профиль #d+: /, ''), null, fixButton(x, changed() ? 'Сначала сохраните или отмените свои правки' : null)))));
   }
@@ -150,6 +156,17 @@ async function viewProfile(content, index, r) {
     try { sessionStorage.setItem('nfqws-ui-pview', vw); } catch { /* нет хранилища */ }
     drawHead();
     draw();
+  }
+  // off/on without deleting: --skip in the profile; applied by the next restart, like any save (several at once)
+  async function toggleSkip() {
+    if (changed()) { toast('Сначала сохраните или отмените правки профиля', { err: true }); return; }
+    const off = !model.skip;
+    const shared = !isCustom ? (S.state.conf_profiles || []).filter((x) => x.source?.source === s.source).length : 1;
+    if (shared > 1 && !await ask(`${off ? 'Выключить' : 'Включить'} профиль?\n\nПеременная ${s.source} общая для ${shared} профилей — ${off ? 'выключатся' : 'включатся'} все.`, off ? 'Выключить' : 'Включить')) return;
+    model.skip = off;
+    if (!await saveVars(buildVars(), `${off ? 'выключен' : 'включён'} профиль ${index}`)) { model.skip = !off; return; }
+    toast(`Профиль ${off ? 'выключен' : 'включён'}. Перезапустите nfqws2, чтобы применить.`);
+    route();
   }
   async function dupCustom() {
     const parts = customParts.map((x) => [...x]);
@@ -223,7 +240,7 @@ async function viewProfile(content, index, r) {
     const text = serializeModel(model).tokens.join('\n');
     textEd = codeEditor({
       value: text, mode: 'args', gutter: true, suggest: sug, maxHeight: 640,
-      onInput: (val) => { model = parseModel(tokensOf(val)); touch(); },
+      onInput: (val) => { model = parseModel(tokensOf(val)); nameSync?.(model.name); touch(); },
       onCaret: (pos, t) => {
         const tk = tokenize(t).map((x, i) => ({ ...x, i })).find((x) => pos >= x.start && pos <= x.end);
         renderHelp(help, tk ? helpFor(tk.text, pos - tk.start) : null, tk ? issues.filter((x) => x.tok - off === tk.i) : null);
@@ -234,7 +251,7 @@ async function viewProfile(content, index, r) {
     issBox.replaceChildren(issuesListEl(local.filter((x) => x.tok != null), (x) => { const t = tokenize(textEd.ta.value)[x.tok]; if (t) textEd.select(t.start, t.end); },
       (x) => { const t = tokenize(textEd.ta.value)[x.tok]; return t ? 'строка ' + textEd.ta.value.slice(0, t.start).split('\n').length : ''; }));
     renderHelp(help, null);
-    body.replaceChildren(h('div', { class: 'panel' },
+    body.replaceChildren(h('div', { class: 'panel' }, groupName(new Map()),
       h('div', { class: 'row' }, h('span', { class: 'sm muted grow', text: 'По одному аргументу на строку. Tab — принять подсказку. Правки здесь и в конструкторе — одно и то же.' }),
         copyBtn(() => textEd.ta.value, 'Копировать', 'small')),
       textEd.el, sug.el, issBox, help));
@@ -242,6 +259,14 @@ async function viewProfile(content, index, r) {
 
   // --- Имя: --name=… (nfqws2 пишет его в журнал; интерфейс показывает вместо «Свой профиль N»).
   // У профилей из общей переменной (NFQWS_ARGS с IPSET и EXTRA_ARGS) имя досталось бы обоим — там поля нет
+  // In the text view the field and the --name line follow each other; the rest of the text stays as typed
+  let nameSync = null;
+  const withName = (text, name) => {
+    const re = /^[ \t]*--name=\S*[ \t]*\n?/m;
+    const line = name ? `--name=${name}\n` : '';
+    if (re.test(text)) return text.replace(re, line);
+    return line + text;
+  };
   function groupName(oi) {
     if (s.with) return null;
     const NAME_RE = /^[\p{L}\p{N}_.-]{0,32}$/u;
@@ -254,8 +279,16 @@ async function viewProfile(content, index, r) {
     };
     const inp = h('input', { class: 'input', style: 'max-width:260px', value: model.name, placeholder: VAR_INFO[s.source][0] + (isCustom ? ' ' + s.part : ''), maxlength: 32,
       'data-fk': 'name', 'aria-label': 'Имя профиля', autocapitalize: 'off', spellcheck: 'false',
-      oninput: (e) => { const val = e.target.value.trim(); showHint(val); if (NAME_RE.test(val)) { model.name = val; touch(); } } });
+      oninput: (e) => {
+        const val = e.target.value.trim();
+        showHint(val);
+        if (!NAME_RE.test(val)) return;
+        model.name = val;
+        if (view === 'text') textEd?.setValue(withName(textEd.ta.value, val));
+        touch();
+      } });
     showHint(model.name);
+    nameSync = (val) => { if (document.activeElement !== inp) inp.value = val; showHint(val); };
     return h('div', { class: 'group' }, h('div', { class: 'frow' }, h('span', { class: 'lbl' }, 'Имя ', newTag('prof:name')), inp, hint,
       (oi.get('name') || []).map((x) => h('div', { class: 'hint ' + x.level }, levelIcon(x.level), ' ', x.msg))));
   }

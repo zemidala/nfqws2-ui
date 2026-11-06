@@ -90,7 +90,37 @@ test('установка упала → «Не получилось» с при�
   await expect(dlg(app)).toContainText('сумма файла не сходится');
 });
 
-test('пункт в «Проблемах» «Вышла nfqws2 9.9.9» открывает то же окно', async ({ app }) => {
+for (const width of [390, 1366]) {
+  test(`журнал растёт, а окно и «Копировать» стоят на месте, ${width}px`, async ({ app }) => {
+    test.setTimeout(60_000);
+    const line = (i) => `строка журнала ${i}`;
+    await setup(app, (n) => ({ ...info(), running: n < 6, exit: null, job: null, log: Array.from({ length: (n + 1) * 4 }, (_, i) => line(i)).join('\n') + '\n' }), { width });
+    await app.page.locator('#nfq-up').click();
+    await dlg(app).getByRole('button', { name: `Обновить до ${NEW}` }).click();
+    await app.yes();
+    const log = dlg(app).locator('pre.box');
+    await expect(log).toBeVisible();
+    await expect(dlg(app)).not.toContainText('проверочный выпуск');
+    const place = () => dlg(app).locator('.copybox > .btn').evaluate((el) => { const r = el.getBoundingClientRect(); return [r.left, r.top]; });
+    const was = await place();
+    await expect(log).toContainText(line(23), { timeout: 20_000 });
+    expect(await place()).toEqual(was);
+    const box = await log.boundingBox();
+    expect(box.y + box.height).toBeLessThanOrEqual(await dlg(app).locator('.modal-b').evaluate((el) => el.getBoundingClientRect().bottom));
+  });
+}
+
+test('сообщение о неудаче не пропадает после обновления окна', async ({ app }) => {
+  await setup(app, () => ({ ...info(), running: false, exit: 1, job: { error: 'проверочная причина' }, log: 'строка\n' }));
+  await app.page.locator('#nfq-up').click();
+  await dlg(app).getByRole('button', { name: `Обновить до ${NEW}` }).click();
+  await app.yes();
+  await expect(dlg(app)).toContainText('проверочная причина');
+  await app.page.waitForTimeout(3000);
+  await expect(dlg(app)).toContainText('проверочная причина');
+});
+
+test('пункт в «Проблемах» «Вышла nfqws2 9.9.9» открывает то же окно', async({ app }) => {
   await setup(app, () => ({}));
   const all = app.page.getByRole('button', { name: /Показать все/ }).first();
   if (await all.isVisible().catch(() => false)) await all.click();
