@@ -49,6 +49,8 @@
 [hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
 body { margin: 0; background: var(--bg); color: var(--fg); font: var(--fs-md)/1.5 var(--sans); padding-bottom: calc(58px + env(safe-area-inset-bottom)); }
+/* the browser must not paint a fake bold or italic: without the real face it takes the nearest real one */
+html { font-synthesis: none; }
 @media (min-width: 760px) { body { padding-bottom: 0; } }
 a { color: var(--accent-ink); text-decoration: none; }
 h1, h2, h3 { margin: 0; line-height: 1.3; text-wrap: balance; }

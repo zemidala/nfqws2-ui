@@ -84,6 +84,16 @@
 :root[data-palette="zd"] .contrib-n { min-width: 0; padding: 8px 10px; background: var(--soft); border-radius: var(--radius); display: grid; gap: 2px; align-content: start; }
 :root[data-palette="zd"] :is(.contrib-n, .mon-tile) b { font: 700 var(--fs-xl)/1.2 var(--head); font-variant-numeric: tabular-nums; }
 :root[data-palette="zd"] .mon-tile { border: 0; padding: 8px 10px; }
+/* the choice of interfaces: one to a line with room around it, the address at the right edge */
+:root[data-palette="zd"] .iface-pick { gap: 12px; }
+:root[data-palette="zd"] .iface-list { flex-direction: column; flex-wrap: nowrap; gap: 8px; margin-top: 0; }
+:root[data-palette="zd"] .iface { display: flex; width: 100%; padding: 8px 12px; gap: 6px 12px; font-size: var(--fs-md); }
+:root[data-palette="zd"] .iface .mono { font-size: var(--fs-md); font-weight: 500; }
+:root[data-palette="zd"] .iface > .mono:first-child { min-width: 72px; }
+:root[data-palette="zd"] .iface > .mono:last-child:not(:first-child) { margin-left: auto; }
+:root[data-palette="zd"] .iface.on { box-shadow: none; }
+:root[data-palette="zd"] .iface-pick > details { padding-top: 2px; }
+:root[data-palette="zd"] .iface-pick details > .iface-list { margin-top: 8px; }
 /* overview tiles: the figure in the heading face and, where the data is there, one mark per site or profile */
 :root[data-palette="zd"] .tile small { font-size: var(--fs-sm); text-transform: none; letter-spacing: 0; }
 :root[data-palette="zd"] .tile b { font-family: var(--head); font-weight: 700; font-variant-numeric: tabular-nums; }

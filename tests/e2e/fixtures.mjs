@@ -36,7 +36,8 @@ export const test = base.extend({
   app: async ({ page, context, sid, baseURL, errors }, use) => {
     await context.addCookies([{ name: 'PHPSESSID', value: sid, url: baseURL }]);
     // шрифты Google: сценарии не зависят от интернета (2026-10-23 fonts.gstatic.com висел ~20 с, и каждый тест шёл 40 с)
-    await context.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, (r) => r.abort());
+    // PW_FONTS=1 — the real web fonts, as people see them: what is measured for looks must be measured with them
+    if (!process.env.PW_FONTS) await context.route(/^https:\/\/fonts\.(googleapis|gstatic)\.com\//, (r) => r.abort());
     const app = {
       page,
       errors,
