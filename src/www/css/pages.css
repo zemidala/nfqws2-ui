@@ -107,3 +107,6 @@
 .stage-row.hit .node { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
 .stage-row.hit b { color: var(--accent-ink); }
 .stage-row .ports { font-family: var(--mono); font-size: var(--fs-xs); color: var(--muted); }
+/* «Что пробовать»: two columns, each box exactly under the one above; one column on a phone */
+.pick-sets { display: grid; grid-template-rows: repeat(3, auto); grid-auto-flow: column; grid-auto-columns: max-content; gap: 6px 32px; align-items: start; min-width: 0; }
+@media (max-width: 759px) { .pick-sets { grid-template-rows: none; grid-auto-flow: row; grid-auto-columns: auto; } }

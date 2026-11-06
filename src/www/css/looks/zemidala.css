@@ -53,6 +53,8 @@
 :root[data-palette="zd"] .md blockquote { border-left: 0; border-radius: var(--radius); }
 :root[data-palette="zd"] .cfg-card.best { box-shadow: none; }
 :root[data-palette="zd"] .logv .lg { border-left-color: transparent; }
+:root:root:root[data-palette="zd"] :is(.dns-tile, .dns-tile.ok, .dns-tile.bad, .dns-tile.warn) { border-top: 1px solid var(--line); }
+:root:root:root:root[data-palette="zd"] main .panel:is(.dns-adv, .dns-adv.ok, .dns-adv.bad) { border-top: 1px solid var(--line); }
 :root[data-palette="zd"] :is(.blk-h h2, .pill, .tag, .dd-g, .mnav .nav-h, .mfly-h, .tbl th) { text-transform: none; letter-spacing: 0; }
 :root[data-palette="zd"] .blk-h h2 { font-size: var(--fs-md); }
 /* status colours above are for text; small bars need a stronger fill, or a failure hardly differs from a success */
@@ -77,6 +79,11 @@
 .svc-m i { display: block; height: 100%; border-radius: 3px; background: #ff6a14; }
 .svc-m i.hot { background: var(--bad-fill); }
 :root[data-palette="zd"] .svc-buttons { grid-auto-flow: row; }
+/* figures with a caption are gauges too: the same cells in «Ваш вклад» and over the monitoring */
+:root[data-palette="zd"] .contrib { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 8px; }
+:root[data-palette="zd"] .contrib-n { min-width: 0; padding: 8px 10px; background: var(--soft); border-radius: var(--radius); display: grid; gap: 2px; align-content: start; }
+:root[data-palette="zd"] :is(.contrib-n, .mon-tile) b { font: 700 var(--fs-xl)/1.2 var(--head); font-variant-numeric: tabular-nums; }
+:root[data-palette="zd"] .mon-tile { border: 0; padding: 8px 10px; }
 /* overview tiles: the figure in the heading face and, where the data is there, one mark per site or profile */
 :root[data-palette="zd"] .tile small { font-size: var(--fs-sm); text-transform: none; letter-spacing: 0; }
 :root[data-palette="zd"] .tile b { font-family: var(--head); font-weight: 700; font-variant-numeric: tabular-nums; }
