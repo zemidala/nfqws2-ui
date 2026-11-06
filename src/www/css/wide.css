@@ -11,8 +11,9 @@ main { container: main / inline-size; }   /* at every width: the narrow-table ru
 /* формы, проверки и таблицы: справа колонка состояния (сервис, замечания, мониторинг, копии) */
 @container main (min-width: 1360px) {   /* a 1700 px window with the open menu and a page scrollbar leaves ~1395 — the column fits */
   .mwrap { grid-template-columns: minmax(0, 1fr) 340px; }
-  /* part of the page, not a scroller of its own: two scrollbars side by side read as a fault */
-  .rail { display: grid; gap: 14px; align-content: start; }
+  /* stays in place while the page scrolls, as the menu does; taller than the window it scrolls on its own, with the
+     bar shown only under the pointer, so two bars do not stand side by side */
+  .rail { display: grid; gap: 14px; align-content: start; position: sticky; top: calc(var(--top-h) + 14px); max-height: calc(100vh - var(--top-h) - 28px); overflow-y: auto; }
   /* строки форм: подсказки и замечания — справа от поля, а не под ним */
   .formy .frow { grid-template-columns: 170px minmax(0, 560px) minmax(0, 1fr); grid-auto-flow: dense; column-gap: 24px; }
   .formy .frow > :not(.lbl):not(.hint) { grid-column: 2; }
@@ -79,7 +80,7 @@ main { container: main / inline-size; }   /* at every width: the narrow-table ru
 .subtabs::-webkit-scrollbar { display: none; }
 /* the menu scrolls on its own (it stays in place while the page scrolls), but its bar shows only under the pointer —
    otherwise two bars stand on screen at once */
-#side::-webkit-scrollbar-track, #side::-webkit-scrollbar-thumb { background: transparent; border-color: transparent; }
-#side:hover::-webkit-scrollbar-track { background: var(--sb-track); border-color: var(--sb-track); }
-#side:hover::-webkit-scrollbar-thumb { background: var(--sb-thumb); border-color: var(--sb-track); }
-#side:hover::-webkit-scrollbar-thumb:hover { background: var(--accent); }
+:is(#side, .rail)::-webkit-scrollbar-track, :is(#side, .rail)::-webkit-scrollbar-thumb { background: transparent; border-color: transparent; }
+:is(#side, .rail):hover::-webkit-scrollbar-track { background: var(--sb-track); border-color: var(--sb-track); }
+:is(#side, .rail):hover::-webkit-scrollbar-thumb { background: var(--sb-thumb); border-color: var(--sb-track); }
+:is(#side, .rail):hover::-webkit-scrollbar-thumb:hover { background: var(--accent); }

@@ -246,8 +246,9 @@ details > summary::before { content: "▸ "; } details[open] > summary::before {
 pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; margin: 0; white-space: pre-wrap; word-break: break-all; max-height: 60vh; overflow: auto; }
 .scroll { overflow-x: auto; }
 /* a data table never grows past most of the window: it scrolls inside its block, the header row stays on top
-   (help tables in markdown keep the page's own scroll) */
-.scroll:not(.md-tbl):has(> table.tbl) { max-height: min(70vh, 720px); overflow-y: auto; overscroll-behavior: contain; }
+   (help tables in markdown keep the page's own scroll). The wheel goes on to the page at the table's end or when
+   the table fits: no overscroll-behavior here, it left the wheel dead over a short table */
+.scroll:not(.md-tbl):has(> table.tbl) { max-height: min(70vh, 720px); overflow-y: auto; }
 /* :where — the styles' own header backgrounds (K, B, Z) stay stronger; the shadow keeps the line under a stuck header
    (with border-collapse the border scrolls away) */
 :where(.scroll:not(.md-tbl)) > table.tbl > thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); box-shadow: inset 0 -1px var(--line); }

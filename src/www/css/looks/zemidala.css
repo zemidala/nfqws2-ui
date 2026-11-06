@@ -84,6 +84,22 @@
 :root[data-palette="zd"] .contrib-n { min-width: 0; padding: 8px 10px; background: var(--soft); border-radius: var(--radius); display: grid; gap: 2px; align-content: start; }
 :root[data-palette="zd"] :is(.contrib-n, .mon-tile) b { font: 700 var(--fs-xl)/1.2 var(--head); font-variant-numeric: tabular-nums; }
 :root[data-palette="zd"] .mon-tile { border: 0; padding: 8px 10px; }
+/* an empty box is well seen on any surface; orange stays for what is chosen */
+:root[data-palette="zd"] { --box-line: #5b6780; }
+:root[data-palette="zd"][data-mode="dark"] { --box-line: #aab4cc; }
+@media (prefers-color-scheme: dark) { :root[data-palette="zd"]:not([data-mode="light"]) { --box-line: #aab4cc; } }
+:root:root[data-palette="zd"] input:is([type="checkbox"], [type="radio"]):not(:checked):not(:disabled) { border-color: var(--box-line); }
+/* a box and its note: the note is told apart by size and weight (grey alone is close to the text, it has to stay
+   readable) and stands under the words of the label, not under the box */
+:root[data-palette="zd"] label.chk { color: var(--fg); font-weight: 500; }
+:root[data-palette="zd"] label.chk > span:not(.tag) { font-weight: inherit; }
+/* an explanation in its own dashed frame, wherever it stands: under a box, under a field or beside it, in a panel */
+:root[data-palette="zd"] main :is(.panel > p.sm.muted, .stack > label.chk + .sm.muted, .stack > .row + .sm.muted, .frow > .hint:not(.error, .warning, .bad, :empty), label.chk span > br + .sm.muted, .own-st > .sm.muted, .row > .btn + .sm.muted, .dns-more-panel p.sm.muted, .dnsx-legend) {
+  display: block; margin-top: 0; padding: 6px 10px; border: 1px dashed var(--k-field); border-radius: var(--radius); font-weight: 400; }
+:root[data-palette="zd"] main .stack > label.chk + .sm.muted { margin-left: 28px; }
+:root[data-palette="zd"] main label.chk span > br:has(+ .sm.muted) { display: none; }
+:root[data-palette="zd"] main label.chk span > br + .sm.muted { margin-top: 4px; }
+:root[data-palette="zd"] .stack:has(> label.chk + .sm.muted) { gap: 4px; }
 /* the choice of interfaces: one to a line with room around it, the address at the right edge */
 :root[data-palette="zd"] .iface-pick { gap: 12px; }
 :root[data-palette="zd"] .iface-list { flex-direction: column; flex-wrap: nowrap; gap: 8px; margin-top: 0; }
@@ -111,7 +127,7 @@
 /* a field standing in a row with buttons or a dropdown: all of them one height (the tallest), in every style —
    styles size fields and buttons separately and they ended up 4–8 px apart; plain text in the row stays centred */
 /* exactly the control height, not «the tallest»: a three-line hint in the same row stretched the button to its size */
-:is(.row, .quick, .search):has(> .input) > :is(input.input, .btn, .dd-btn) { align-self: center; height: var(--ctl-h); min-height: var(--ctl-h); }
+:is(.row, .quick, .search):has(> .input, > .dd-btn) > :is(input.input, .btn, .dd-btn) { align-self: center; height: var(--ctl-h); min-height: var(--ctl-h); }
 /* a row of chips with a field or a dropdown in it: everything one height, in every style */
 .chips:has(> .input, > .dd-btn) { --chips-h: 30px; align-items: center; }
 @media (max-width: 759px) { .chips:has(> .input, > .dd-btn) { --chips-h: var(--ctl-h); } }
