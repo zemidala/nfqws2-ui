@@ -17,7 +17,8 @@ test('«Оформление»: смена темы и стиля не прок�
   }
   await page.evaluate(() => document.querySelectorAll('label.look input[name="look"]')[1].click());   // a real click would scroll to it
   await page.waitForTimeout(400);
-  expect(await page.evaluate(() => Math.round(window.scrollY))).toBe(was);
+  // another style has another height, so the page may rest on its new bottom, but it does not go back to the top
+  expect(await page.evaluate(() => window.scrollY)).toBeGreaterThan(was - 200);
 });
 
 test('другой адрес открывается сверху', async ({ app, page }) => {
