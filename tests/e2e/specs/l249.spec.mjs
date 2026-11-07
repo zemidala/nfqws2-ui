@@ -37,9 +37,8 @@ async function check(page, what) {
   await page.waitForTimeout(1000);   // blocks fade in: measured mid-way they look pale
   expect(await page.locator('main').innerText(), `${what}: «null» в тексте`).not.toMatch(/\bnull\b|undefined/);
   expect(await auditLayout(page, { ignore: ['ПРОКРУТКА ВБОК nav.subtabs'] }), what).toEqual([]);
-  // known before this task, a separate matter: style Z's primary button (black on orange) everywhere, and a done step
-  // of the pick's flow line in the dark theme (Lc 74 of 75)
-  expect(await contrastReport(page, { ignore: ['на #ff6a14', 'на #24463a · 13px'] }), what).toEqual([]);
+  // known before this task, a separate matter: style Z's primary button (black on orange) everywhere
+  expect(await contrastReport(page, { ignore: ['на #ff6a14'] }), what).toEqual([]);
 }
 
 for (const [w, mode, variant] of RUNS) {

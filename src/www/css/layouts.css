@@ -329,7 +329,7 @@ details.dns-more-panel > summary { cursor: pointer; color: var(--accent-ink); }
 .flow > div { flex: 1 1 150px; min-width: 0; padding: 8px 12px; background: var(--soft); display: grid; gap: 1px; font-size: var(--fs-sm); color: var(--muted); }
 .flow > div b { font-size: var(--fs-sm); color: var(--fg); }
 .flow > div span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.flow > div.done { background: var(--ok-soft); }
+.flow > div.done { background: var(--ok-soft); color: var(--fg); }   /* grey on the green fell short of contrast in Z dark */
 .flow > div.now { background: var(--accent-soft); box-shadow: inset 0 0 0 2px var(--accent); }
 .tune { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
 .tune span { font-family: var(--mono); font-size: var(--fs-sm); padding: 3px 8px; border-radius: 5px; background: var(--bad-soft); color: var(--bad); cursor: default; }
