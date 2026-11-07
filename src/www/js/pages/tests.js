@@ -336,6 +336,28 @@ function sentPanel(sent) {
     h('p', { class: 'sm muted', text: 'Если Telegram недоступен, сообщение не теряется: оно ждёт и уходит, как только связь появится, с пометкой о времени события.' }));
 }
 
+// Several sites: the ones whose address the router's DNS replaced, probed at the real address
+function pinnedNote(sites) {
+  const pinned = (sites || []).filter((r) => r.dns_pin);
+  if (!pinned.length) return null;
+  return h('div', { class: 'sm', style: 'color:var(--warn)' }, 'DNS роутера подменяет адрес: ', pinned.map((r, i) => [i ? ', ' : '', h('span', { class: 'mono', text: r.host })]),
+    '. Они проверялись по настоящему адресу от защищённого DNS; у устройств откроются только с другим DNS — ', h('a', { href: '#/tests/dns', text: 'DNS-серверы' }), '.');
+}
+
+// The router's DNS gave a stub, so the pick probed the real address: a strategy alone will not open the site for devices.
+// If the real address opens without bypass, the stub is the whole block
+function dnsPinNote(pin, baseline) {
+  if (!pin) return null;
+  const got = `DNS роутера отдаёт ${(pin.system || []).join(', ') || 'пустой ответ'}, а защищённый DNS — ${pin.ip}.`;
+  return h('div', { class: 'notice warn' }, icon('alert'), h('div', { class: 'grow' },
+    h('b', { text: baseline?.ok ? 'Сайт закрыт только подменой DNS' : 'DNS роутера подменяет адрес сайта' }),
+    h('div', { class: 't' }, baseline?.ok
+      ? `${got} По настоящему адресу сайт открывается без обхода${baseline.ms ? `, ${baseline.ms} мс` : ''}: стратегия не нужна, устройствам нужен другой DNS: `
+      : `${got} Подбор шёл по настоящему адресу. Найденная стратегия снимет блокировку по DPI, но сайт откроется только у устройств, которые получают настоящий адрес. Выбрать другой DNS: `,
+      // the accent link on the warning's tinted background falls short of contrast in the dark theme
+      h('a', { href: '#/tests/dns', text: 'DNS-серверы', style: 'color:inherit;text-decoration:underline' }), '.')));
+}
+
 async function viewTests(main, r, bare = false) {
   await loadCatalog();
   stopTestPoll();
@@ -548,10 +570,11 @@ async function viewTests(main, r, bare = false) {
         h('td', {}, x.ok || x.community ? h('div', { class: 'row acts-row' }, x.ok ? applyMenu(x, s) : null, full ? wideBtn(x, s) : null, full || x.community ? shareBtn(x, s) : null) : null));
     });
     // blocks by name: a key each for morph, so a notice that appears at the end does not shift the table
-    const NAMES = ['flow', 'baseline', 'advice', 'best', 'community', 'none', 'refine', 'failed', 'parallel', 'table'];
+    const NAMES = ['flow', 'dnspin', 'baseline', 'advice', 'best', 'community', 'none', 'refine', 'failed', 'parallel', 'table'];
     return h('div', { class: 'stack', style: 'gap:14px' }, [
       flow(s, running, res, best),
-      baseline ? (baseline.ok ? (s.proto === 'quic' ? notice('info', 'Без обхода по QUIC сайт отвечает', `Ответ за ${baseline.ms} мс — QUIC этого сайта не режут, стратегия не нужна.`)
+      dnsPinNote(s.dns_pin, baseline),
+      baseline && !(baseline.ok && s.dns_pin) ? (baseline.ok ? (s.proto === 'quic' ? notice('info', 'Без обхода по QUIC сайт отвечает', `Ответ за ${baseline.ms} мс — QUIC этого сайта не режут, стратегия не нужна.`)
         : notice('info', 'Без обхода сайт открывается', `HTTP ${baseline.code}, ${baseline.ms} мс — блокировки нет, стратегия не нужна.`))
         : s.proto === 'quic' ? notice('warn', 'Без обхода по QUIC сайт не отвечает', 'QUIC (HTTP/3) этого сайта режут. Сам сайт при этом может открываться: браузер ждёт ответа по QUIC и только потом переходит на обычное соединение — страницы и видео стартуют с задержкой.')
         : notice('warn', 'Без обхода сайт не открывается: ' + baseline.reason, baseline.reason === 'соединение сброшено' || baseline.reason === 'обрыв TLS' ? 'Похоже на блокировку по SNI (DPI) — обход поможет.' : isFreeze(baseline.reason) ? (best ? 'Это ограничение ТСПУ «16–20 КБ» для зарубежных хостингов. Ниже — стратегия, которая его снимает.' : FREEZE_HINT) : 'Похоже на блокировку по DPI или IP.')) : null,
@@ -684,7 +707,8 @@ async function viewTests(main, r, bare = false) {
     const skipped = (s.sites || []).filter((r) => r.skip);
     const sitesBox = (s.sites || []).length ? h('div', { class: 'stack', style: 'gap:4px' },
       h('div', { class: 'sm' }, h('b', { text: `Подбор для ${plural(M, 'сайта', 'сайтов', 'сайтов')}: ` }), h('span', { class: 'mono', style: 'white-space:normal;overflow-wrap:anywhere', text: hosts.join(', ') || '—' }), s.list ? h('span', { class: 'muted', text: ` (из ${s.list.name})` }) : null, s.tls12 ? h('span', { class: 'muted', text: ' · по TLS 1.2' }) : null),
-      skipped.length ? h('div', { class: 'sm muted' }, 'Не участвуют: ', skipped.map((r, i) => [i ? '; ' : '', h('span', { class: 'mono', text: r.host }), ' — ' + r.skip])) : null) : null;
+      skipped.length ? h('div', { class: 'sm muted' }, 'Не участвуют: ', skipped.map((r, i) => [i ? '; ' : '', h('span', { class: 'mono', text: r.host }), ' — ' + r.skip])) : null,
+      pinnedNote(s.sites)) : null;
     if (running || s.state === 'error') return panel(null, null, sitesBox);
     const res = s.results || [];
     const conf = res.filter((x) => x.confirmed && x.opened > 0);
@@ -803,8 +827,8 @@ async function viewTests(main, r, bare = false) {
           const free = r.baseline?.ok;
           return h('tr', {},
             h('td', {}, r.ok === undefined && !r.skip ? null : levelIcon(r.skip || free ? 'info' : full ? 'ok' : r.ok ? 'warning' : 'error')),
-            h('td', { class: 'mono', text: r.host }),
-            h('td', { class: 'sm', text: r.skip ? r.skip : free ? 'открывается — не в счёт' : r.baseline?.reason || '—' }),
+            h('td', { class: 'mono' }, r.host, r.dns_pin ? [' ', chip('DNS подменяет адрес', 'warn')] : null),
+            h('td', { class: 'sm', text: r.skip ? r.skip : free ? (r.dns_pin ? 'по настоящему адресу открывается — не в счёт' : 'открывается — не в счёт') : r.baseline?.reason || '—' }),
             h('td', { class: 'sm', text: r.skip ? '—' : r.ok === undefined ? (running ? 'ждёт' : 'не проверен') : full ? `открылся ${r.ok} из ${r.ok}` : r.ok ? `${r.ok} из ${r.tries}` : r.reason || 'не открылся' }),
             h('td', { class: 'num', text: r.ms ? r.ms + ' мс' : '—' }));
         })))) : null,

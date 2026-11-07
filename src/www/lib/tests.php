@@ -270,14 +270,45 @@ function probeTlsOpt(): string
   return !empty($GLOBALS['PROBE_TLS12']) ? ' --tlsv1.2 --tls-max 1.2' : '';
 }
 
+// The router's DNS gives a stub instead of the site (the ISP's address or a private one): the probes of the job go to
+// the real address from the encrypted DNS — otherwise every strategy «fails» on the stub. Returns
+// ['ip' => pinned, 'system' => what the router's DNS gave] or null. One call per site, before its probes
+function probePin(string $host, array $dns, bool $http = false): ?array
+{
+  unset($GLOBALS['PROBE_PIN'][$host]);
+  $ip = in_array($dns['status'], ['fake', 'no_system'], true) ? (array_values(array_filter($dns['ips'], 'isIp4'))[0] ?? null) : null;
+  $sys = array_values(array_filter($dns['system'], 'isIp4'));
+  if ($ip === null || !$http && $sys && !array_filter($sys, 'ipReserved') && pinRealServer($host, $sys[0])) {
+    return null;
+  }
+  $GLOBALS['PROBE_PIN'][$host] = $ip;
+  return ['ip' => $ip, 'system' => array_slice($sys, 0, 3)];
+}
+
+// An address in the ISP's own network is not always a stub: CDN caches stand inside ISPs (Google GGC). A cache holds
+// a valid certificate for the site, a stub cannot. Checked by curl itself (no -k: with it the verify result reads 0 for
+// any certificate). Anything but success (no CA bundle, the handshake cut by DPI) is no proof
+function pinRealServer(string $host, string $ip): bool
+{
+  exec('curl -4 -s -o /dev/null --connect-timeout 3 -m 5 --resolve ' . escapeshellarg("$host:443:$ip") . ' '
+    . escapeshellarg("https://$host/") . ' 2>/dev/null', $out, $rc);
+  return $rc === 0;
+}
+
+function probePinOpt(string $host, bool $http): string
+{
+  $ip = $GLOBALS['PROBE_PIN'][$host] ?? null;
+  return $ip === null ? '' : ' --resolve ' . escapeshellarg($host . ':' . ($http ? 80 : 443) . ':' . $ip);
+}
+
 function curlProbe(string $host, bool $http, string $path = '/'): array
 {
   $url = ($http ? 'http://' : 'https://') . $host . $path;
   // Начальный порт — случайный: curl берёт первый свободный, и соединения подряд шли бы с одного и того же
   // порта к тому же серверу — на следующее может повлиять остаток прошлого (conntrack, состояние у провайдера).
-  $curl = function () {
+  $curl = function () use ($host, $http) {
     [$lo, $hi] = array_map('intval', explode(':', TEST_PORTS));
-    return 'curl -4 -sk' . probeTlsOpt() . ' -o /dev/null --local-port ' . mt_rand($lo, $hi - 50) . '-' . $hi
+    return 'curl -4 -sk' . probeTlsOpt() . probePinOpt($host, $http) . ' -o /dev/null --local-port ' . mt_rand($lo, $hi - 50) . '-' . $hi
       . ' --connect-timeout 4 -A ' . escapeshellarg('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130 Safari/537.36');
   };
   $out = [];

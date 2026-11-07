@@ -82,10 +82,10 @@ function parTry(array $chunk, ?array &$nfq, array $baseArgs, array $filter, int 
   file_put_contents($sh, implode("\n", [
     'P=$1; U=$2; R=$3; O=$4; : > "$O"; i=0',
     'while [ $i -lt $R ]; do i=$((i+1))',
-    '  set -- $(curl -4 -sk' . probeTlsOpt() . ' -o /dev/null --local-port $P --connect-timeout 4 -A "$UA" -m 7 -r 0-' . (VOLUME_BYTES - 1) . ' -w "%{http_code} %{time_total} %{size_download}" "$U" 2>/dev/null; echo " $?")',
+    '  set -- $(curl -4 -sk' . probeTlsOpt() . probePinOpt($host, $http) . ' -o /dev/null --local-port $P --connect-timeout 4 -A "$UA" -m 7 -r 0-' . (VOLUME_BYTES - 1) . ' -w "%{http_code} %{time_total} %{size_download}" "$U" 2>/dev/null; echo " $?")',
     '  code=$1; t=$2; size=$3; rc=$4; v=""',
     '  if [ "$rc" = 0 ] && [ "${size%.*}" -lt ' . VOLUME_SMALL . ' ]; then',
-    '    a=$(curl -4 -sk' . probeTlsOpt() . ' -o /dev/null --local-port $P --connect-timeout 4 -A "$UA" -m 8 -H "Expect:" -H "Content-Type: application/octet-stream" --data-binary @' . TEST_DIR . '/volume.bin -w "%{time_appconnect}" "$U?t=$i$$" 2>/dev/null); vrc=$?; v="$vrc $a"',
+    '    a=$(curl -4 -sk' . probeTlsOpt() . probePinOpt($host, $http) . ' -o /dev/null --local-port $P --connect-timeout 4 -A "$UA" -m 8 -H "Expect:" -H "Content-Type: application/octet-stream" --data-binary @' . TEST_DIR . '/volume.bin -w "%{time_appconnect}" "$U?t=$i$$" 2>/dev/null); vrc=$?; v="$vrc $a"',
     '  fi',
     '  echo "$rc $code $t $size $v" >> "$O"',
     '  [ "$rc" = 0 ] || break',
@@ -345,6 +345,9 @@ function testJob(): void
     $why = 'Имя сайта не находится — ни у роутера, ни у защищённого DNS. Проверьте написание.';
   } elseif ($dns['ips'] && !array_filter(diagTcp($dns['ips'], $http ? 80 : 443), fn($x) => $x['ok'])) {
     $why = 'С адресом сайта нет соединения (' . implode(', ', $dns['ips']) . ') — похоже на блокировку по IP. Стратегии nfqws2 меняют пакеты, а не маршрут, и тут не помогут: нужен туннель (podkop, VPN).';
+  }
+  if ($why === null && !$quic && ($pin = probePin($job['host'], $dns, $http))) {
+    $status['dns_pin'] = $pin;
   }
   $qip = null;
   if ($why === null && $quic) {

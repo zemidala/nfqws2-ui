@@ -133,8 +133,9 @@ function cfgJob(array $job, array &$status, ?array &$nfq, string $iface): void
     }
     $status['current'] = "$h без обхода";
     testSaveStatus($status);
+    $pin = probePin($h, diagDns($h));
     $b = curlProbe($h, false);
-    $status['sites'][] = ['host' => $h, 'baseline' => ['ok' => $b['ok'], 'reason' => $b['reason'] ?? null]];
+    $status['sites'][] = ['host' => $h, 'baseline' => ['ok' => $b['ok'], 'reason' => $b['reason'] ?? null]] + ($pin ? ['dns_pin' => $pin] : []);
     $status['done']++;
   }
 

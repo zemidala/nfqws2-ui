@@ -80,9 +80,12 @@ function multiJob(array $job, array &$status, ?array &$nfq, string $iface, array
     if ($dns['status'] === 'nxdomain') {
       $row['skip'] = 'имя не находится';
     } else {
+      if ($pin = probePin($h, $dns, $http)) {
+        $row['dns_pin'] = $pin;
+      }
       $b = curlProbe($h, $http);
       if ($b['ok']) {
-        $row['skip'] = 'открывается без обхода';
+        $row['skip'] = $pin ? 'закрыт только подменой DNS: по настоящему адресу открывается без обхода, нужен другой DNS' : 'открывается без обхода';
       } elseif ($dns['ips'] && !array_filter(diagTcp($dns['ips'], $http ? 80 : 443), fn($x) => $x['ok'])) {
         $row['skip'] = 'с адресом нет соединения — закрыт по IP, стратегия не поможет (нужен туннель)';
       } else {
@@ -219,9 +222,13 @@ function wideJob(array $job, array &$status, ?array &$nfq, string $iface, array 
     $status['current'] = "$h без обхода";
     testSaveStatus($status);
     $row = ['host' => $h];
-    if (diagDns($h)['status'] === 'nxdomain') {
+    $dns = diagDns($h);
+    if ($dns['status'] === 'nxdomain') {
       $row['skip'] = 'имя не находится';
     } else {
+      if ($pin = probePin($h, $dns, $http)) {
+        $row['dns_pin'] = $pin;
+      }
       $b = curlProbe($h, $http);
       $row['baseline'] = ['ok' => $b['ok'], 'reason' => $b['reason'] ?? null];
     }

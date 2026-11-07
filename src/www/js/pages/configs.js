@@ -133,8 +133,8 @@ async function viewCfg(main) {
     };
     const table = () => h('div', { class: 'scroll', 'data-key': 'tbl' }, h('table', { class: 'tbl cfg-tbl' },
       h('thead', {}, h('tr', {}, h('th', { text: 'Сайт' }), h('th', { text: 'без обхода' }), [mine, ...theirs].filter(Boolean).map((c) => h('th', { text: c.name })))),
-      h('tbody', {}, (s.sites || []).map((x) => h('tr', {}, h('td', { class: 'mono', text: x.host }),
-        h('td', { class: 'sm ' + (x.baseline?.ok ? 'ok' : 'muted'), text: x.baseline?.ok ? 'открывается' : (x.baseline?.reason || '—') }),
+      h('tbody', {}, (s.sites || []).map((x) => h('tr', {}, h('td', { class: 'mono' }, x.host, x.dns_pin ? [' ', chip('DNS подменяет адрес', 'warn')] : null),
+        h('td', { class: 'sm ' + (x.baseline?.ok ? 'ok' : 'muted'), text: x.baseline?.ok ? (x.dns_pin ? 'открывается по настоящему адресу' : 'открывается') : (x.baseline?.reason || '—') }),
         [mine, ...theirs].filter(Boolean).map((c) => {
           const p = c.per?.[x.host];
           if (!p) return h('td', { class: 'sm faint', text: c.skip ? 'не проверен' : '—' });
