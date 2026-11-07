@@ -60,7 +60,7 @@
 :root[data-variant="b"] .tile { border-color: transparent; }
 .tile:hover { border-color: var(--accent); }
 .tile small { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
-.tile b { font-size: var(--fs-xl); line-height: 1.2; }
+.tile b { font-size: var(--fs-xl); --lh: 1.2; }
 .tile span { font-size: var(--fs-sm); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile.ok b { color: var(--ok); } .tile.bad b { color: var(--bad); } .tile.warn b { color: var(--warn); }
 .ov-cols { display: grid; grid-template-columns: minmax(0, 2fr) minmax(0, 1fr); gap: 14px; align-items: start; }
@@ -79,7 +79,9 @@
 @media (max-width: 1099px) { .ov-panel { grid-template-columns: repeat(2, minmax(0, 1fr)); } .ov-panel > :last-child:nth-child(odd) { grid-column: 1 / -1; } }
 @media (max-width: 759px) { .ov-panel { grid-template-columns: minmax(0, 1fr); } }
 .over-rows { display: grid; gap: 1px; margin-inline: -6px; }
-.over-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 7px; color: inherit; min-width: 0; font-size: var(--fs-sm); }
+/* a whole-pixel line: with the text's own 1.45 each row was 29.75 px high, every next row stood on a fraction of a
+   pixel, and its text and number boxes came out blurred */
+.over-row { display: flex; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 7px; color: inherit; min-width: 0; font-size: var(--fs-sm); line-height: 20px; }
 a.over-row:hover { background: var(--soft); }
 .over-row .ellipsis { flex: 1; }
 .over-row .faint { flex: 0 1 auto; max-width: 50%; }
@@ -116,14 +118,14 @@ a.over-row:hover { background: var(--soft); }
 .lnav-opt { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 6px; }
 .lnav-opt > * { min-width: 0; width: 100%; }
 .lnav-empty { padding: 12px 6px; }
-.lsec-h .pnum { font: 600 var(--fs-sm)None var(--mono); color: var(--accent-ink); white-space: nowrap; flex: none; }
+.lsec-h .pnum { font: 600 var(--fs-sm) var(--mono); color: var(--accent-ink); white-space: nowrap; flex: none; }
 .lsec-h .pnum + b { white-space: normal; min-width: 0; }
 .lsec-h .pnum ~ .cnt { flex: none; overflow: visible; }
 .lrole { font-size: var(--fs-xs); color: var(--warn); }
 /* own tooltip (shared handler in app.js): graphite with an orange line, the same in every theme */
 .ui-tip { position: fixed; z-index: 1000; max-width: min(320px, calc(100vw - 16px)); padding: 7px 10px; border-radius: 6px;
   background: #23262e; color: #eceef3; border: 1px solid #3a3e48; box-shadow: 0 6px 18px rgba(0, 0, 0, .28);
-  font: 400 var(--fs-sm)/1.4 var(--sans, system-ui); font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0;   /* "--new" stays two hyphens */
+  font: 400 var(--fs-sm) var(--sans, system-ui); --lh: 1.4; font-variant-ligatures: none; font-feature-settings: "liga" 0, "calt" 0;   /* "--new" stays two hyphens */
   white-space: pre-line; overflow-wrap: anywhere; pointer-events: none; }
 .ui-tip::before { content: ""; position: absolute; left: var(--ax, 50%); top: -6px; width: 10px; height: 10px; transform: translateX(-50%) rotate(45deg);
   background: #23262e; border: 1px solid #3a3e48; border-right: 0; border-bottom: 0; }
@@ -158,7 +160,7 @@ a.over-row:hover { background: var(--soft); }
   :root:root:root:root .conn-tbl tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
   :root:root:root:root .conn-tbl tr:first-child { padding-top: 0; }
   :root:root:root:root .conn-tbl td.c-dst > .sm { font-size: var(--fs-xs); overflow-wrap: anywhere; }   /* the network name under the address, not bigger than it */
-  :root:root:root:root .conn-tbl td { display: block; padding: 0; border: 0; text-align: left; background: none; line-height: 1.35; }
+  :root:root:root:root .conn-tbl td { display: block; padding: 0; border: 0; text-align: left; background: none; --lh: 1.35; }
   :root:root:root:root .conn-tbl td.c-dst { grid-column: 1; grid-row: 1; }
   :root:root:root:root .conn-tbl td.c-res { grid-column: 2; grid-row: 1; justify-self: end; align-self: start; }
   :root:root:root:root .conn-tbl td.c-port { grid-column: 1 / -1; grid-row: 2; margin-top: -6px; font-size: var(--fs-xs); color: var(--muted); }
@@ -172,7 +174,7 @@ a.over-row:hover { background: var(--soft); }
 /* «Ваш вклад» on the community page, mockup local/design/share.html, variant A */
 .contrib { display: flex; flex-wrap: wrap; gap: 12px 28px; margin-bottom: 12px; }
 .contrib-n { min-width: 110px; }
-.contrib-n b { display: block; font-size: var(--fs-2xl); font-weight: 500; line-height: 1.1; }
+.contrib-n b { display: block; font-size: var(--fs-2xl); font-weight: 500; --lh: 1.1; }
 .contrib-n span { font-size: var(--fs-sm); color: var(--muted); }
 .contrib-dl { display: grid; grid-template-columns: auto minmax(0, 1fr); gap: 2px 12px; margin: 8px 0 12px 28px; font-size: var(--fs-sm); color: var(--muted); }
 .contrib-dl dt { color: var(--fg); }
@@ -215,7 +217,7 @@ a.over-row:hover { background: var(--soft); }
 .dns-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
 .dns-tile { display: grid; align-content: start; gap: 6px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--ok); border-radius: var(--radius); }
 .dns-tile.bad { border-top-color: var(--bad); } .dns-tile.warn { border-top-color: var(--warn); }
-.dns-tile .v { font-size: var(--fs-xl); line-height: 1.25; }
+.dns-tile .v { font-size: var(--fs-xl); --lh: 1.25; }
 .dns-tile.ok .v { color: var(--ok); } .dns-tile.bad .v { color: var(--bad); } .dns-tile.warn .v { color: var(--warn); }
 /* still being checked: the tile keeps its place, a neutral top line and a spinner instead of the verdict */
 .dns-tile.wait { border-top-color: var(--line); }

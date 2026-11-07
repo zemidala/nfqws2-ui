@@ -38,5 +38,5 @@
   :root:root:root .frow.kv + .frow.kv { margin-top: -6px; }     /* 8 px between «label — value» lines */
   /* a switch spans the width in equal parts and never breaks into two lines */
   :root:root:root .seg { display: flex; flex-wrap: nowrap; width: 100%; }
-  :root:root:root .seg > button { flex: 1 1 0; min-width: 0; padding: 0 6px; white-space: normal; line-height: 1.15; }
+  :root:root:root .seg > button { flex: 1 1 0; min-width: 0; padding: 0 6px; white-space: normal; --lh: 1.15; }
 }

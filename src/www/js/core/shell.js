@@ -154,7 +154,8 @@ const overviewCol = () => isWide() && layout() === 'tabs';
 function parseRoute() {
   const raw = location.hash.replace(/^#\/?/, '');
   const [path, query] = raw.split('?');
-  const parts = path.split('/').filter(Boolean).map(decodeURIComponent);
+  // a hand-typed or cut link with a stray «%» (#/sites/100%) must not leave the page blank
+  const parts = path.split('/').filter(Boolean).map((p) => { try { return decodeURIComponent(p); } catch { return p; } });
   return { tab: parts[0] || '', arg: parts[1] || '', sub: parts[2] || '', q: new URLSearchParams(query || '') };
 }
 const go = (hash) => { location.hash = hash; };
@@ -289,6 +290,16 @@ function fitLoad() {
   if (top.scrollWidth > top.clientWidth + 1 || (q?.offsetParent && q.clientWidth < 140)) el.classList.add('nofit');
 }
 addEventListener('resize', debounce(fitLoad, 150));
+// the bar fills after the numbers are drawn: the HTTPS lock, «Отменить», the service buttons come and go — each time the
+// room for the site field changes (on the owner's router it was squeezed to 93 px). Changes inside the numbers
+// themselves are left out, or redrawing them would call this again
+const fitLoadSoon = debounce(fitLoad, 50);
+function watchTopBar() {
+  const top = document.querySelector('.top-in');
+  if (!top || top.__fitWatch) return;
+  top.__fitWatch = new MutationObserver((ms) => { if (ms.some((m) => !m.target.closest?.('#load'))) fitLoadSoon(); });
+  top.__fitWatch.observe(top, { subtree: true, childList: true, attributes: true, attributeFilter: ['hidden'] });
+}
 document.fonts?.addEventListener('loadingdone', fitLoad);   // the web fonts come later and are wider than the system ones
 // a light request every 10 s while the numbers are shown; on a weak router (lowmem) every request is a php-cgi
 // process, so there only when the usual state has not brought fresh numbers for 30 s (it skips while one types)
@@ -333,6 +344,7 @@ function renderShell() {
     h('nav', { class: 'bottom', 'aria-label': 'Разделы' }, BOTTOM.map(link),
       h('button', { type: 'button', onclick: () => openDrawer() }, icon('menu'), h('span', { text: 'Меню' }))),
     h('div', { id: 'drawer', class: 'drawer', hidden: true, onclick: (e) => { if (e.target.id === 'drawer' || e.target.closest('a')) openDrawer(false); } }, h('div', { class: 'drawer-in' })));
+  watchTopBar();
 }
 
 // Упрощённый вид: редкое из верхней панели — под «⋯»: обновить данные, HTTPS, GitHub, выход

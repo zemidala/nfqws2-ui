@@ -111,7 +111,7 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .mon-sw { display: inline-flex; align-items: center; gap: 8px; font-size: var(--fs-md); cursor: pointer; }
 .mon-tiles { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
 .mon-tile { border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 16px; background: var(--soft); min-width: 0; }
-.mon-tile b { display: block; font-size: var(--fs-2xl); font-weight: 600; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.mon-tile b { display: block; font-size: var(--fs-2xl); font-weight: 600; --lh: 1.15; font-variant-numeric: tabular-nums; }
 .mon-tile span { display: block; font-size: var(--fs-sm); color: var(--muted); margin-top: 2px; }
 .mon-tile .okc { color: var(--ok); } .mon-tile .badc { color: var(--bad); }
 @media (max-width: 599px) { .mon-tiles { grid-template-columns: 1fr 1fr; } .mon-tile:last-child { grid-column: 1 / -1; } }
@@ -228,7 +228,7 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .release-notes { background: var(--soft); border-radius: 8px; padding: 10px 12px; font-size: var(--fs-sm); max-height: 30vh; overflow: auto; }
 
 /* ---------- подсветка журналов ---------- */
-pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family: var(--mono); font-size: var(--fs-xs); line-height: 1.55; }
+pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family: var(--mono); font-size: var(--fs-xs); --lh: 1.55; }
 .logv .lg { white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 12px 0 10px; border-left: 3px solid transparent; }
 .logv .lg:hover { background: var(--soft); }
 .logv .lg-err-line { background: var(--bad-soft); border-left-color: var(--bad); }
@@ -246,7 +246,7 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 
 
 /* ---------- документы: README, история версий, описание релиза ---------- */
-.md { font-size: var(--fs-md); line-height: 1.6; overflow-wrap: anywhere; }
+.md { font-size: var(--fs-md); --lh: 1.6; overflow-wrap: anywhere; }
 .md > :first-child { margin-top: 0; }
 .md h2 { font-size: var(--fs-xl); margin: 4px 0 10px; }
 .md h3 { font-size: var(--fs-lg); margin: 22px 0 8px; padding-top: 12px; border-top: 1px solid var(--line); scroll-margin-top: calc(var(--top-h, 56px) + 12px); }

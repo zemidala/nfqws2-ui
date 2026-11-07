@@ -42,7 +42,7 @@
 /* number fields without the browser's own up/down arrows (a system control among our own) — the number is typed */
 input[type="number"].input { appearance: textfield; -moz-appearance: textfield; }
 input[type="number"].input::-webkit-inner-spin-button, input[type="number"].input::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
-.textarea { font-family: var(--mono); font-size: var(--fs-sm); line-height: 1.55; resize: vertical; min-height: 80px; width: 100%; }
+.textarea { font-family: var(--mono); font-size: var(--fs-sm); --lh: 1.55; resize: vertical; min-height: 80px; width: 100%; }
 @media (max-width: 759px) { .input, .select { font-size: var(--fs-md); } }   /* 16 px keeps phones from zooming into the field */
 /* Own dropdowns (app.js, «dropdowns»): the button takes the select's classes, the native select stays hidden */
 .dd-native { display: none !important; }
@@ -94,7 +94,7 @@ input[type="checkbox"]:disabled, input[type="radio"]:disabled { opacity: .45; cu
 .chip.ok { background: var(--ok-soft); color: var(--ok); } .chip.warn { background: var(--warn-soft); color: var(--warn); } .chip.bad { background: var(--bad-soft); color: var(--bad); }
 .chip.add { background: transparent; border: 1px dashed var(--line); color: var(--muted); cursor: pointer; }
 .chip.add:hover { color: var(--fg); border-color: var(--muted); }
-.chip .x { background: none; border: 0; padding: 0 0 0 2px; color: var(--faint); cursor: pointer; font-size: var(--fs-sm); line-height: 1; }
+.chip .x { background: none; border: 0; padding: 0 0 0 2px; color: var(--faint); cursor: pointer; font-size: var(--fs-sm); --lh: 1; }
 .chip .x:hover { color: var(--bad); }
 .chip.mono { font-family: var(--mono); }
 /* a chip you can press looks pressable: the control border (3:1) and the accent on hover; plain label chips stay flat */

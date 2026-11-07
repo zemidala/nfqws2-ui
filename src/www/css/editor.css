@@ -49,7 +49,7 @@
 /* ---------- редактор с подсветкой ---------- */
 .ed { position: relative; min-width: 0; }
 .ed-ta, .ed-hl {
-  font-family: var(--mono); font-size: var(--fs-sm); line-height: 1.65; letter-spacing: 0; tab-size: 4;
+  font-family: var(--mono); font-size: var(--fs-sm); --lh: 1.65; letter-spacing: 0; tab-size: 4;
   padding: 8px 11px; margin: 0; border: 1px solid transparent; border-radius: calc(var(--radius) * .7 + 2px);
   white-space: pre; overflow-wrap: normal; font-weight: 400; font-style: normal;
 }
@@ -63,7 +63,7 @@
 .ed.gutter-on.plain .ed-ta { padding-left: 11px; }
 .ed-hl { position: absolute; inset: 0; overflow: hidden; pointer-events: none; background: var(--bg); color: var(--fg); }
 .ed.gutter-on .ed-ta, .ed.gutter-on .ed-hl { padding-left: 58px; }
-.ed-gut { position: absolute; left: 1px; top: 1px; bottom: 1px; width: 46px; overflow: hidden; z-index: 2; pointer-events: none; font-family: var(--mono); font-size: var(--fs-sm); line-height: 1.65; padding-top: 8px; text-align: right; color: var(--faint); border-right: 1px solid var(--line); background: var(--bg); border-radius: calc(var(--radius) * .7 + 2px) 0 0 calc(var(--radius) * .7 + 2px); }
+.ed-gut { position: absolute; left: 1px; top: 1px; bottom: 1px; width: 46px; overflow: hidden; z-index: 2; pointer-events: none; font-family: var(--mono); font-size: var(--fs-sm); --lh: 1.65; padding-top: 8px; text-align: right; color: var(--faint); border-right: 1px solid var(--line); background: var(--bg); border-radius: calc(var(--radius) * .7 + 2px) 0 0 calc(var(--radius) * .7 + 2px); }
 .ed-gut div { padding-right: 8px; font-variant-numeric: tabular-nums; }
 .ed-gut .e { color: var(--bad); font-weight: 600; } .ed-gut .w { color: var(--warn); font-weight: 600; } .ed-gut .i { color: var(--accent-ink); }
 .tk-opt { color: var(--tk-opt); } .tk-fn { color: var(--tk-fn); } .tk-key { color: var(--tk-key); } .tk-val { color: var(--fg); }

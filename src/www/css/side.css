@@ -35,7 +35,7 @@
 .nav a.on, .nav button.ni.on { background: var(--accent-soft); color: var(--accent-ink); font-weight: 600; }
 .nav .tail { margin-left: auto; color: var(--faint); font-size: var(--fs-xs); display: inline-flex; gap: 6px; align-items: center; font-weight: 400; flex: none; }
 /* the pin star on a menu item: on hover (always, faint, on touch screens); a pinned one — filled, in the brand orange */
-.mnav .mpin { flex: none; margin: -4px -6px -4px auto; padding: 4px 6px; line-height: 1; font-size: var(--fs-sm); color: var(--faint); cursor: pointer; visibility: hidden; }
+.mnav .mpin { flex: none; margin: -4px -6px -4px auto; padding: 4px 6px; --lh: 1; font-size: var(--fs-sm); color: var(--faint); cursor: pointer; visibility: hidden; }
 .mnav .tail + .mpin { margin-left: 0; }
 .mnav a:hover .mpin, .mnav a:focus-visible .mpin, .mnav .mpin.on { visibility: visible; }
 .mnav .mpin:hover { color: #ff6a14; }
@@ -49,7 +49,11 @@
   .nav.scrollable .nav-h { display: none; }
   .nav.scrollable a { width: auto; white-space: nowrap; flex: none; }
 }
-.pn { width: 20px; height: 20px; border-radius: 50%; display: block; text-align: center; align-content: center; text-box: trim-both cap alphabetic; font-size: var(--fs-xs); font-weight: 700; border: 2px solid var(--ok); flex: none; font-variant-numeric: tabular-nums lining-nums; }
+/* a box with soft corners, not a circle: two digits (10–15) ran into the round edge. One width for all, wide
+   enough for two digits, so the names after it stay on one line */
+/* the digits on a whole pixel: a 16 px line inside the 2 px frame. Centring by the capitals (text-box trim) put them
+   on a fraction of a pixel, and they came out blurred */
+.pn { box-sizing: border-box; min-width: 24px; padding: 0 2px; height: 20px; line-height: 16px; border-radius: 4px; display: block; text-align: center; font-size: var(--fs-xs); font-weight: 700; border: 2px solid var(--ok); flex: none; font-variant-numeric: tabular-nums lining-nums; }
 .pn.pi { display: grid; place-items: center; text-box: none; color: var(--accent-ink); border-color: currentColor; }   /* «Свой профиль», «Вставить чужой»: an icon in the circle */
 .pn.pi svg { width: 12px; height: 12px; display: block; }
 .pn.off { border-style: dashed; color: var(--muted); }

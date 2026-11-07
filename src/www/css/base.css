@@ -48,23 +48,36 @@
 * { box-sizing: border-box; }
 [hidden] { display: none !important; }
 html { -webkit-text-size-adjust: 100%; }
-body { margin: 0; background: var(--bg); color: var(--fg); font: var(--fs-md)/1.5 var(--sans); padding-bottom: calc(58px + env(safe-area-inset-bottom)); }
+body { margin: 0; background: var(--bg); color: var(--fg); font: var(--fs-md) var(--sans); --lh: 1.5; padding-bottom: calc(58px + env(safe-area-inset-bottom)); }
 /* the browser must not paint a fake bold or italic: without the real face it takes the nearest real one */
 html { font-synthesis: none; }
 @media (min-width: 760px) { body { padding-bottom: 0; } }
 a { color: var(--accent-ink); text-decoration: none; }
-h1, h2, h3 { margin: 0; line-height: 1.3; text-wrap: balance; }
+h1, h2, h3 { margin: 0; --lh: 1.3; text-wrap: balance; }
 /* Typography (approved mockup local/design/typography.html, variant A): one face — Inter — in every style, the code
    face stays per style; six sizes instead of 21; line height by size — the smaller the text, the tighter the lines,
    headings tighter than text. Every font-size in this file takes one of these steps. */
 :root { --fs-xs: 12px; --fs-sm: 13px; --fs-md: 15px; --fs-lg: 17px; --fs-xl: 20px; --fs-2xl: 26px; }
 :root:root:root { --sans: "Inter", "Segoe UI", system-ui, -apple-system, sans-serif; }   /* over each style's own face */
-h1 { line-height: 1.2; } h2 { line-height: 1.25; } h3 { line-height: 1.3; }
-.sm, small { line-height: 1.45; }
+h1 { --lh: 1.2; } h2 { --lh: 1.25; } h3 { --lh: 1.3; }
+.sm, small { --lh: 1.45; }
 h1 { font-size: var(--fs-xl); } h2 { font-size: var(--fs-md); } h3 { font-size: var(--fs-md); }
 p { margin: 0; }
 code, pre, .mono { font-family: var(--mono); font-size: var(--fs-sm); }
 button, input, select, textarea { font: inherit; color: inherit; }
+/* Nothing on a fraction of a pixel (the owner's rule: nothing in the interface blurred, ever). A line is its --lh
+   times the element's own font size, rounded to a whole pixel: --lh inherits as a plain line-height number did, and
+   lines no longer push everything below by halves of a pixel (15 px × 1.5 = 22.5 — the boxes under them were drawn
+   blurred). A line-height in px is set as before and wins — even values only. Form controls again after their «font: inherit», which
+   would take the parent's line instead of their own. A browser without round() keeps the plain number */
+:root { --lh: 1.5; }
+/* Rounded to an even pixel: buttons, fields and rows are even (30–40 px, paddings 4–12 px), and an odd line centred in
+   them left half a pixel over — a 31 px heading in a 36 px row stood at .5, a field's text a pixel low in one field and
+   a pixel high in the next */
+*, ::before, ::after, button, input, select, textarea { line-height: var(--lh); line-height: round(nearest, calc(var(--lh) * 1em), 2px); }
+/* Inter's capitals sit low in their line: in a field they stood 1–2 px under the middle (measured: 11 px above the
+   capitals, 9 below). The line goes up a pixel; the code face (.mono) sits in the middle as it is */
+:root:root:root input.input:not(.mono) { padding-top: 0; padding-bottom: 2px; }
 svg { width: 17px; height: 17px; flex: none; }
 .muted { color: var(--muted); } .faint { color: var(--faint); } .sm { font-size: var(--fs-sm); } .num { font-variant-numeric: tabular-nums; }
 .grow { flex: 1; } .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .between { justify-content: space-between; }
