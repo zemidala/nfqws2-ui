@@ -87,7 +87,7 @@ const CACHE_VER = 6;  // увеличить при изменении разбо
 // The server is split into sections in lib/ (one file each). They are loaded in this order: a later one may use
 // constants of an earlier one. API_FILE — this file: background jobs start it again (php-cgi -f API_FILE)
 define('API_FILE', __FILE__);
-const LIB = ['core', 'snapshots', 'service', 'conf', 'lists', 'check', 'devices', 'exclude', 'lint', 'adapt', 'listcheck', 'fixes', 'monitor', 'subs', 'tests', 'parallel', 'multi', 'configs', 'freeze', 'picks', 'auto', 'refine', 'diag', 'dns', 'dnsx', 'conns', 'update', 'state', 'report', 'learn', 'share'];
+const LIB = ['core', 'snapshots', 'service', 'conf', 'lists', 'check', 'devices', 'exclude', 'lint', 'adapt', 'listcheck', 'fixes', 'monitor', 'subs', 'tests', 'parallel', 'multi', 'configs', 'freeze', 'picks', 'auto', 'refine', 'diag', 'dns', 'dnsx', 'conns', 'pcap', 'update', 'state', 'report', 'learn', 'share'];
 // Sections to load, in LIB order; null — all of them. Loaded once each
 function libLoad(?array $names = null): void
 {
@@ -220,6 +220,17 @@ if (($_SERVER['REQUEST_METHOD'] ?? '') === 'GET' && isset($_GET['download'])) {
     fail('auth', 401);
   }
   $id = (string)$_GET['download'];
+  // the device's packets of the last «Соединения устройства» recording
+  if ($id === 'conns-pcap') {
+    $c = connData();
+    is_file(CONN_PCAP) && !empty($c['pcap']) || fail('Записи пакетов нет', 404);
+    header('Content-Type: application/vnd.tcpdump.pcap');
+    header('Content-Disposition: attachment; filename="nfqws2-ui-' . ($c['ip'] ?? 'device') . '-' . ldate('Y-m-d-His', (int)($c['finished'] ?? time())) . '.pcap"');
+    header('Content-Length: ' . filesize(CONN_PCAP));
+    header('Cache-Control: no-store');
+    readfile(CONN_PCAP);
+    exit();
+  }
   if ($id === 'current') {
     historyScan('auto');
     $file = tempnam('/tmp', 'nfqarch');
@@ -1465,10 +1476,13 @@ switch ($cmd) {
     respond(['items' => $s['asn']]);
 
   case 'conns_devices':
-    respond(['items' => connDevices(), 'noacct' => connNoAcct()]);
+    respond(['items' => connDevices(), 'noacct' => connNoAcct(), 'tcpdump' => tcpdumpBin() !== null]);
 
   case 'conns_start':
-    respond(connStart((string)($in['ip'] ?? ''), (int)($in['secs'] ?? 60)));
+    respond(connStart((string)($in['ip'] ?? ''), (int)($in['secs'] ?? 60), !empty($in['names'])));
+
+  case 'tcpdump_install':
+    respond(tcpdumpInstall());
 
   case 'conns_get':
     respond(connData());

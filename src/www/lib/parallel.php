@@ -149,8 +149,7 @@ function testSpeed(array &$status, ?array &$nfq, array $baseArgs, array $filter,
   $status['phase'] = 'speed';
   foreach ($good as $i) {
     if (is_file(TEST_DIR . '/stop')) {
-      $status['state'] = 'stopped';
-      return;
+      return;   // the pick itself is complete: only the extra measurement is cut short
     }
     $r = &$status['results'][$i];
     $status['current'] = 'скорость: ' . $r['name'];

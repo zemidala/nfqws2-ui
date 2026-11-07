@@ -81,6 +81,15 @@ function pkgApk(): bool
   return !ROOT && is_file('/usr/bin/apk') && !is_file('/bin/opkg');
 }
 
+// A package command for sh -c, cut off after $sec seconds with all its children (opkg runs wget, which may hang on a
+// dead mirror); exit code 124 — cut off
+function pkgTimed(string $cmd, int $sec): string
+{
+  $tree = 'kt() { k=$(awk -v p="$1" \'$4 == p { print $1 }\' /proc/[0-9]*/stat 2>/dev/null); kill "$1" 2>/dev/null; for c in $k; do kt "$c"; done; }; ';
+  return 'PATH=' . JOB_PATH . '; ' . $tree . '( ' . $cmd . ' ) & p=$!; i=0; while kill -0 $p 2>/dev/null; do '
+    . 'if [ $i -ge ' . $sec . ' ]; then kt $p; exit 124; fi; sleep 1; i=$((i+1)); done; wait $p';
+}
+
 // Ставит (или переставляет, если curl есть, но не запускается) curl. Не дольше ~2,5 минуты: wget внутри opkg ждёт
 // недоступный источник пакетов бесконечно — по истечении времени процесс снимается вместе с потомками
 function curlInstall(): array
@@ -90,19 +99,16 @@ function curlInstall(): array
   if ($err === null) {
     return ['ok' => true, 'log' => 'curl уже работает'];
   }
-  $tree = 'kt() { k=$(awk -v p="$1" \'$4 == p { print $1 }\' /proc/[0-9]*/stat 2>/dev/null); kill "$1" 2>/dev/null; for c in $k; do kt "$c"; done; }; ';
-  $lim = fn(int $s, string $cmd) => '( ' . $cmd . ' ) & p=$!; i=0; while kill -0 $p 2>/dev/null; do '
-    . 'if [ $i -ge ' . $s . ' ]; then kt $p; exit 124; fi; sleep 1; i=$((i+1)); done; wait $p';
   if (pkgApk()) {
-    $cmd = $lim(150, 'apk add curl && apk fix curl libcurl');
+    $cmd = 'apk add curl && apk fix curl libcurl';
   } else {
     // сначала без обновления списка: он почти всегда уже есть (пакеты ставились), а opkg update — самое долгое место;
     // если curl в списке нет — обновить список и повторить. --force-reinstall: пакет может числиться установленным,
     // а файла нет (удалили вручную) — тогда простой install ответил бы «уже установлен» и ничего не вернул.
     // В команде только латиница: escapeshellarg при локали C выбрасывает кириллицу
-    $cmd = $lim(150, opkgReinstall('curl libcurl'));
+    $cmd = opkgReinstall('curl libcurl');
   }
-  [$rc, $out] = runTimeout(['sh', '-c', 'PATH=' . JOB_PATH . '; ' . $tree . $cmd], 190);
+  [$rc, $out] = runTimeout(['sh', '-c', pkgTimed($cmd, 150)], 190);
   @unlink(CACHE_DIR . '/curl-cmd.json');
   $after = curlCmdError();
   $log = trim(implode("\n", array_slice(explode("\n", trim($out)), -15)));

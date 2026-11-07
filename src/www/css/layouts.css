@@ -147,6 +147,7 @@ a.over-row:hover { background: var(--soft); }
 .conn-tbl td { vertical-align: top; }
 .conn-tbl td.nowrap { white-space: nowrap; }
 .conn-tbl td.warnc { color: var(--warn); }
+.conn-tbl td.c-pick { white-space: nowrap; }
 /* phone: a row is a card — address and verdict on top, port, then sent / received side by side, nfqws2 below */
 /* :root ×4 — above every style's table cell padding (it gave each cell 12 px top and bottom: half a screen per card).
    Card: address and verdict on top, the port right under the address, sent / received side by side, nfqws2 below;
@@ -164,6 +165,8 @@ a.over-row:hover { background: var(--soft); }
   :root:root:root:root .conn-tbl td.num { grid-row: 3; }
   :root:root:root:root .conn-tbl td.num + td.num { grid-column: 2; justify-self: end; text-align: right; }
   :root:root:root:root .conn-tbl td.c-nfq { grid-column: 1 / -1; }
+  :root:root:root:root .conn-tbl td.c-pick { grid-column: 1 / -1; }
+  :root:root:root:root .conn-tbl td.c-pick:empty { display: none; }   /* no empty line in a card without «Подобрать» */
   :root:root:root:root .conn-tbl td[data-h]::before { content: attr(data-h); display: block; margin-bottom: 2px; font-size: var(--fs-xs); color: var(--muted); }
 }
 /* «Ваш вклад» on the community page, mockup local/design/share.html, variant A */

@@ -120,6 +120,7 @@ return array (
       1 => 'devices',
       2 => 'diag',
       3 => 'conns',
+      4 => 'pcap',
     ),
     'conns_get' => array (
       0 => 'conns',
@@ -128,6 +129,7 @@ return array (
       0 => 'check',
       1 => 'diag',
       2 => 'conns',
+      3 => 'pcap',
     ),
     'conns_stop' => array (
       0 => 'conns',
@@ -654,6 +656,9 @@ return array (
     ),
     'sysinfo' => array (
       0 => 'adapt',
+    ),
+    'tcpdump_install' => array (
+      0 => 'pcap',
     ),
     'test_candidates' => array (
       0 => 'conf',

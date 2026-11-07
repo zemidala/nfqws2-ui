@@ -123,7 +123,8 @@ function connData(): array
   return is_array($d) ? $d : [];
 }
 
-function connStart(string $ip, int $secs): array
+// $names — capture the device's packets (tcpdump) for the site names and a .pcap
+function connStart(string $ip, int $secs, bool $names = false): array
 {
   ipLan($ip) || fail('Нужен адрес устройства домашней сети');
   in_array($secs, CONN_SECS, true) || fail('Неверная длительность');
@@ -133,7 +134,8 @@ function connStart(string $ip, int $secs): array
     fail('Запись уже запускается');
   }
   !empty(connData()['running']) && fail('Запись уже идёт');
-  $d = ['running' => true, 'id' => bin2hex(random_bytes(6)), 'ip' => $ip, 'secs' => $secs, 'started' => time(), 'flows' => [], 'noacct' => connNoAcct()];
+  captureClear();   // the last recording's .pcap lies in memory (/tmp): it goes with the recording it belongs to
+  $d = ['running' => true, 'id' => bin2hex(random_bytes(6)), 'ip' => $ip, 'secs' => $secs, 'started' => time(), 'flows' => [], 'noacct' => connNoAcct(), 'names' => $names];
   file_put_contents(CONN_FILE, json_encode($d));
   exec('(env -i PATH=' . JOB_PATH . ' NFQWS_UI_CLI=conns php-cgi -q -f ' . escapeshellarg(API_FILE) . ' >/dev/null 2>&1 &)');
   flock($lock, LOCK_UN);
@@ -192,7 +194,14 @@ function connJob(): void
     file_put_contents(CONN_FILE, json_encode($d, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
   };
   @unlink(CONN_STOP);
+  // a recording taken over by a newer one exits in $save: its tcpdump stops by itself at the end of its time
+  $cap = !empty($d['names']) ? captureStart($ip, $secs) : [];
+  $d['capture'] = (bool)$cap;
+  register_shutdown_function(function () use (&$cap) {
+    captureStop($cap);   // also when a newer recording took over and $save exits
+  });
   while (time() - $t0 < $secs) {
+    $cap = captureTrim($cap, $d);
     if (@file_get_contents(CONN_STOP) === $id) {
       @unlink(CONN_STOP);
       $d['stopped'] = true;
@@ -230,6 +239,20 @@ function connJob(): void
   }
   // after the recording: does nfqws2 see the port, which profile takes the address, whose network it is
   $d['step'] = 'annotate';
+  captureStop($cap);
+  $cap = [];
+  if ($d['capture']) {
+    $byIp = pcapNames(CONN_NAMES, $ip);
+    @unlink(CONN_NAMES);
+    foreach ($rows as &$f) {
+      if (isset($byIp[$f['dst']])) {
+        $f['names'] = $byIp[$f['dst']];   // the first one — from the device's own greeting when it had one
+      }
+    }
+    unset($f);
+    clearstatcache(true, CONN_PCAP);
+    $d['pcap'] = (int)@filesize(CONN_PCAP);
+  }
   $v = confValues();
   $ports = ['tcp' => parsePorts(str_replace(':', '-', $v['TCP_PORTS'])) ?? [], 'udp' => parsePorts(str_replace(':', '-', $v['UDP_PORTS'])) ?? []];
   $profiles = currentProfiles();

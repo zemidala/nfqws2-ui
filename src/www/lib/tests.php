@@ -301,16 +301,20 @@ function probePinOpt(string $host, bool $http): string
   return $ip === null ? '' : ' --resolve ' . escapeshellarg($host . ':' . ($http ? 80 : 443) . ':' . $ip);
 }
 
+// curl of a probe through the test queue: from the test ports, as a browser, with the job's TLS and pinned address.
+// Начальный порт — случайный: curl берёт первый свободный, и соединения подряд шли бы с одного и того же
+// порта к тому же серверу — на следующее может повлиять остаток прошлого (conntrack, состояние у провайдера).
+function probeCurl(string $host, bool $http): string
+{
+  [$lo, $hi] = array_map('intval', explode(':', TEST_PORTS));
+  return 'curl -4 -sk' . probeTlsOpt() . probePinOpt($host, $http) . ' -o /dev/null --local-port ' . mt_rand($lo, $hi - 50) . '-' . $hi
+    . ' --connect-timeout 4 -A ' . escapeshellarg('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130 Safari/537.36');
+}
+
 function curlProbe(string $host, bool $http, string $path = '/'): array
 {
   $url = ($http ? 'http://' : 'https://') . $host . $path;
-  // Начальный порт — случайный: curl берёт первый свободный, и соединения подряд шли бы с одного и того же
-  // порта к тому же серверу — на следующее может повлиять остаток прошлого (conntrack, состояние у провайдера).
-  $curl = function () use ($host, $http) {
-    [$lo, $hi] = array_map('intval', explode(':', TEST_PORTS));
-    return 'curl -4 -sk' . probeTlsOpt() . probePinOpt($host, $http) . ' -o /dev/null --local-port ' . mt_rand($lo, $hi - 50) . '-' . $hi
-      . ' --connect-timeout 4 -A ' . escapeshellarg('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130 Safari/537.36');
-  };
+  $curl = fn() => probeCurl($host, $http);
   $out = [];
   exec($curl() . ' -m 7 -r 0-' . (VOLUME_BYTES - 1) . ' -w "%{http_code} %{time_total} %{size_download} %{time_starttransfer}" ' . escapeshellarg($url) . ' 2>/dev/null', $out, $rc);
   [$code, $time, $size, $ttfb] = array_pad(explode(' ', trim($out[0] ?? '')), 4, '0');
@@ -350,11 +354,10 @@ const SPEED_MIN = 65536;
 
 function speedProbe(string $host, bool $http): ?array
 {
-  [$lo, $hi] = array_map('intval', explode(':', TEST_PORTS));
-  exec('curl -4 -sk' . probeTlsOpt() . probePinOpt($host, $http) . ' -o /dev/null --local-port ' . mt_rand($lo, $hi - 50) . '-' . $hi
-    // -L: a main page is often only a redirect (rutracker.org/ — 162 bytes of «301»), the content is one step further
-    . ' --connect-timeout 4 -m 15 -L --max-redirs 3 -A ' . escapeshellarg('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130 Safari/537.36')
-    . ' -r 0-' . (SPEED_BYTES - 1) . ' -w "%{size_download} %{speed_download}" ' . escapeshellarg(($http ? 'http://' : 'https://') . "$host/") . ' 2>/dev/null', $out, $rc);
+  // -L: a main page is often only a redirect (rutracker.org/ — 162 bytes of «301»), the content is one step further.
+  // Not for HTTP: its redirect leads to HTTPS, which the tested strategy (port 80) does not touch
+  exec(probeCurl($host, $http) . ' -m 15' . ($http ? '' : ' -L --max-redirs 3') . ' -r 0-' . (SPEED_BYTES - 1)
+    . ' -w "%{size_download} %{speed_download}" ' . escapeshellarg(($http ? 'http://' : 'https://') . "$host/") . ' 2>/dev/null', $out, $rc);
   [$size, $speed] = array_map('floatval', array_pad(explode(' ', trim($out[0] ?? '')), 2, '0'));
   // a slow site that ran out of time after a good part still has a speed
   return in_array($rc, [0, 28], true) && $size >= SPEED_MIN ? ['kbps' => (int)round($speed / 1024), 'kb' => (int)round($size / 1024)] : null;

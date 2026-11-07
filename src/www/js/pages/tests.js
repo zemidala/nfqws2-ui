@@ -341,7 +341,7 @@ function sentPanel(sent) {
 const fmtSpeed = (k) => k >= 1024 ? (k / 1024).toFixed(1).replace('.', ',') + ' МБ/с' : k + ' КБ/с';
 function timeNote(x) {
   if (!x.ms) return null;
-  const first = x.ttfb && x.ms - x.ttfb >= 50 && x.ttfb <= x.ms * 0.85;
+  const first = x.ttfb && x.ms - x.ttfb >= 50;
   const parts = [first ? `ответ ${x.ttfb} мс` : null, x.kbps ? fmtSpeed(x.kbps) : null].filter(Boolean);
   if (!parts.length) return null;
   return h('div', { class: 'sm muted nowrap', title: [first ? `Первый байт ответа — через ${x.ttfb} мс` : null, x.kbps ? `Скорость — по скачиванию ${x.kb} КБ с того же сайта` : null].filter(Boolean).join('. '),
@@ -390,7 +390,7 @@ async function viewTests(main, r, bare = false) {
   const host = h('input', { class: 'input mono grow', id: 't-host', value: r.q.get('host') || S.check?.input.value || '', placeholder: 'rutracker.org', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Сайт для теста' });
   host.addEventListener('input', () => { host.dataset.edited = '1'; });
   if (r.q.get('host')) host.dataset.edited = '1';
-  const proto = h('select', { class: 'select', 'aria-label': 'Протокол' }, h('option', { value: 'https', text: 'HTTPS (TLS, TCP 443)' }), h('option', { value: 'http', text: 'HTTP (TCP 80)' }),
+  const proto = h('select', { class: 'select', 'aria-label': 'Протокол' }, h('option', { value: 'https', text: 'HTTPS (TLS, TCP 443)' }), h('option', { value: 'http', text: 'HTTP (TCP 80)', selected: r.q.get('proto') === 'http' }),
     h('option', { value: 'quic', text: 'QUIC (HTTP/3, UDP 443)', selected: r.q.get('proto') === 'quic' }));
   const isQuic = () => proto.value === 'quic';
   // через какой профиль сайт идёт по этому протоколу и какие порты профиля смотреть
@@ -604,7 +604,7 @@ async function viewTests(main, r, bare = false) {
       s.parallel && !running ? h('p', { class: 'sm muted', text: `Большой набор проверялся параллельно, по ${plural(s.parallel, 'стратегии', 'стратегии', 'стратегий')} сразу`
         + (s.parallel_max && s.parallel < s.parallel_max ? ` (а не по ${s.parallel_max}: пачка подстраивается под память роутера, чтобы он не начал тормозить)` : '') + '. Когда к одному сайту идёт много разных соединений одновременно, оборудование провайдера иногда путается, и такой итог может разойтись с проверкой по одной. Поэтому находки перепроверяются по одной, начиная с быстрых, пока не наберётся 8 подтверждённых (отметка «перепроверена»). Рабочими считаются только они; открывшие сайт лишь в пачке показаны в таблице, но применить их отсюда нельзя.' }) : null,
       panel(`Результаты для ${s.host}` + (s.proto === 'quic' ? ' · QUIC' : '') + (s.tls12 ? ' · TLS 1.2' : ''),h('span', { class: 'sm muted num', text: `${res.length} стратегий · ${rep} повт.` + (s.finished ? ` · ${Math.round((s.finished - s.started))} с` : '') }),
-        h('div', { class: 'scroll' }, h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, h('th'), h('th', { text: 'Стратегия' }), h('th', { text: 'Откуда' }), h('th', { text: 'Результат' }), h('th', { class: 'num', text: 'Время' }), h('th'))), h('tbody', {}, rows))))].map((el, i) => keyed(el, NAMES[i])));
+        h('div', { class: 'scroll' }, h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, h('th'), h('th', { text: 'Стратегия' }), h('th', { text: 'Откуда' }), h('th', { text: 'Результат' }), h('th', { class: 'num' }, 'Время', newTag('pick:speed')), h('th'))), h('tbody', {}, rows))))].map((el, i) => keyed(el, NAMES[i])));
   }
 
   // Ход подбора: без обхода → перебор → уточнение → итог
