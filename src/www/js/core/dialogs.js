@@ -47,7 +47,8 @@ function renderDiff(ops) {
 // opts: cls — extra class of the window (.ask — narrow), cancel — label of the closing button, onClose — after any close
 function modal(title, body, footer, opts = {}) {
   const close = () => { bg.remove(); document.removeEventListener('keydown', esc); opts.onClose?.(); };
-  const esc = (e) => { if (e.key === 'Escape') close(); };
+  // only the top window: a question asked over another window closes alone
+  const esc = (e) => { if (e.key === 'Escape' && bg === [...document.querySelectorAll('body > .modal-bg')].pop()) close(); };
   const bg = h('div', { class: 'modal-bg', onclick: (e) => { if (e.target === bg) close(); } },
     h('div', { class: 'modal' + (opts.cls ? ' ' + opts.cls : ''), role: 'dialog', 'aria-modal': 'true', 'aria-label': title },
       h('div', { class: 'modal-h' }, h('h2', { text: title }), h('button', { class: 'btn ghost icon', type: 'button', onclick: close, 'aria-label': 'Закрыть' }, icon('x'))),

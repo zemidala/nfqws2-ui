@@ -40,10 +40,19 @@ function autoStreak(array $hist): array
   return [$n, $i >= 0];
 }
 
-function testLaunch(array $job): void
+// false — another job is running or just starting: the callers' own check and this launch are not one step, and two
+// requests in the same second (two tabs, a click and the auto-pick from cron) would both start a job on one test queue
+function testLaunch(array $job): bool
 {
   @mkdir(TEST_DIR, 0777, true);
   @chmod(TEST_DIR, 0777);
+  $lock = @fopen(TEST_DIR . '/launch.lock', 'ce');   // released when the function returns
+  if ($lock) {
+    flock($lock, LOCK_EX);
+  }
+  if (testRunning()) {
+    return false;
+  }
   @unlink(TEST_DIR . '/stop');
   file_put_contents(TEST_DIR . '/job.json', json_encode($job));
   touch(TEST_DIR . '/trace.log');
@@ -51,6 +60,13 @@ function testLaunch(array $job): void
   testSaveStatus(['state' => 'starting', 'type' => $job['type'], 'host' => $job['host'], 'started' => time()] + (isset($job['pick']) ? ['pick' => $job['pick']] : []));
   // Чистое окружение: иначе php-cgi увидит CGI-переменные запроса и не перейдёт в режим задания
   exec('(env -i PATH=' . JOB_PATH . ' NFQWS_UI_CLI=test php-cgi -q -f ' . escapeshellarg(API_FILE) . ' >/dev/null 2>&1 &)');
+  return true;
+}
+
+// A job from the page: the answer says so when another one got in first
+function launchJob(array $job): void
+{
+  testLaunch($job) || fail('Сейчас идёт подбор или другая проверка — дождитесь окончания или остановите её');
 }
 
 function diagBusy(): bool
@@ -139,9 +155,13 @@ function autoTick(): void
       autoSave($d);
       return;
     }
+    if (!testLaunch(['type' => 'pick', 'host' => $h, 'proto' => 'https', 'sets' => ['config', 'std', 'hist', 'other', 'community'], 'repeats' => 3, 'refine' => false, 'auto' => true])) {
+      array_unshift($d['queue'], $h);   // a pick from the page got in first: this site waits for the next pass
+      autoSave($d);
+      return;
+    }
     autoLog($d, $h, 'start', 'Перестал открываться — запущен подбор стратегии.');
     autoSave($d);
-    testLaunch(['type' => 'pick', 'host' => $h, 'proto' => 'https', 'sets' => ['config', 'std', 'hist', 'other', 'community'], 'repeats' => 3, 'refine' => false, 'auto' => true]);
     return;
   }
   if ($changed) {

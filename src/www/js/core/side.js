@@ -37,11 +37,10 @@ function placeSide() {
 const RAIL_PAGES = ['diag', 'frz', 'dns', 'conns', 'cfg', 'pick', 'trace', 'phist', 'comm', 'auto', 'learn', 'tg', 'asn', 'basic', 'base', 'hist', 'report', 'look', 'about', 'site'];
 // Where the page is drawn. With the status column the page goes into .mcol and the column stays put: moving between
 // two such pages redraws only the middle, the column is not torn down and built again after the page has loaded.
+// main comes empty for every page (route): the rail is put together anew, its blocks (SIDE.*) move over as they are
 function railTarget(main, page) {
   main.classList.toggle('formy', RAIL_PAGES.includes(page));   // строки форм на широком экране — подсказки справа от поля
-  const wrap = main.querySelector(':scope > .mwrap');
   if (!isWide() || overviewCol() || !RAIL_PAGES.includes(page)) return main;
-  if (wrap) return wrap.firstElementChild;
   sideBlocks(false);
   const col = h('div', { class: 'mcol' });
   main.replaceChildren(h('div', { class: 'mwrap' }, col, h('aside', { class: 'rail', 'aria-label': 'Состояние' }, SIDE.service, SIDE.problems, SIDE.monitor, SIDE.backup)));

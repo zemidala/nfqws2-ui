@@ -85,9 +85,22 @@ function putSynced(string $file, string $data): bool
   return $ok;
 }
 
+// A temporary file of its own for every write: cron and a page request saving the same file at once would otherwise
+// share one, and one could rename the other's half-written copy into place (settings.json — the token, the sites)
 function putSafe(string $path, string $data): bool
 {
-  return putSynced("$path.tmp", $data) && rename("$path.tmp", $path);
+  // what a write cut off by a power loss left behind (older than a minute: a write going on now is not touched)
+  foreach (glob("$path.tmp*") ?: [] as $old) {
+    if (time() - (int)@filemtime($old) > 60) {
+      @unlink($old);
+    }
+  }
+  $tmp = "$path.tmp" . getmypid() . bin2hex(random_bytes(3));
+  if (putSynced($tmp, $data) && rename($tmp, $path)) {
+    return true;
+  }
+  @unlink($tmp);
+  return false;
 }
 
 function saveUiSettings(array $s): void
@@ -369,7 +382,12 @@ function remotePush(): array
   if (!remoteOn()) {
     return ['sent' => 0, 'error' => 'отправка на NAS выключена'];
   }
-  $l = fopen(SNAP_DIR . '/.push.lock', 'c');
+  // the folder appears with the first snapshot: a copy turned on before it would get no lock file (flock(false) — fatal)
+  @mkdir(SNAP_DIR, 0755, true);
+  $l = @fopen(SNAP_DIR . '/.push.lock', 'c');
+  if (!$l) {
+    return ['sent' => 0, 'error' => 'не удалось открыть ' . SNAP_DIR . '/.push.lock'];
+  }
   if (!flock($l, LOCK_EX | LOCK_NB)) {
     return ['sent' => 0, 'error' => null, 'busy' => true];   // уже идёт фоновая отправка
   }
@@ -545,6 +563,12 @@ function restoreArchive(string $archive, string $reason, bool $nfqOnly = false, 
     }
     $conf = $conf || preg_match('#^(opt/)?etc/nfqws2/nfqws2\.conf$#', $e);
   }
+  // our snapshots hold plain files and folders only. A link (etc/nfqws2/lists → /etc) would let tar write through it
+  // outside the temporary folder while unpacking, and a linked file would be copied into a readable list
+  exec('tar -tvzf ' . escapeshellarg($archive) . ' 2>/dev/null', $tv);
+  if (preg_grep('/^[lh]/', $tv)) {
+    fail('В архиве есть ссылки на другие файлы — восстановление отменено');
+  }
   if (!$conf) {
     fail('В архиве нет конфига nfqws2 — только настройки интерфейса. Так собирались копии на Keenetic до версии 1.15.4: конфиг, списки и блобы в них не попадали. Восстановить из такой копии нечего — сделайте новый снимок.');
   }
@@ -553,6 +577,11 @@ function restoreArchive(string $archive, string $reason, bool $nfqOnly = false, 
   $tmp = '/tmp/nfqws-ui-restore-' . bin2hex(random_bytes(4));
   mkdir($tmp, 0700);
   exec('tar -xzf ' . escapeshellarg($archive) . ' -C ' . escapeshellarg($tmp) . ' 2>&1', $o, $rc);
+  if ($rc !== 0) {
+    // a half-unpacked archive (/tmp is memory and may run out) would restore some files and report the rest as unchanged
+    exec('rm -rf ' . escapeshellarg($tmp));
+    fail('Архив не распаковался: ' . (trim(implode(' ', array_slice($o, -3))) ?: "tar $rc") . '. Ничего не изменено.');
+  }
   $changed = [];
   foreach ($list as $e) {
     $src = "$tmp/$e";
@@ -819,6 +848,13 @@ function pkgLeftoversDelete(array $names): int
 }
 
 // Путь к редактируемому файлу по имени: nfqws2.conf или список
+// A list only: deleting, renaming or moving lines must never reach nfqws2.conf, which editablePath also gives
+function listPath(string $name): string
+{
+  $name === 'nfqws2.conf' && fail('Это не список');
+  return editablePath($name);
+}
+
 function editablePath(string $name): string
 {
   if ($name === 'nfqws2.conf') {

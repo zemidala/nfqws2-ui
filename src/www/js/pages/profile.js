@@ -75,7 +75,8 @@ async function viewProfile(content, index, r) {
   } else {
     applied = null;
   }
-  let view = sessionStorage.getItem('nfqws-ui-pview') || 'build';
+  let view = 'build';
+  try { view = sessionStorage.getItem('nfqws-ui-pview') || 'build'; } catch { /* нет хранилища */ }
   let issues = profIssues(p);
   let dryRun = S.state.lint?.dry_run;
   let helpInfo = null;

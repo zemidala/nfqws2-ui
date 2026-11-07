@@ -11,12 +11,13 @@ function subsRun(?string $only = null): array
 {
   $s = uiSettings();
   $report = [];
-  foreach ($s['subs'] as $i => $sub) {
+  foreach ($s['subs'] as $sub) {
     if ($only !== null && $sub['list'] !== $only) {
       continue;
     }
     $path = LISTS_DIR . '/' . $sub['list'];
     $tmp = tempnam('/tmp', 'nfqsub');
+    $out = [];   // exec appends: the next failing subscription would show this one's output too
     exec('curl -fsSL -m 60 --max-filesize 10485760 -o ' . escapeshellarg($tmp) . ' ' . escapeshellarg($sub['url']) . ' 2>&1', $out, $rc);
     $sub['last'] = time();
     if ($rc !== 0) {
@@ -42,8 +43,16 @@ function subsRun(?string $only = null): array
       }
     }
     @unlink($tmp);
-    $s['subs'][$i] = $sub;
     $report[] = $sub;
+  }
+  // the downloads take up to a minute each: what the page saved meanwhile (token, sites, other subscriptions) stays —
+  // only the results of these subscriptions go into the settings read now
+  $s = uiSettings();
+  $byList = array_column($report, null, 'list');
+  foreach ($s['subs'] as $i => $sub) {
+    if (isset($byList[$sub['list']]) && $byList[$sub['list']]['url'] === $sub['url']) {
+      $s['subs'][$i] = $byList[$sub['list']];
+    }
   }
   saveUiSettings($s);
   return $report;

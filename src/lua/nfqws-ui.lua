@@ -18,9 +18,13 @@ LEARN_HALF = 604800
 -- 2 KB of answer means the greeting got past DPI. An explicit inseq=N in the profile wins.
 LEARN_INSEQ = 2048
 
--- decay a record's counts to `now` (weights halve every `half` seconds)
+-- decay a record's counts to `now` (weights halve every `half` seconds). The time only moves forward: after a boot the
+-- clock lags until NTP sets it, and a record stamped with that lagging time would look years old once the clock
+-- jumps — everything learned would decay to nothing. (A record first made in those minutes still gets the lagging
+-- stamp and fades: it holds only those minutes)
 function learn_decay(rec, now, half)
-	if rec.t and now > rec.t then
+	if rec.t and now <= rec.t then return end
+	if rec.t then
 		local k = 0.5 ^ ((now - rec.t) / half)
 		rec.ok = rec.ok * k
 		rec.fail = rec.fail * k

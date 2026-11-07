@@ -39,6 +39,8 @@ jobs:
         run: |
           v="$(cat VERSION)"
           awk -v v="$v" '$0 ~ "^## "v" " {p=1; next} /^## / {p=0} p' CHANGELOG.md > notes.md
+          # a tag made while the section is still «Следующая версия» would publish a release with no list of changes
+          grep -q '[^[:space:]]' notes.md || { echo "::error::CHANGELOG.md has no section «## $v — …»"; exit 1; }
           cat >> notes.md <<EOT
 
           ## Установка

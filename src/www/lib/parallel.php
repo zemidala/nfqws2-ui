@@ -240,13 +240,21 @@ function testStatus(): array
 
 function testSaveStatus(array $s): void
 {
-  file_put_contents(TEST_DIR . '/status.json.tmp', json_encode($s, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
-  rename(TEST_DIR . '/status.json.tmp', TEST_DIR . '/status.json');
+  $tmp = TEST_DIR . '/status.json.tmp' . getmypid();   // the job and a page request may write at once
+  file_put_contents($tmp, json_encode($s, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+  rename($tmp, TEST_DIR . '/status.json');
 }
+
+// «starting» counts too: until php-cgi of the job is up (about a second, longer on a busy router) the status has no
+// pid, and a second click, another tab or the auto-pick from cron would start a second job on the same test queue
+const TEST_START_WAIT = 20;
 
 function testRunning(): bool
 {
   $s = testStatus();
+  if (($s['state'] ?? '') === 'starting') {
+    return time() - (int)($s['started'] ?? 0) < TEST_START_WAIT;
+  }
   return ($s['state'] ?? '') === 'running' && !empty($s['pid']) && file_exists('/proc/' . $s['pid']);
 }
 

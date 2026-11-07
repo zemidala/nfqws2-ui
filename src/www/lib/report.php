@@ -430,7 +430,8 @@ function asnFetch(int $asn): array
       $end = $e;
     }
   }
-  return ['asn' => $asn, 'holder' => (string)($ov['holder'] ?? ''), 'prefixes' => array_merge($out, array_keys($six)), 'v6' => $v6];
+  // the holder's name goes into the list's «#» line: a line break from RIPEstat would make the rest a list entry
+  return ['asn' => $asn, 'holder' => trim(preg_replace('/[\x00-\x1f]+/', ' ', (string)($ov['holder'] ?? ''))), 'prefixes' => array_merge($out, array_keys($six)), 'v6' => $v6];
 }
 
 function asnWrite(array $a, bool $auto): array

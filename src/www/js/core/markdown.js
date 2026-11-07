@@ -19,7 +19,7 @@ function mdInline(s, onAnchor) {
     else {
       const href = m[4];
       const kids = mdInline(m[3], onAnchor);
-      if (href.startsWith('#')) out.push(h('a', { href: '#', onclick: (e) => { e.preventDefault(); onAnchor?.(decodeURIComponent(href.slice(1))); } }, kids));
+      if (href.startsWith('#')) out.push(h('a', { href: '#', onclick: (e) => { e.preventDefault(); let a = href.slice(1); try { a = decodeURIComponent(a); } catch { /* a stray «%» */ } onAnchor?.(a); } }, kids));
       else if (/^https?:\/\//.test(href)) out.push(h('a', { href, target: '_blank', rel: 'noopener' }, kids));
       else if (/^CHANGELOG\.md$/i.test(href)) out.push(h('a', { href: '#/settings/changelog' }, kids));
       else if (/^README\.md$/i.test(href)) out.push(h('a', { href: '#/settings/readme' }, kids));

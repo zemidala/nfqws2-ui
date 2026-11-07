@@ -27,6 +27,10 @@ end
 local r = { ok = 4, fail = 2, t = t0 }
 learn_decay(r, t0 + H, H)
 eq(r.ok, 2, 'ok halves'); eq(r.fail, 1, 'fail halves')
+-- the clock behind the saved time (a boot before NTP): nothing decays and the stamp stays, so the jump forward to the
+-- real time later does not age the record by years
+learn_decay(r, t0 - 5 * 365 * 86400, H)
+eq(r.t, t0 + H, 'stamp not moved back'); eq(r.ok, 2, 'no decay backwards')
 -- single strategy: skip gives back 1
 eq(learn_pick({}, 1, t0, H, 1), 1, 'only one')
 print('ok: choice logic')

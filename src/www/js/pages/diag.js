@@ -226,7 +226,8 @@ async function viewSite(main, r) {
     h('nav', { class: 'subtabs', 'aria-label': 'Сайт' },
       [['check', 'Проверка'], ['diag', 'Диагноз'], ['pick', 'Подбор стратегии'], ['trace', 'Трассировка'], ['hist', 'История подборов']].map(([s, t]) => h('a', { href: href(s), class: s === sub ? 'on' : null, text: t }))));
   if (sub === 'hist') return viewPickHist(main, { q: new URLSearchParams({ host }) }, true);
-  const q = new URLSearchParams({ host, ...(r.q?.get('tls12') === '1' ? { tls12: '1' } : {}) });   // «as old devices» from the diagnosis
+  // «as old devices» from the diagnosis; the protocol from «Соединения устройства» (an HTTP flow → a pick for HTTP)
+  const q = new URLSearchParams({ host, ...(r.q?.get('tls12') === '1' ? { tls12: '1' } : {}), ...(['http', 'quic'].includes(r.q?.get('proto')) ? { proto: r.q.get('proto') } : {}) });
   if (sub === 'diag') return viewDiag(main, { q }, true);
   if (sub !== 'check') return viewTests(main, { arg: sub, q }, true);
   if (overviewCol()) main.append(h('p', { class: 'muted', text: 'Результат проверки — в колонке слева.' }));

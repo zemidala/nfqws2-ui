@@ -23,7 +23,15 @@ async function route(refresh = false) {
   document.documentElement.classList.remove('cfg-fs');
   if (r.tab !== 'settings' || r.arg !== 'raw') S.cfgFull = false;
   if (r.tab !== 'sites' || r.arg !== S.listFull) S.listFull = null;
-  const main = document.getElementById('main');
+  let main = document.getElementById('main');
+  // Every page is built into a new, empty #main: a page left before its data came holds the old, detached element,
+  // so what it draws late lands nowhere instead of under the next page
+  const freshMain = () => {
+    const m = main.cloneNode(false);
+    main.replaceWith(m);
+    main = m;
+    return m;
+  };
   if (!S.state || refresh) {
     if (!S.state) main.replaceChildren(skel(2, 5));
     try { await loadState(); } catch (e) { main.replaceChildren(notice('bad', 'Не удалось получить состояние', e.message)); return; }
@@ -51,7 +59,7 @@ async function route(refresh = false) {
   // (Оформление → «Анимации»); the same page with other data (profile → profile, a refresh) just replaces it.
   // A skeleton only when there is nothing on screen yet or the browser cannot do view transitions.
   const build = async () => {
-    const target = railTarget(main, page);
+    const target = railTarget(freshMain(), page);
     target.replaceChildren(subTabs(page));
     placeSide();
     updatedNote();
@@ -72,7 +80,7 @@ async function route(refresh = false) {
     S.vt.finished.catch(() => {});
     await S.vt.updateCallbackDone.catch(() => {});
   } else {
-    const target = railTarget(main, page);
+    const target = railTarget(freshMain(), page);
     const wait = skel(2, 5);
     target.replaceChildren(subTabs(page), wait);
     placeSide();

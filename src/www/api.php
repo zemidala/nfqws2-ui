@@ -164,6 +164,14 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
     connJob();
     exit(0);
   }
+  // one pass at a time: a slow monitoring pass (many sites, a dead DNS) longer than the 10 min between runs, or the
+  // daily one at 4:05 on top of a scan, would probe twice and send the same Telegram message twice
+  // «e» — not inherited: the pass starts background jobs (an auto-pick, which may restart nfqws2), and a child holding
+  // the lock would make every later scan give up
+  $cronLock = @fopen('/tmp/nfqws-ui-cron.lock', 'ce');
+  if ($cronLock && !flock($cronLock, LOCK_EX | ($cli === 'daily' ? 0 : LOCK_NB))) {
+    exit(0);
+  }
   seenInfo();   // первым — как и в state()
   pendingExpire(60);   // задание проверки после перезапуска могло погибнуть — откат не должен потеряться
   devicesEnsure();     // nfqws2 restarted outside the interface or the router rebooted
@@ -284,11 +292,21 @@ $str = function (string $k) use ($in): string {
 
 if ($cmd === 'login') {
   $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+  // the check, the password and the failure count under one short lock: checked in parallel, fifty guesses would all
+  // pass the «5 failures» check before any failure is written. The 2 s pause comes after the lock, so wrong guesses
+  // from elsewhere do not queue the owner's login behind them
+  $loginLock = @fopen('/tmp/nfqws-ui-login.lock', 'ce');
+  if ($loginLock) {
+    flock($loginLock, LOCK_EX);
+  }
   if (loginBlocked($ip)) {
     fail('Слишком много неудачных попыток. Подождите 10 минут.', 429);
   }
   if (!authenticate($str('user'), $str('password'))) {
     loginBlocked($ip, true);
+    if ($loginLock) {
+      flock($loginLock, LOCK_UN);
+    }
     sleep(2);
     fail('Неверный логин или пароль. Вход — под root с его паролем (на Asuswrt-Merlin — под логином администратора роутера); если у root нет пароля, задайте его командой passwd.', 401);
   }
@@ -409,7 +427,7 @@ switch ($cmd) {
 
   case 'list_add':
   case 'list_remove':
-    $path = editablePath($str('name'));
+    $path = listPath($str('name'));
     if (!is_file($path)) {
       fail('Файл не найден', 404);
     }
@@ -462,7 +480,7 @@ switch ($cmd) {
   case 'list_remove_lines':
     // Удаление строк по номерам: из повторов уходит только отмеченный.
     // Текст строки сверяется — если файл успели изменить, ничего не удаляем.
-    $path = editablePath($str('name'));
+    $path = listPath($str('name'));
     if (!is_file($path)) {
       fail('Файл не найден', 404);
     }
@@ -487,7 +505,7 @@ switch ($cmd) {
     respond(['changed' => count($drop)]);
 
   case 'list_save':
-    $path = editablePath($str('name'));
+    $path = listPath($str('name'));
     if (!is_file($path)) {
       fail('Файл не найден', 404);
     }
@@ -519,12 +537,12 @@ switch ($cmd) {
     respond(['name' => $name]);
 
   case 'list_rename':
-    $from = editablePath($str('name'));
+    $from = listPath($str('name'));
     $to = $str('to');
     if (!str_ends_with($to, '.list')) {
       $to .= '.list';
     }
-    $toPath = editablePath($to);
+    $toPath = listPath($to);
     if (!is_file($from)) {
       fail('Файл не найден', 404);
     }
@@ -550,12 +568,14 @@ switch ($cmd) {
 
   case 'list_move':
     // Перенос или копирование записей в другой список
-    $from = editablePath($str('name'));
-    $toPath = editablePath($str('to'));
+    $from = listPath($str('name'));
+    $toPath = listPath($str('to'));
     if (!is_file($from) || !is_file($toPath)) {
       fail('Файл не найден', 404);
     }
-    $items = array_values(array_filter(is_array($in['items'] ?? null) ? $in['items'] : [], 'is_string'));
+    $from === $toPath && fail('Это тот же список');   // a move would add the lines and then take them out again
+    // one entry — one line: an item with a line break inside would add lines nobody chose
+    $items = array_values(array_filter(is_array($in['items'] ?? null) ? $in['items'] : [], fn($x) => is_string($x) && !preg_match('/[\r\n]/', $x)));
     $want = array_flip(array_map(fn($x) => strtolower(trim($x)), $items));
     $toText = rtrim(file_get_contents($toPath), "\n");
     $toLines = $toText === '' ? [] : explode("\n", $toText);
@@ -576,7 +596,7 @@ switch ($cmd) {
 
   case 'list_delete':
     $name = $str('name');
-    $path = editablePath($name);
+    $path = listPath($name);
     foreach (listsInventory(currentProfiles()) as $l) {
       if ($l['name'] === $name && !$l['removable']) {
         fail(in_array($name, PROTECTED_LISTS, true) ? 'Стандартный список nfqws2-keenetic удалить нельзя — его можно очистить'
@@ -659,7 +679,7 @@ switch ($cmd) {
     respond(['issues' => listUsed($path) ? lintList(basename($path), is_string($in['content'] ?? null) ? $in['content'] : (string)@file_get_contents($path)) : []]);
 
   case 'list_fix':
-    $path = editablePath($str('name'));
+    $path = listPath($str('name'));
     if (!is_file($path)) {
       fail('Файл не найден', 404);
     }
@@ -803,7 +823,7 @@ switch ($cmd) {
     // свои стратегии из формы подбора: до OWN_MAX штук, у каждой — только шаги --lua-desync
     $ownList = $cmd === 'test_start' ? ownFromRequest($in['own'] ?? null) : [];
     curlRequire();
-    testLaunch(['type' => $cmd === 'trace_start' ? 'trace' : 'pick', 'host' => $host,
+    launchJob(['type' => $cmd === 'trace_start' ? 'trace' : 'pick', 'host' => $host,
       'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : (($in['proto'] ?? '') === 'quic' ? 'quic' : 'https'),
       'sets' => $own || $ownList ? $sets : ($sets ?: ['config', 'std']), 'steps' => $own, 'own' => $ownList,
       'repeats' => (int)($in['repeats'] ?? 3), 'refine' => !empty($in['refine']), 'tls12' => !empty($in['tls12'])]);
@@ -839,7 +859,7 @@ switch ($cmd) {
     $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : [], ['config', 'ports', 'std', 'hist', 'community']));
     $ownList = ownFromRequest($in['own'] ?? null);   // own strategies alone are a valid run
     curlRequire();
-    testLaunch(['type' => 'multi', 'host' => $list ? $list['name'] : 'сайтов: ' . count($hosts), 'hosts' => $hosts, 'list' => $list,
+    launchJob(['type' => 'multi', 'host' => $list ? $list['name'] : 'сайтов: ' . count($hosts), 'hosts' => $hosts, 'list' => $list,
       'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https', 'sets' => $ownList ? $sets : ($sets ?: ['config', 'std']), 'own' => $ownList,
       'repeats' => (int)($in['repeats'] ?? 3), 'tls12' => !empty($in['tls12'])]);
     respond(['ok' => true]);
@@ -871,7 +891,7 @@ switch ($cmd) {
     $prev = testStatus();
     $pick = ($prev['type'] ?? '') === 'pick' ? $prev : (($prev['type'] ?? '') === 'wide' ? ($prev['pick'] ?? null) : null);
     curlRequire();
-    testLaunch(['type' => 'wide', 'host' => $pick['host'] ?? $hosts[0], 'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https',
+    launchJob(['type' => 'wide', 'host' => $pick['host'] ?? $hosts[0], 'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https',
       'hosts' => $hosts, 'steps' => $steps, 'repeats' => (int)($in['repeats'] ?? ($pick['repeats'] ?? 3)), 'pick' => $pick]);
     respond(['ok' => true]);
 
@@ -936,7 +956,7 @@ switch ($cmd) {
       fail('Укажите хотя бы один сайт для проверки');
     }
     curlRequire();
-    testLaunch(['type' => 'cfg', 'host' => 'конфигов: ' . (count($cfgs) - ($withMine ? 1 : 0)),'configs' => $cfgs, 'hosts' => $hosts, 'repeats' => (int)($in['repeats'] ?? 3)]);
+    launchJob(['type' => 'cfg', 'host' => 'конфигов: ' . (count($cfgs) - ($withMine ? 1 : 0)),'configs' => $cfgs, 'hosts' => $hosts, 'repeats' => (int)($in['repeats'] ?? 3)]);
     respond(['ok' => true]);
 
   case 'cfg_get':
@@ -979,7 +999,7 @@ switch ($cmd) {
       fail('«Только свои»: впишите хотя бы один свой сайт или адрес');
     }
     curlRequire();
-    testLaunch(['type' => 'freeze', 'host' => $only ? 'свои адреса' : 'опорные сети', 'sets' => [], 'extra' => $extra, 'ips' => $ips, 'only' => $only]);
+    launchJob(['type' => 'freeze', 'host' => $only ? 'свои адреса' : 'опорные сети', 'sets' => [], 'extra' => $extra, 'ips' => $ips, 'only' => $only]);
     respond(['ok' => true]);
 
   case 'freeze_get':
@@ -1000,9 +1020,9 @@ switch ($cmd) {
 
   case 'test_status':
     $s = testStatus();
-    if (($s['state'] ?? '') === 'running' && !testRunning()) {
+    if (in_array($s['state'] ?? '', ['running', 'starting'], true) && !testRunning()) {
+      $s['error'] = $s['state'] === 'starting' ? 'задание не запустилось' : 'задание прервалось';
       $s['state'] = 'error';
-      $s['error'] = 'задание прервалось';
     }
     respond($s);
 
