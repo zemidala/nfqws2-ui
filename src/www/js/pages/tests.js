@@ -336,6 +336,18 @@ function sentPanel(sent) {
     h('p', { class: 'sm muted', text: 'Если Telegram недоступен, сообщение не теряется: оно ждёт и уходит, как только связь появится, с пометкой о времени события.' }));
 }
 
+// Under a strategy's time: the wait for the first byte, and the download speed for the fastest few. A small page comes
+// in one piece, the first byte is then the whole time — shown only when it says something of its own
+const fmtSpeed = (k) => k >= 1024 ? (k / 1024).toFixed(1).replace('.', ',') + ' МБ/с' : k + ' КБ/с';
+function timeNote(x) {
+  if (!x.ms) return null;
+  const first = x.ttfb && x.ms - x.ttfb >= 50 && x.ttfb <= x.ms * 0.85;
+  const parts = [first ? `ответ ${x.ttfb} мс` : null, x.kbps ? fmtSpeed(x.kbps) : null].filter(Boolean);
+  if (!parts.length) return null;
+  return h('div', { class: 'sm muted nowrap', title: [first ? `Первый байт ответа — через ${x.ttfb} мс` : null, x.kbps ? `Скорость — по скачиванию ${x.kb} КБ с того же сайта` : null].filter(Boolean).join('. '),
+    text: parts.join(' · ') });
+}
+
 // Several sites: the ones whose address the router's DNS replaced, probed at the real address
 function pinnedNote(sites) {
   const pinned = (sites || []).filter((r) => r.dns_pin);
@@ -566,7 +578,7 @@ async function viewTests(main, r, bare = false) {
         h('td', {}, h('div', {}, x.name, needsTs(x.steps) ? ' ' : null, needsTs(x.steps) ? tsChip() : null), h('code', { class: 'sm muted', style: 'word-break:break-all', text: x.steps.map((t) => t.replace('--lua-desync=', '')).join('  ') })),
         h('td', { class: 'sm muted src' }, x.from, x.hist ? h('div', { class: 'nowrap' }, chip('работала ' + fmtDate(x.hist), 'ok')) : null, x.confirmed ? h('div', { class: 'nowrap' }, full ? chip('перепроверена', 'ok') : chip('в пачке открывала, по одной — нет')) : null),
         h('td', { class: 'sm', text: full ? `открылся ${x.ok} из ${x.ok}` : x.ok ? `${x.ok} из ${x.tries}` : x.reason || 'не открылся' }),
-        h('td', { class: 'num', text: x.ms ? x.ms + ' мс' : '—' }),
+        h('td', { class: 'num' }, x.ms ? x.ms + ' мс' : '—', timeNote(x)),
         h('td', {}, x.ok || x.community ? h('div', { class: 'row acts-row' }, x.ok ? applyMenu(x, s) : null, full ? wideBtn(x, s) : null, full || x.community ? shareBtn(x, s) : null) : null));
     });
     // blocks by name: a key each for morph, so a notice that appears at the end does not shift the table
@@ -581,7 +593,7 @@ async function viewTests(main, r, bare = false) {
       !running ? recommendation(s, good, best) : null,
       !running && best ? h('div', { class: 'notice ok' }, icon('ok'), h('div', { class: 'grow' },
         h('b', { text: `Работают ${good.length} из ${res.length}. Быстрее всех — ${best.name}, ${best.ms} мс.` }),
-        h('div', { class: 't', text: best.from }), h('code', { class: 'sm', style: 'word-break:break-all', text: best.steps.join(' ') }),
+        h('div', { class: 't', text: (best.kbps ? `Скачивание до 1 МБ: ${fmtSpeed(best.kbps)}. ` : '') + best.from }), h('code', { class: 'sm', style: 'word-break:break-all', text: best.steps.join(' ') }),
         needsTs(best.steps) ? h('div', { class: 't', text: `На компьютерах с Windows эта стратегия сработает, только если включены временные метки TCP: ${WIN_TS_HINT}.` }) : null),
         h('div', { class: 'notice-actions' }, applyMenu(best, s, 'primary'), btn('Скопировать', () => copyText(best.steps.join('\n')), 'small', 'copy'), shareBtn(best, s, true), newTag('pick:share'))) : null,
       communityNote(s, best),
@@ -597,9 +609,11 @@ async function viewTests(main, r, bare = false) {
 
   // Ход подбора: без обхода → перебор → уточнение → итог
   function flow(s, running, res, best) {
-    const now = running ? (s.phase || 'baseline') : 'done';
+    // the speed of the fastest is measured after the pick: the result is known, the last step is still running
+    const speed = running && s.phase === 'speed';
+    const now = running && !speed ? (s.phase || 'baseline') : 'done';
     const order = ['baseline', 'pick', 'refine', 'done'];
-    const cell = (id, title, text) => h('div', { class: order.indexOf(id) < order.indexOf(now) || now === 'done' ? 'done' : id === now ? 'now' : '' }, h('b', { text: title }), h('span', { text }));
+    const cell = (id, title, text) => h('div', { class: speed && id === 'done' ? 'now' : order.indexOf(id) < order.indexOf(now) || now === 'done' ? 'done' : id === now ? 'now' : '' }, h('b', { text: title }), h('span', { text }));
     const tried = res.filter((x) => !x.refined);
     const full = tried.filter((x) => x.ok && x.ok === x.tries).length;
     const part = tried.filter((x) => x.ok && x.ok < x.tries).length;
@@ -608,7 +622,7 @@ async function viewTests(main, r, bare = false) {
       cell('pick', '2 · Перебор', s.parallel && s.done > 1 ? `${plural(s.done - 1, 'стратегия', 'стратегии', 'стратегий')} из ${s.total - 1}: работают ${full}` + (part ? `, почти — ${part}` : '') + (s.phase === 'confirm' ? ' · перепроверка' : '')
         : res.length ? `${plural(tried.length, 'стратегия', 'стратегии', 'стратегий')}: работают ${full}` + (part ? `, почти — ${part}` : '') : 'ожидает'),
       cell('refine', '3 · Уточнение', s.refine ? `основа — ${s.refine.base}` : now === 'done' ? 'не понадобилось' : 'если рабочих не найдётся'),
-      cell('done', '4 · Итог', now !== 'done' ? '' : best ? best.name : 'рабочей стратегии нет'));
+      cell('done', '4 · Итог', speed ? 'замеряю скорость…' : now !== 'done' ? '' : best ? best.name : 'рабочей стратегии нет'));
   }
 
   // Что перебрало уточнение: зелёное — открылся каждый раз, жёлтое — не каждый, красное — не открылся

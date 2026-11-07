@@ -82,12 +82,12 @@ function parTry(array $chunk, ?array &$nfq, array $baseArgs, array $filter, int 
   file_put_contents($sh, implode("\n", [
     'P=$1; U=$2; R=$3; O=$4; : > "$O"; i=0',
     'while [ $i -lt $R ]; do i=$((i+1))',
-    '  set -- $(curl -4 -sk' . probeTlsOpt() . probePinOpt($host, $http) . ' -o /dev/null --local-port $P --connect-timeout 4 -A "$UA" -m 7 -r 0-' . (VOLUME_BYTES - 1) . ' -w "%{http_code} %{time_total} %{size_download}" "$U" 2>/dev/null; echo " $?")',
-    '  code=$1; t=$2; size=$3; rc=$4; v=""',
+    '  set -- $(curl -4 -sk' . probeTlsOpt() . probePinOpt($host, $http) . ' -o /dev/null --local-port $P --connect-timeout 4 -A "$UA" -m 7 -r 0-' . (VOLUME_BYTES - 1) . ' -w "%{http_code} %{time_total} %{size_download} %{time_starttransfer}" "$U" 2>/dev/null; echo " $?")',
+    '  code=$1; t=$2; size=$3; tt=$4; rc=$5; v=""',
     '  if [ "$rc" = 0 ] && [ "${size%.*}" -lt ' . VOLUME_SMALL . ' ]; then',
     '    a=$(curl -4 -sk' . probeTlsOpt() . probePinOpt($host, $http) . ' -o /dev/null --local-port $P --connect-timeout 4 -A "$UA" -m 8 -H "Expect:" -H "Content-Type: application/octet-stream" --data-binary @' . TEST_DIR . '/volume.bin -w "%{time_appconnect}" "$U?t=$i$$" 2>/dev/null); vrc=$?; v="$vrc $a"',
     '  fi',
-    '  echo "$rc $code $t $size $v" >> "$O"',
+    '  echo "$rc $code $t $size $tt $v" >> "$O"',
     '  [ "$rc" = 0 ] || break',
     '  case "$v" in "28 "*) [ "${v#28 }" != "0.000000" ] && break;; esac',   // отправка повисла после рукопожатия — заморозка
     'done', '']));
@@ -107,8 +107,10 @@ function parTry(array $chunk, ?array &$nfq, array $baseArgs, array $filter, int 
   foreach (array_keys(array_values($chunk)) as $k) {
     $ok = 0;
     $times = [];
+    $firsts = [];
     $reason = null;
     $tries = 0;
+    // a line: rc code time size ttfb [volume rc, volume handshake time]
     foreach (file(TEST_DIR . "/slot$k.out", FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) ?: [] as $line) {
       $f = explode(' ', trim($line));
       $tries++;
@@ -117,16 +119,50 @@ function parTry(array $chunk, ?array &$nfq, array $baseArgs, array $filter, int 
         $reason = curlReason($rc, $code);
         break;
       }
-      if (isset($f[4]) && (int)$f[4] === 28 && (float)($f[5] ?? 0) > 0) {
+      if (isset($f[5]) && (int)$f[5] === 28 && (float)($f[6] ?? 0) > 0) {
         $reason = REASON_FREEZE;
         break;
       }
       $ok++;
       $times[] = (int)round($t * 1000);
+      $firsts[] = (int)round((float)($f[4] ?? 0) * 1000);
     }
-    $res[] = ['ok' => $ok, 'tries' => max(1, $tries), 'ms' => $times ? (int)round(array_sum($times) / count($times)) : null, 'reason' => $ok === $tries ? null : ($reason ?? 'нет ответа')];
+    $avg = fn(array $x) => $x ? (int)round(array_sum($x) / count($x)) : null;
+    $res[] = ['ok' => $ok, 'tries' => max(1, $tries), 'ms' => $avg($times), 'ttfb' => $avg($firsts), 'reason' => $ok === $tries ? null : ($reason ?? 'нет ответа')];
   }
   return $res;
+}
+
+// After the pick: download speed of the SPEED_TOP fastest strategies that opened the site every time. Each gets its
+// own test nfqws2 for one download; the result goes into its row (kbps, kb — how much was downloaded)
+const SPEED_TOP = 3;
+
+function testSpeed(array &$status, ?array &$nfq, array $baseArgs, array $filter, string $host, bool $http): void
+{
+  $good = array_keys(array_filter($status['results'] ?? [], fn($r) => $r['ok'] > 0 && $r['ok'] === $r['tries'] && $r['ms'] !== null));
+  usort($good, fn($a, $b) => $status['results'][$a]['ms'] <=> $status['results'][$b]['ms']);
+  $good = array_slice($good, 0, SPEED_TOP);
+  if (!$good) {
+    return;
+  }
+  // done/total stay those of the pick: the flow line counts strategies with them
+  $status['phase'] = 'speed';
+  foreach ($good as $i) {
+    if (is_file(TEST_DIR . '/stop')) {
+      $status['state'] = 'stopped';
+      return;
+    }
+    $r = &$status['results'][$i];
+    $status['current'] = 'скорость: ' . $r['name'];
+    testSaveStatus($status);
+    $nfq = testNfqwsStart(array_merge($baseArgs, $filter, $r['steps']));
+    if ($nfq && ($sp = speedProbe($host, $http))) {
+      $r += $sp;
+    }
+    testNfqwsStop($nfq);
+    $nfq = null;
+    unset($r);
+  }
 }
 
 // A blob the strategy names but the config does not declare, while the blobs folder has a file for it (the name itself
@@ -499,12 +535,16 @@ function testJob(): void
     }
     $ok = 0;
     $times = [];
+    $firsts = [];
     $reason = null;
     for ($i = 0; $i < $repeats; $i++) {
       $r = $probe();
       if ($r['ok']) {
         $ok++;
         $times[] = $r['ms'];
+        if (isset($r['ttfb'])) {
+          $firsts[] = $r['ttfb'];
+        }
       } else {
         $reason = $r['reason'];
         if ($i === 0) {
@@ -514,7 +554,8 @@ function testJob(): void
     }
     testNfqwsStop($nfq);
     $nfq = null;
-    return ['ok' => $ok, 'tries' => $i < $repeats ? $i + 1 : $repeats, 'ms' => $times ? (int)round(array_sum($times) / count($times)) : null, 'reason' => $reason];
+    return ['ok' => $ok, 'tries' => $i < $repeats ? $i + 1 : $repeats, 'ms' => $times ? (int)round(array_sum($times) / count($times)) : null,
+      'ttfb' => $firsts ? (int)round(array_sum($firsts) / count($firsts)) : null, 'reason' => $reason];
   };
   $entry = fn(array $c, array $r) => ['name' => $c['name'], 'from' => $c['from'], 'steps' => $c['steps'], 'profile' => array_merge($filter, $c['steps'])]
     + (isset($c['hist']) ? ['hist' => $c['hist']] : []) + (isset($c['community']) ? ['community' => $c['community']] : []) + $r;
@@ -603,6 +644,9 @@ function testJob(): void
   }
   if ($status['state'] === 'running' && !$quic && !($auto && !$cands)) {   // уточнение — оси TLS-фейков, к QUIC не подходит
     testRefine($status, $try, $repeats, $http, !empty($job['refine']), $filter);
+  }
+  if ($status['state'] === 'running' && !$quic && !$auto) {
+    testSpeed($status, $nfq, $baseArgs, $filter, $job['host'], $http);
   }
   testRules('off', $iface);
   if ($status['state'] === 'running') {

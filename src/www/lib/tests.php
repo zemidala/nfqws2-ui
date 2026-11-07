@@ -312,8 +312,8 @@ function curlProbe(string $host, bool $http, string $path = '/'): array
       . ' --connect-timeout 4 -A ' . escapeshellarg('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130 Safari/537.36');
   };
   $out = [];
-  exec($curl() . ' -m 7 -r 0-' . (VOLUME_BYTES - 1) . ' -w "%{http_code} %{time_total} %{size_download}" ' . escapeshellarg($url) . ' 2>/dev/null', $out, $rc);
-  [$code, $time, $size] = array_pad(explode(' ', trim($out[0] ?? '')), 3, '0');
+  exec($curl() . ' -m 7 -r 0-' . (VOLUME_BYTES - 1) . ' -w "%{http_code} %{time_total} %{size_download} %{time_starttransfer}" ' . escapeshellarg($url) . ' 2>/dev/null', $out, $rc);
+  [$code, $time, $size, $ttfb] = array_pad(explode(' ', trim($out[0] ?? '')), 4, '0');
   $ok = $rc === 0 && (int)$code > 0;
   $reason = $ok ? null : (match ($rc) {
     6 => 'имя не разрешается',
@@ -338,7 +338,26 @@ function curlProbe(string $host, bool $http, string $path = '/'): array
       [$ok, $reason] = [false, REASON_FREEZE];
     }
   }
-  return ['ok' => $ok, 'code' => (int)$code, 'ms' => (int)round((float)$time * 1000), 'reason' => $reason];
+  // ttfb — the wait for the server's first byte: connection and handshake included, as a browser feels it
+  return ['ok' => $ok, 'code' => (int)$code, 'ms' => (int)round((float)$time * 1000), 'ttfb' => (int)round((float)$ttfb * 1000), 'reason' => $reason];
+}
+
+// Download speed of a working strategy: up to SPEED_BYTES from the site's page, through the test nfqws2 already
+// started with it. Only a meaningful amount counts: a page smaller than SPEED_MIN is mostly the handshake. null — not
+// measured (the page is too small, or the download failed)
+const SPEED_BYTES = 1048576;
+const SPEED_MIN = 65536;
+
+function speedProbe(string $host, bool $http): ?array
+{
+  [$lo, $hi] = array_map('intval', explode(':', TEST_PORTS));
+  exec('curl -4 -sk' . probeTlsOpt() . probePinOpt($host, $http) . ' -o /dev/null --local-port ' . mt_rand($lo, $hi - 50) . '-' . $hi
+    // -L: a main page is often only a redirect (rutracker.org/ — 162 bytes of «301»), the content is one step further
+    . ' --connect-timeout 4 -m 15 -L --max-redirs 3 -A ' . escapeshellarg('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130 Safari/537.36')
+    . ' -r 0-' . (SPEED_BYTES - 1) . ' -w "%{size_download} %{speed_download}" ' . escapeshellarg(($http ? 'http://' : 'https://') . "$host/") . ' 2>/dev/null', $out, $rc);
+  [$size, $speed] = array_map('floatval', array_pad(explode(' ', trim($out[0] ?? '')), 2, '0'));
+  // a slow site that ran out of time after a good part still has a speed
+  return in_array($rc, [0, 28], true) && $size >= SPEED_MIN ? ['kbps' => (int)round($speed / 1024), 'kb' => (int)round($size / 1024)] : null;
 }
 
 // Обрыв на объёме по адресу — без сайта и без большого файла (приём runnin4ik/dpi-detector, tcp16): PAD_REQS запросов
