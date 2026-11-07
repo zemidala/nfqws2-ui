@@ -2,18 +2,19 @@
 
 /* ---------- Z · zemidala: the K layout with the brand palette (data-variant="k" data-palette="zd") ----------
    «Сумерки»: a slate blue base, far from black, with clear steps page → card → raised → line, so blocks are told
-   apart at a glance. Orange #ff6a14 fills (buttons, switches, markers) carry dark text; orange as text is a tint
-   (#ffd0b0 on dark, #8f3205 on light), the pure brand orange is hard to read as text. Text colours pass APCA Lc 75
+   apart at a glance. Orange #ff6a14 marks (switches, markers, the focus ring); a fill that carries text — the main
+   button, the selected — is burnt orange #c2410c with white text, since no text reads on the pure brand orange.
+   Orange as text is a tint (#ffd0b0 on dark, #7a2a04 on light). Text colours pass APCA Lc 75
    on every surface they stand on. Headings Geologica, text Golos Text.
    The selectors carry data-variant too, so they outrank every K colour block above (and its later overrides). */
 :root:root:root:root[data-palette="zd"] { --sans: "Golos Text", "Segoe UI", system-ui, -apple-system, sans-serif; --mono: "JetBrains Mono", ui-monospace, Consolas, monospace; }
 :root[data-variant="k"][data-palette="zd"] {
   --radius: 6px; --head: "Geologica", var(--sans);
   --bg: #e8ecf3; --surface: #ffffff; --soft: #eef1f6; --line: #bcc5d6; --fg: #141a28; --muted: #3f4a60; --faint: #414c62;
-  --accent: #ff6a14; --accent-ink: #8f3205; --accent-fg: #14161b; --accent-soft: #fdeadd;
+  --accent: #ff6a14; --accent-ink: #7a2a04; --accent-fg: #14161b; --accent-soft: #fdeadd;
   --ok: #0a5a2c; --ok-soft: #dff5e8; --warn: #6e4000; --warn-soft: #fbeccf; --bad: #8f1419; --bad-soft: #fbe3e3;
   --k-side: #ffffff; --k-active: #fdeadd; --k-field: #7d8799; --zd-blue: #1d4dff; --zd-blue-soft: #e6ecff;
-  --tk-opt: #8f3205; --tk-fn: #0a5a2c; --tk-key: #6d2aa3; --tk-p: #414c62; --tk-var: #6e4000;
+  --tk-opt: #8f3205; --tk-fn: #0a5a2c; --tk-key: #5e2390; --tk-p: #414c62; --tk-var: #6e4000;
 }
 :root[data-variant="k"][data-palette="zd"][data-mode="dark"] {
   --bg: #1b2130; --surface: #252d3f; --soft: #2f384d; --line: #475370; --fg: #f1f4fa; --muted: #d4dae8; --faint: #d8deeb;
@@ -58,10 +59,15 @@
 :root[data-palette="zd"] :is(.blk-h h2, .pill, .tag, .dd-g, .mnav .nav-h, .mfly-h, .tbl th) { text-transform: none; letter-spacing: 0; }
 :root[data-palette="zd"] .blk-h h2 { font-size: var(--fs-md); }
 /* status colours above are for text; small bars need a stronger fill, or a failure hardly differs from a success */
-:root[data-palette="zd"] { --ok-fill: #1f9d55; --warn-fill: #c98a00; --bad-fill: #d8343b; --sel: #ff6a14; --sel-fg: #14161b; }
+/* the selected fill as the main button: dark text on the brand orange is APCA Lc 49 of 75 */
+:root[data-palette="zd"] { --ok-fill: #1f9d55; --warn-fill: #c98a00; --bad-fill: #d8343b; --sel: #c2410c; --sel-fg: #fff; }
 :root[data-palette="zd"][data-mode="dark"] { --ok-fill: #4cc98a; --warn-fill: #f0b04a; --bad-fill: #ff7d73; }
 @media (prefers-color-scheme: dark) { :root[data-palette="zd"]:not([data-mode="light"]) { --ok-fill: #4cc98a; --warn-fill: #f0b04a; --bad-fill: #ff7d73; } }
 :root[data-palette="zd"] :is(.ch-ticks, .ch-cols, .ch-blocks, .ch-hours, .ch-hmini, .mtl-dot, .mtl-legend, .lbar, .tile-bars) { --ok: var(--ok-fill); --warn: var(--warn-fill); --bad: var(--bad-fill); }
+/* the main button: no text colour reads well enough on the brand orange (black — APCA Lc 50 of 75), so the button is
+   burnt orange with white text (Lc 80); the brand orange stays on links, marks and the selected. Mockup
+   local/design/primary.html, variant А */
+:root[data-palette="zd"] .btn.primary, :root[data-palette="zd"] .btn.primary:hover { background: var(--sel); border-color: var(--sel); color: var(--sel-fg); }
 /* «Открыть» stands in every block: a link, so that only real actions look like buttons */
 :root[data-palette="zd"] .blk-h > a.btn.small { border-color: transparent; background: none; color: var(--accent-ink); box-shadow: none; padding: 0 2px; font-weight: 600; }
 :root[data-palette="zd"] .blk-h > a.btn.small:hover { background: none; border-color: transparent; text-decoration: underline; }

@@ -259,6 +259,9 @@ details.dns-more-panel > summary { cursor: pointer; color: var(--accent-ink); }
 .tbl.dnsx-tbl td.who { max-width: 0; width: 34%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 @container main (max-width: 1499px) { .tbl.dnsx-tbl .hide-narrow { display: none; } }
 .tbl.dnsx-tbl tr.best td { background: var(--accent-soft); }
+/* on the tinted row the status colours fell just short of contrast (Lc 72–74 of 75 in A, B, C, K): a step towards the text colour */
+.tbl.dnsx-tbl tr.best :is(.ok-t, .bad-t) { color: color-mix(in srgb, var(--ok) 70%, var(--fg)); }
+.tbl.dnsx-tbl tr.best .bad-t { color: color-mix(in srgb, var(--bad) 70%, var(--fg)); }
 .tbl.dnsx-tbl td.num, .tbl.dnsx-tbl th.num { text-align: right; }
 @container main (max-width: 760px) { .dnsx-best { grid-template-columns: minmax(0, 1fr); gap: 6px; }
   .dnsx-tile { grid-template-columns: minmax(0, 1fr) auto; column-gap: 10px; row-gap: 0; padding: 8px 12px; }

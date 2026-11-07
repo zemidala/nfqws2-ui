@@ -156,7 +156,7 @@ button.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
    a few («Списком / Текстом») or on/off («Структура») — sits in a sunken track with the chosen part filled, on/off
    also shows a dot (not by colour alone); an action is the style's own button and sinks by 1 px when pressed.
    The chosen fill: the accent in the light theme, a darker accent with white text in the dark one (APCA ≥ 75 at 13 px) */
-:root { --sel: var(--accent); --sel-fg: var(--accent-fg); --track-fg: color-mix(in srgb, var(--fg) 72%, var(--bg)); }
+:root { --sel: var(--accent); --sel-fg: var(--accent-fg); --track-fg: color-mix(in srgb, var(--fg) 76%, var(--bg)); }   /* 72% — Lc 74.6 of 75 in Z light */
 @media (prefers-color-scheme: dark) { :root:not([data-mode="light"]) { --sel: color-mix(in srgb, var(--accent) 54%, #000); --sel-fg: #fff; --track-fg: color-mix(in srgb, var(--fg) 92%, var(--bg)); } }
 :root[data-mode="dark"] { --sel: color-mix(in srgb, var(--accent) 54%, #000); --sel-fg: #fff; --track-fg: color-mix(in srgb, var(--fg) 92%, var(--bg)); }
 .seg button { color: var(--track-fg); }

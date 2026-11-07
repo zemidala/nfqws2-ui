@@ -37,8 +37,7 @@ async function check(page, what) {
   await page.waitForTimeout(1000);   // blocks fade in: measured mid-way they look pale
   expect(await page.locator('main').innerText(), `${what}: «null» в тексте`).not.toMatch(/\bnull\b|undefined/);
   expect(await auditLayout(page, { ignore: ['ПРОКРУТКА ВБОК nav.subtabs'] }), what).toEqual([]);
-  // known before this task, a separate matter: style Z's primary button (black on orange) everywhere
-  expect(await contrastReport(page, { ignore: ['на #ff6a14'] }), what).toEqual([]);
+  expect(await contrastReport(page), what).toEqual([]);
 }
 
 for (const [w, mode, variant] of RUNS) {
