@@ -58,8 +58,8 @@
 .pn.pi svg { width: 12px; height: 12px; display: block; }
 .pn.off { border-style: dashed; color: var(--muted); }
 .pn.partial { border-color: var(--warn); } .pn.dead, .pn.excludes-only { border-color: var(--bad); } .pn.err { border-color: var(--bad); color: var(--bad); }
-.errdot { width: 7px; height: 7px; border-radius: 50%; background: var(--bad); flex: none; }
-.warndot { width: 7px; height: 7px; border-radius: 50%; background: var(--warn); flex: none; }
+.errdot { width: 8px; height: 8px; border-radius: 50%; background: var(--bad); flex: none; }
+.warndot { width: 8px; height: 8px; border-radius: 50%; background: var(--warn); flex: none; }
 .grip { color: var(--faint); cursor: grab; letter-spacing: -2px; user-select: none; font-size: var(--fs-sm); }
 .lnav { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 6px; max-height: calc(100vh - var(--top-h) - 40px); overflow: auto; position: sticky; top: calc(var(--top-h) + 16px); box-shadow: var(--shadow); }
 :root[data-variant="b"] .lnav { border-color: transparent; }

@@ -11,8 +11,9 @@ export const signs = () => {
     if (/inset/.test(s.boxShadow) && /\d+px 0px 0px 0px inset/.test(s.boxShadow)) out.add(`полоса сбоку: ${name}`);
     // a line on one side only, on any side; the underline of a tab is what a tab is, so tabs are left out
     const w = ['Top', 'Right', 'Bottom', 'Left'].map((k) => (s[`border${k}Style`] === 'none' || s[`border${k}Color`] === 'rgba(0, 0, 0, 0)' ? 0 : parseFloat(s[`border${k}Width`])));
-    // a hairline between rows is a divider, a thick line on one side is the stripe
-    if (Math.max(...w) >= 2 && Math.min(...w) < Math.max(...w) && b.height > 16 && b.width > 16 && !e.closest('.tabs, .subtabs, nav')) out.add(`полоса с одной стороны: ${name}`);
+    // a hairline between rows is a divider, a thick line on one side is the stripe; a notice's left bar is the
+    // designer's plate the owner chose (2026-11-08)
+    if (Math.max(...w) >= 2 && Math.min(...w) < Math.max(...w) && b.height > 16 && b.width > 16 && !e.closest('.tabs, .subtabs, nav, .notice')) out.add(`полоса с одной стороны: ${name}`);
     if ([...e.childNodes].some((n) => n.nodeType === 3 && n.textContent.trim().length > 2)) {
       if (s.textTransform === 'uppercase') out.add(`капс: ${name} «${e.textContent.trim().slice(0, 20)}»`);
       if (parseFloat(s.letterSpacing) > 0.5) out.add(`разрядка: ${name} «${e.textContent.trim().slice(0, 20)}»`);

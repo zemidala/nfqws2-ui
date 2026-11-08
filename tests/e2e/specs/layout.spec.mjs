@@ -8,7 +8,7 @@ const PAGES = ['#/', '#/diag', '#/tests/freeze', '#/tests/dns', '#/tests/conns',
   '#/settings/raw', '#/settings/backup', '#/settings/hist', '#/log', '#/settings/report', '#/settings/look', '#/settings/about'];
 // полосы вкладок над страницей прокручиваются вбок намеренно
 // редактор: подсветка (span.tk-*) шире окна и прокручивается вбок вместе с полем ввода — так задумано
-const IGNORE = ['ПРОКРУТКА ВБОК nav.subtabs', 'span.tk-', 'span.iss'];   // span.iss — подсветка замечания в редакторе: строка прокручивается вбок, как и span.tk-
+const IGNORE = ['ПРОКРУТКА ВБОК nav.subtabs', 'span.tk-', 'span.iss', 'ПРОКРУТКА ВБОК div.conn-box'];   // span.iss — подсветка замечания в редакторе: строка прокручивается вбок, как и span.tk-; div.conn-box: the connections table scrolls inside its own frame on a phone
 
 // 1920 и 2560 — широкий экран: там колонки «Мониторинга» и списков, колонка состояния справа (жалоба Эдика, #299)
 for (const [w, h] of [[390, 844], [900, 1000], [1920, 1080], [2560, 1440]]) {
