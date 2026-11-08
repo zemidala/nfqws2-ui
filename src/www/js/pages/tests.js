@@ -64,7 +64,8 @@ async function viewMonitor(main) {
   const isDown = (host) => kindOf(histOf(host).at(-1)) === 'bad';
   const sorted = () => [...sites].sort((a, b) => (sort.key === 'host' ? isDown(b) - isDown(a) : 0) || sort.dir * (CMP[sort.key] || CMP.host)(a, b) || CMP.host(a, b));
   const remove = async (host) => { sites.splice(sites.indexOf(host), 1); await save(); draw(); };
-  const acts = (host) => h('div', { class: 'mon-acts' },
+  // the row's buttons: in their own column, and on a phone in a line under the site name (mon-under)
+  const acts = (host, cls = '') => h('div', { class: 'mon-acts' + cls },
     btn('', () => checkNow([host]), 'small icon', 'refresh', { title: 'Проверить сейчас и записать результат в историю', 'aria-label': 'Проверить ' + host, disabled: checking.has(host) }),
     btn('', () => checkHost(host), 'small icon mon-more', 'search', { title: 'Подробно: какой профиль обрабатывает сайт', 'aria-label': 'Подробно о ' + host }),
     btn('', () => remove(host), 'small icon', 'x', { title: 'Убрать из мониторинга', 'aria-label': 'Убрать ' + host }));
@@ -113,7 +114,7 @@ async function viewMonitor(main) {
   const drawSeg = () => viewSeg.replaceChildren(...[['tbl', 'Таблица'], ['tl', 'Шкала времени']].map(([v, t]) =>
     h('button', { type: 'button', class: view === v ? 'on' : '', 'aria-pressed': String(view === v), text: t, onclick: () => { view = v; setLook({ monView: v }); drawSeg(); draw(); } })));
   const drawTable = () => {
-    const heads = [['host', 'Сайт', ''], ['now', 'Сейчас', ''], [null, colHead(), 'mon-wide'], ['pct', 'Доступность', 'num'], ['when', 'Проверен', 'num mon-wide mon-when'], [null, '', '']];
+    const heads = [['host', 'Сайт', ''], ['now', 'Сейчас', ''], [null, colHead(), 'mon-wide'], ['pct', 'Доступность', 'num'], ['when', 'Проверен', 'num mon-wide mon-when'], [null, '', 'mon-actcol']];
     const th = ([k, t, cls]) => h('th', { class: cls, 'aria-sort': k && sort.key === k ? (sort.dir > 0 ? 'ascending' : 'descending') : null },
       !k ? t : h('button', { class: 'th-sort', type: 'button', title: `Сортировать по столбцу «${t}»`, onclick: () => {
         sort = { key: k, dir: sort.key === k ? -sort.dir : 1 };
@@ -127,12 +128,12 @@ async function viewMonitor(main) {
         return h('tr', { class: dupHosts.has(host) ? 'mon-dup' : down ? 'mon-down' : '' },
           // a long name may wrap only after a dot, never in the middle of a word; why it does not open — under the name
           h('td', { class: 'mono mon-host' }, h('button', { class: 'linkish', type: 'button', title: 'Подробно: какой профиль обрабатывает сайт', onclick: () => checkHost(host) },
-            host.split('.').flatMap((p, j) => j ? [h('wbr'), '.' + p] : [p])), down ? h('div', { class: 'mon-why', text: x[3], title: x[3] }) : null),
+            host.split('.').flatMap((p, j) => j ? [h('wbr'), '.' + p] : [p])), down ? h('div', { class: 'mon-why', text: x[3], title: x[3] }) : null, acts(host, ' mon-under')),
           h('td', {}, statusChip(host, x)),
           h('td', { class: 'mon-wide mon-hcell' }, histBar(hist)),
           h('td', { class: 'num', text: p === null ? '—' : p + '%' }),
           h('td', { class: 'num sm muted mon-wide mon-when', text: x ? fmtAgo(nowS() - x[0]) : '—' }),
-          h('td', {}, acts(host)));
+          h('td', { class: 'mon-actcol' }, acts(host)));
       }))), tblLegend() ? h('div', { class: 'mtl-legend sm muted mon-wide' }, tblLegend().map(([k, t]) => h('span', { class: k, text: t }))) : null);
   };
   // Timeline: every site on one time axis — the window from the oldest check to now in 96 slots, each slot shows the

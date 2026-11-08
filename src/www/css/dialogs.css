@@ -86,8 +86,16 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
   .ch-hours i { border-radius: 2px; }
   .ch-words .ch-blocks i { width: 12px; }
   .ch-words { min-width: 0; }
-  .mon-tbl .mon-acts > .btn:not(:first-child) { display: none; }   /* only «check now»; the rest through the site name */
 }
+/* all three buttons stay: in a line under the site name instead of their own column (owner's mockup А, 2026-11-08) —
+   below 700 px of table the column with three buttons no longer fits (measured: 662 px of table in a 620 px box) */
+@container monbox (max-width: 700px) {
+  .mon-tbl .mon-actcol { display: none; }
+  .mon-tbl .mon-acts.mon-under { display: flex; justify-content: flex-start; margin-top: 8px; }
+  .scroll > table.tbl.mon-tbl:has(th) { min-width: 0; }   /* the tables' 600 px floor: here the table fits without it */
+}
+/* a box as narrow as a phone's (side columns on a 600 px screen): the history column goes, as on a phone */
+@container monbox (max-width: 560px) { .mon-tbl .mon-wide { display: none; } .mon-tbl .mon-narrow { display: inline; } }
 .ch-words { display: grid; gap: 6px; font-size: var(--fs-sm); }
 .ch-words .ok { color: var(--ok); } .ch-words .bad { color: var(--bad); }
 .ch-blocks { justify-content: flex-start; }
@@ -137,6 +145,7 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .tbl.mon-tbl tr.mon-down td { background: var(--bad-soft); }   /* a site that does not open now: first in the list, tinted */
 .mon-why { margin-top: 3px; max-width: 32ch; font-size: var(--fs-sm); font-family: var(--sans); font-weight: 400; color: var(--bad); }
 .mon-acts { display: flex; gap: 6px; justify-content: flex-end; }
+.mon-acts.mon-under { display: none; }   /* the phone's copy under the site name */
 .mon-narrow { display: none; }
 .mtl { display: grid; grid-template-columns: max-content minmax(0, 1fr) max-content; gap: 6px 12px; align-items: center; }
 /* a fixed-size chart: its column is as wide as the chart — it starts right after the names and the axis lies exactly under it */
@@ -169,7 +178,6 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 /* phone: table without history and «checked» columns, «%» instead of «Доступность», details through the site name */
 @media (max-width: 599px) {
   .mon-tbl .mon-wide { display: none; } .mon-tbl .mon-narrow { display: inline; }
-  .mon-tbl .mon-acts > .btn:not(:first-child) { display: none; }   /* only «check now»; details and removal — through the site name */
   .tbl.mon-tbl th, .tbl.mon-tbl td { padding-left: 4px; padding-right: 4px; }
   .mon-tbl .mon-host { font-size: var(--fs-sm); min-width: 120px; }   /* room for the reason under the name */
   .mon-tbl .mon-why { font-size: var(--fs-xs); display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 2; line-clamp: 2; overflow: hidden; }   /* two lines; the whole reason is in the tooltip */
