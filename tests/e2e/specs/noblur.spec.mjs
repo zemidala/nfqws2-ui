@@ -39,12 +39,12 @@ for (const variant of ['z', 'k']) for (const w of [390, 1366]) {
   });
 }
 
-test('текст в полях по центру, 1366 px', async ({ app, page }) => {
+for (const variant of ['z', 'k']) test(`текст в полях по центру, 1366 px, стиль ${variant}`, async ({ app, page }) => {
   test.setTimeout(900_000);
   await page.setViewportSize({ width: 1366, height: 900 });
   const bad = [];
   for (const hash of PAGES) {
-    await app.open(hash, { variant: 'z', mode: 'dark' });
+    await app.open(hash, { variant, mode: 'dark' });
     await page.waitForTimeout(1200);
     // style Z puts a field's label on its top frame: hidden for the shots (it keeps its room), or it reads as text
     await page.addStyleTag({ content: 'main :is(.lbl, label:not(.chk)) { visibility: hidden !important; }' });
@@ -66,7 +66,10 @@ test('текст в полях по центру, 1366 px', async ({ app, page }
       await page.mouse.move(0, 0);
       const box = await f.boundingBox();
       if (!box || box.height < 10 || box.width < 50) continue;
-      const png = await page.screenshot({ clip: { x: Math.round(box.x) + 4, y: Math.round(box.y), width: Math.min(120, Math.round(box.width) - 30), height: Math.round(box.height) } });
+      // the field's own shot: a page that redraws between measuring and shooting moved the window's clip onto the next
+      // block («сверху 11 / снизу 0»); the text's columns are cut out of it below
+      const png = await f.screenshot({ timeout: 5000 }).catch(() => null);
+      if (!png) continue;
       await f.evaluate((e, r) => { if (e.tagName === 'INPUT') { e.value = r ?? ''; if (e.dataset.pw) { e.type = 'password'; delete e.dataset.pw; } } else { const t = e.querySelector('.dd-t'); if (t && r != null) t.textContent = r; } }, info.restore);
       const gaps = await page.evaluate(async ([b64, bt, bb]) => {
         const img = new Image();
@@ -76,9 +79,9 @@ test('текст в полях по центру, 1366 px', async ({ app, page }
         g.drawImage(img, 0, 0);
         const d = g.getImageData(0, 0, c.width, c.height).data;
         const px = (x, y) => { const i = (y * c.width + x) * 4; return [d[i], d[i + 1], d[i + 2]]; };
-        const top = Math.ceil(bt) + 1, bottom = c.height - Math.ceil(bb) - 1, bg = px(2, Math.floor(c.height / 2));
-        // from 12 px in: the frame's rounded corner is not text
-        const ink = (y) => { for (let x = 12; x < c.width - 2; x++) { const p = px(x, y); if (Math.abs(p[0] - bg[0]) + Math.abs(p[1] - bg[1]) + Math.abs(p[2] - bg[2]) > 90) return true; } return false; };
+        const top = Math.ceil(bt) + 1, bottom = c.height - Math.ceil(bb) - 1, bg = px(6, Math.floor(c.height / 2));
+        // from 16 px in (the frame's rounded corner is not text) to 120 px or the arrow of a dropdown
+        const ink = (y) => { for (let x = 16; x < Math.min(124, c.width - 30); x++) { const p = px(x, y); if (Math.abs(p[0] - bg[0]) + Math.abs(p[1] - bg[1]) + Math.abs(p[2] - bg[2]) > 90) return true; } return false; };
         let a = -1, z = -1;
         for (let y = top; y < bottom; y++) if (ink(y)) { if (a < 0) a = y; z = y; }
         return a < 0 ? null : [a - top, bottom - 1 - z];
