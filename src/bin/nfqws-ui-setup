@@ -153,8 +153,15 @@ foreign_main_port() {
 }
 
 port_busy() {
-	# Порт занят не нашим lighttpd?
-	netstat -ltnp 2>/dev/null | awk -v p=":$1" '$4 ~ p"$" { print $7 }' | grep -qv lighttpd
+	# Busy by something else: not a lighttpd, or a lighttpd that is not ours (Keenetic's firmware runs its own) —
+	# told apart by the program file; when it cannot be read, a lighttpd counts as ours, as before
+	our=$(readlink -f "$(command -v lighttpd)" 2>/dev/null)
+	for pp in $(netstat -ltnp 2>/dev/null | awk -v p=":$1" '$4 ~ p"$" { print $7 }'); do
+		[ "${pp#*/}" = lighttpd ] || return 0
+		exe=$(readlink -f "/proc/${pp%%/*}/exe" 2>/dev/null)
+		[ -z "$our" ] || [ -z "$exe" ] || [ "$exe" = "$our" ] || return 0
+	done
+	return 1
 }
 
 check_port() {
@@ -258,7 +265,13 @@ restart_lighttpd() {
 	svc lighttpd enable 2>/dev/null
 	svc lighttpd restart >/dev/null 2>&1
 	sleep 1
-	[ -n "$NFQWS_UI_TEST" ] || pidof lighttpd >/dev/null || die "lighttpd не запустился, проверьте конфиг: lighttpd -tt -f $LMAIN"
+	[ -z "$NFQWS_UI_TEST" ] || return 0
+	pidof lighttpd >/dev/null || die "lighttpd не запустился, проверьте конфиг: lighttpd -tt -f $LMAIN"
+	# a pid proves little: Keenetic's firmware runs a lighttpd of its own. Our ports must answer (up to 5 s)
+	i=0
+	while [ -n "$(deaf_ports)" ] && [ "$i" -lt 5 ]; do sleep 1; i=$((i + 1)); done
+	d=$(deaf_ports)
+	[ -z "$d" ] || die "lighttpd запущен, но порт $d не слушает — проверьте конфиг: lighttpd -tt -f $LMAIN"
 }
 
 apply_web() {
@@ -406,13 +419,14 @@ fetch() { # url [файл]
 		# GNU wget (Entware) retries a stalled download 20 times — six minutes when GitHub hangs; uclient-fetch
 		# (OpenWrt) and busybox know no -t
 		if wget --help 2>&1 | grep -q -- '--tries'; then
-			wget -q -T 20 -t 2 -O "${2:--}" "$1"
+			wget -q -T 20 -t 2 -O "${2:--}" "$1" && return 0
 		else
-			wget -q -T 20 -O "${2:--}" "$1"
+			wget -q -T 20 -O "${2:--}" "$1" && return 0
 		fi
-	else
-		curl -fsSL -m 20 -o "${2:--}" "$1"
+		# a busybox wget without ssl_client cannot do HTTPS at all, while curl can
+		have curl || return 1
 	fi
+	curl -fsSL -m 20 -o "${2:--}" "$1"
 }
 
 latest_version() {
@@ -527,8 +541,8 @@ https)
 	onoff "$1" >/dev/null; mode=$1; shift
 	while [ $# -gt 0 ]; do
 		case "$1" in
-		--cert) CERT_FILE=$2; shift 2 ;;
-		--key) KEY_FILE=$2; shift 2 ;;
+		--cert) [ $# -ge 2 ] || die "после --cert нужен файл сертификата"; CERT_FILE=$2; shift 2 ;;
+		--key) [ $# -ge 2 ] || die "после --key нужен файл ключа"; KEY_FILE=$2; shift 2 ;;
 		*) port=$1; shift ;;
 		esac
 	done
@@ -610,8 +624,10 @@ apply)
 		say "Поставьте его: $hint (или кнопкой «Установить модуль curl» в «Проблемах» на «Обзоре»)"
 		say ""
 	fi
+	# cron first: a web server that fails to start must not leave the monitoring and the copies without their schedule
+	cron_apply
 	[ "$MANAGED" = true ] && apply_web
-	cron_apply; save
+	save
 	status
 	;;
 adopt)

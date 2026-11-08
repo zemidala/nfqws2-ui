@@ -31,13 +31,14 @@ fetch() { # url [файл]
 	# GNU wget (Entware), uclient-fetch (OpenWrt) and busybox know no -t
 	if have wget; then
 		if wget --help 2>&1 | grep -q -- '--tries'; then
-			wget -q -T 20 -t 2 -O "${2:--}" "$1"
+			wget -q -T 20 -t 2 -O "${2:--}" "$1" && return 0
 		else
-			wget -q -T 20 -O "${2:--}" "$1"
+			wget -q -T 20 -O "${2:--}" "$1" && return 0
 		fi
-	else
-		curl -fsSL -m 20 -o "${2:--}" "$1"
+		# a busybox wget without ssl_client cannot do HTTPS at all, while curl can
+		have curl || return 1
 	fi
+	curl -fsSL -m 20 -o "${2:--}" "$1"
 }
 
 # Менеджер пакетов (opkg или apk) с ограничением времени: wget внутри opkg ждёт недоступный источник бесконечно,

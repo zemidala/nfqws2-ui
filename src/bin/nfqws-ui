@@ -2,4 +2,5 @@
 # nfqws-ui — короткое имя для nfqws-ui-setup: nfqws-ui update, nfqws-ui status, nfqws-ui help
 # https://github.com/zemidala/nfqws2-ui
 # Лежит рядом с nfqws-ui-setup: /usr/sbin на OpenWrt, /opt/sbin на Keenetic (Entware)
-exec "${0%/*}/nfqws-ui-setup" "$@"
+case "$0" in */*) dir=${0%/*} ;; *) dir=. ;; esac   # «sh nfqws-ui» run from its own folder has no slash in $0
+exec "$dir/nfqws-ui-setup" "$@"

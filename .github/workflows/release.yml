@@ -34,6 +34,14 @@ jobs:
           sh scripts/build.sh "$(cat VERSION)"
           test -s "dist/nfqws2-ui_$(cat VERSION)-1_all.apk"
 
+      # a run by hand (no tag) publishes nothing: the packages stay as the run's files to download
+      - name: Packages of a manual run
+        if: ${{ !startsWith(github.ref, 'refs/tags/') }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: nfqws2-ui-${{ github.sha }}
+          path: dist/
+
       - name: Release notes
         if: startsWith(github.ref, 'refs/tags/')
         run: |
