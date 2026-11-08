@@ -80,6 +80,13 @@ function markWraps() {
     const wrapped = [...row.children].some((k) => k.offsetParent && k.getBoundingClientRect().top >= fr.bottom - 2)
       || (lh > 0 && /^H[1-3]$/.test(first.tagName) && first.getBoundingClientRect().height > lh * 1.5);
     row.classList.toggle('wrapped', wrapped);
+    // text trimmed to its capitals (centred on a button) is only right on one line: over two lines or alone on a line
+    // of its own its height turns fractional (10.5, 54.5 px) and everything below blurs — such text keeps whole lines
+    for (const k of row.children) {
+      k.classList.remove('ml');
+      const klh = parseFloat(getComputedStyle(k).lineHeight) || 0;
+      if (klh && k.getBoundingClientRect().height > klh * 1.5) k.classList.add('ml');
+    }
   }
 }
 let cardQueued = false;
@@ -87,7 +94,7 @@ new MutationObserver(() => {
   if (cardQueued) return;
   cardQueued = true;
   requestAnimationFrame(() => { cardQueued = false; document.querySelectorAll('table.tbl').forEach(cardTable); markWraps(); });
-}).observe(document.documentElement, { childList: true, subtree: true, attributes: true, attributeFilter: ['hidden', 'open'] });   // a block shown later is measured too
+}).observe(document.documentElement, { childList: true, subtree: true, characterData: true, attributes: true, attributeFilter: ['hidden', 'open'] });   // a block shown later is measured too; text changed in place (morph) too
 addEventListener('resize', () => requestAnimationFrame(markWraps));
 
 function ddShow(sel) {

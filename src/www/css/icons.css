@@ -26,7 +26,10 @@
    small so the command line is not 40 px tall */
 :root:root:root .frow.cmd-row { row-gap: 2px; align-items: center; }
 :root:root:root .frow.cmd-row + .frow.cmd-row { margin-top: 0; }   /* the panel's 14 px gap is the step between items */
+/* a flex line: the command and its 24 px copy button on one baseline made the line 25.03 px, and every command below
+   moved by that fraction */
 :root:root:root .cmd-row > .lbl { padding: 0; min-height: 0; }
+:root:root:root:root .frow.cmd-row > .lbl { display: flex; align-items: center; gap: 6px; }   /* over rhythm.css's block label */
 :root:root:root .cmd-row > .lbl .btn { height: 24px; min-height: 24px; width: 24px; }
 .tbl td.date { white-space: nowrap; font-variant-numeric: tabular-nums; }
 

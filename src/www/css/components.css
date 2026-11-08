@@ -22,6 +22,9 @@
 /* plain text standing in a row beside a button is centred the same way, or the two sit 1.5px apart; badges and
    chips keep their own box */
 :is(.row, .panel-h, .blk-h):has(> .btn) > :is(span, p, small, b, strong, em, label):not(.btn, .chip, .mst, .tag, .pchip, .badge, .st, .dd-btn, .spin, .dot, .sw, .seg) { text-box: trim-both cap alphabetic; }
+/* …but not in a row that broke into lines, nor text of several lines (.ml, markWraps in dropdowns.js): there the
+   trimmed height is fractional and everything under it stands on half a pixel */
+:root:root :is(.row, .panel-h, .blk-h).wrapped > :not(.btn), :root:root :is(.row, .panel-h, .blk-h) > .ml:not(.btn) { text-box: none; }
 .btn:hover { background: var(--soft); }
 .btn:disabled { opacity: .5; cursor: default; }
 .btn.icon { width: var(--ctl-h); padding: 0; }
