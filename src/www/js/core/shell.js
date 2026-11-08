@@ -246,7 +246,14 @@ function openDrawer(on = true) {
   const d = document.getElementById('drawer');
   if (!d) return;
   d.hidden = !on;
-  if (on) d.firstChild.replaceChildren(menuNav());
+  if (!on) return;
+  // the top bar of a phone has no room for «Открыть по HTTPS» and GitHub: they are the last items of the menu
+  const nav = menuNav(), hp = S.state?.ui?.https_port;
+  const httpsUrl = location.protocol === 'http:' && hp ? `https://${location.hostname}:${hp}/${location.hash}` : null;
+  nav.insertBefore(h('div', { class: 'mgrp drawer-x' }, h('div', { class: 'mtop' },
+    httpsUrl ? h('a', { href: httpsUrl, title: 'Пароль и данные идут в зашифрованном виде' }, h('span', { class: 'k-ic' }, icon('lock')), h('span', { class: 'nm', text: 'Открыть по HTTPS' })) : null,
+    h('a', { href: REPO, target: '_blank', rel: 'noopener' }, h('span', { class: 'k-ic' }, icon('git')), h('span', { class: 'nm', text: 'nfqws2-ui на GitHub' })))), nav.querySelector('.nav-mini'));
+  d.firstChild.replaceChildren(nav);
 }
 
 // Второй ряд вкладок — страницы текущей верхней вкладки («Вкладки», «Вокруг сайта») или раздела (упрощённое боковое меню)
