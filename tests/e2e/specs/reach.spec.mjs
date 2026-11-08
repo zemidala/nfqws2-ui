@@ -38,15 +38,17 @@ test('всё, что есть на компьютере, есть и на тел
   await page.setViewportSize({ width: 1366, height: 900 });
   const missing = [];
   for (const hash of PAGES) {
+    // a new hash is a route inside the same page: the old page stays on screen until the new one has its data (a slow
+    // page kept «Устройства» under «#/asn»); the router marks the end with S.shownHash
+    const drawn = () => S.shownHash === location.hash;
     await app.open(hash, { variant: 'z', mode: 'dark' });
-    await page.waitForTimeout(1500);
+    await page.waitForFunction(drawn, null, { timeout: 30_000 });
+    await page.waitForTimeout(800);
     const wide = await page.evaluate(collect);
-    const h1 = await page.locator('main h1').first().textContent();
     if (hash === PAGES[0]) await phone.addInitScript(() => localStorage.setItem('nfqws-ui-look', JSON.stringify({ variant: 'z', mode: 'dark', noanim: true })));
     await phone.goto(page.url());
-    // a new hash is a route inside the same page: the old heading stays until the new page is drawn
-    await expect(phone.locator('main h1').first()).toHaveText(h1);
-    await phone.waitForTimeout(1500);
+    await phone.waitForFunction(drawn, null, { timeout: 30_000 });
+    await phone.waitForTimeout(800);
     const narrow = new Set(await phone.evaluate(collect));
     for (const k of wide) if (!narrow.has(k) && !MAY_MISS.some((re) => re.test(k))) missing.push(`${hash} ${k}`);
   }
