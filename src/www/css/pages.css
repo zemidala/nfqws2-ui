@@ -96,17 +96,6 @@
 .th-b { background: #eef2f1; } .th-b i { background: #fff; height: 17px; border-radius: 6px; } .th-b .acc { background: #0e6f67; height: 7px; }
 .th-c { background: #f7f7f9; } .th-c i { background: #e1e1e8; } .th-c .acc { background: #b0215f; }
 .th-c .pl { display: grid; grid-template-columns: 11px 1fr; gap: 5px; align-items: center; } .th-c .nd { width: 9px; height: 9px; border-radius: 50%; border: 2px solid #b0215f; background: #fff; }
-
-/* ---------- схема (стиль C) ---------- */
-.pipe { display: grid; }
-.stage-row { display: grid; grid-template-columns: 28px 1fr auto; gap: 12px; align-items: center; position: relative; padding: 6px 0; color: inherit; }
-.stage-row::before { content: ""; position: absolute; left: 13px; top: 0; bottom: 0; width: 2px; background: var(--line); }
-.stage-row:first-child::before { top: 50%; } .stage-row:last-child::before { bottom: 50%; }
-.node { width: 28px; height: 28px; border-radius: 50%; background: var(--surface); border: 2px solid var(--ok); display: block; text-align: center; align-content: center; text-box: trim-both cap alphabetic; font-weight: 700; font-size: var(--fs-sm); position: relative; z-index: 1; font-variant-numeric: tabular-nums; }
-.stage-row.partial .node { border-color: var(--warn); } .stage-row.dead .node, .stage-row.excludes-only .node { border-color: var(--bad); }
-.stage-row.hit .node { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
-.stage-row.hit b { color: var(--accent-ink); }
-.stage-row .ports { font-family: var(--mono); font-size: var(--fs-xs); color: var(--muted); }
 /* «Что пробовать»: two columns, each box exactly under the one above; one column on a phone */
 .pick-sets { display: grid; grid-template-rows: repeat(3, auto); grid-auto-flow: column; grid-auto-columns: max-content; gap: 6px 32px; align-items: start; min-width: 0; }
 @media (max-width: 759px) { .pick-sets { grid-template-rows: none; grid-auto-flow: row; grid-auto-columns: auto; } }

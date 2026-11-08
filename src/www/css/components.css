@@ -27,7 +27,7 @@
 :root:root :is(.row, .panel-h, .blk-h).wrapped > :not(.btn), :root:root :is(.row, .panel-h, .blk-h) > .ml:not(.btn) { text-box: none; }
 /* a code-face name inside a line of text: the mono face's own 20 px line stuck out of the 22 px line by a pixel, the
    text block came out an odd height, and the buttons centred beside it stood on half a pixel */
-:is(span, p) > b.mono { line-height: 1; }
+:is(span, p) > b.mono, td > span.mono { line-height: 1; }
 /* the same for a chip or an icon link on a text line, and a table checkbox: on the baseline they made the line a pixel
    taller (or stood on a fraction themselves), and a middle-aligned table row came out on half a pixel */
 .tbl td > .chip, .icon-link { vertical-align: top; }

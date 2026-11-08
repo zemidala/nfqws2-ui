@@ -4,8 +4,13 @@
 
 // ============ данные ============
 
+// the 30 s timer and a save may ask at once: a slower older answer must not put back the state from before the save
+let stateSeq = 0;
 async function loadState() {
-  S.state = await api('state');
+  const my = ++stateSeq;
+  const st = await api('state');
+  if (my !== stateSeq) return S.state;
+  S.state = st;
   const since = S.state?.ui?.seen?.since;
   if (since) {
     const def = vcmp(since, ZD_SINCE) >= 0 ? 'z' : 'k';

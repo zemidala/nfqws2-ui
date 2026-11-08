@@ -237,17 +237,9 @@ a.over-row:hover { background: var(--soft); }
 .panel-h:has(> .dnsx-step) > h2 { flex: none; }   /* the progress goes right after the title, «Остановить» to the right */
 /* a spinner in a table cell or beside small text: the size of a digit */
 .spin.xs { width: 11px; height: 11px; border-width: 1.5px; color: var(--muted); vertical-align: -1px; }
-.dns-cards { display: grid; grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); gap: 10px; }
-.dns-card { display: grid; align-content: start; gap: 8px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); }
-.dns-card .hd { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
-.dns-pr { display: grid; grid-template-columns: 58px auto 1fr; gap: 2px 8px; align-items: center; }
-.dns-pr .chip { justify-self: start; }
-.dns-pr .num { text-align: right; }
-.dns-pr .why { grid-column: 2 / -1; }
 .dns-sites { display: grid; }
 .dns-site { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .dns-site > .sm { grid-column: 1 / -1; overflow-wrap: anywhere; }
-.dns-card.best { border-color: var(--accent); box-shadow: 0 0 0 1px var(--accent); }
 /* DNS page: one advice block (border by verdict), own DNS rows on top of the table, a caption row before the public ones */
 :root:root main .panel.dns-adv.ok { border-top-color: var(--ok); } :root:root main .panel.dns-adv.bad { border-top-color: var(--bad); }   /* outrank the style's own top line */
 .panel.dns-adv p { margin: 0; }
@@ -296,10 +288,9 @@ details.dns-more-panel > summary { cursor: pointer; color: var(--accent-ink); }
   :root:root:root:root .dnsx-tbl td.who { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
   :root:root:root:root .dnsx-tbl td.who { grid-column: 1 / -1; }
 }
-.dns-best { margin-left: auto; font-size: var(--fs-xs); font-weight: 600; padding: 0 6px; border-radius: 4px; background: var(--accent); color: var(--accent-fg); }
 .dns-adv a { color: var(--accent-ink); }
-/* status chips on this page carry a dot, as on «Мониторинг» */
-:is(.dns-card, .dns-site, .dns-more) .chip::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+/* status chips on this page carry a dot, as on «Мониторинг»; 8 px, an odd dot centred in a chip stood on half a pixel */
+:is(.dns-site, .dns-more) .chip::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
 .dns-more { margin-top: 12px; } .dns-more summary { cursor: pointer; color: var(--accent-ink); }
 .dns-more .tbl { margin-top: 8px; }
 .lsec-h .cnt { margin-left: auto; color: var(--faint); font-size: var(--fs-xs); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; min-width: 0; }

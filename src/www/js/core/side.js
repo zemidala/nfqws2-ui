@@ -415,7 +415,7 @@ function createCheck() {
     closeBtn.hidden = false;
     out.replaceChildren(spinner('Проверяю…'));
     let res;
-    try { res = await api('check', { host }); } catch (e) { out.replaceChildren(notice('bad', e.message)); return; }
+    try { res = await api('check', { host }); } catch (e) { if (my === seq) out.replaceChildren(notice('bad', e.message)); return; }   // a late failure of an older check stays out of the newer one
     if (my !== seq) return;
     recentAdd(res.host);
     drawRecent();

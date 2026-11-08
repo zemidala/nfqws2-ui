@@ -131,7 +131,7 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 .mon-viewrow > .tag { margin-left: 0; }   /* the «new» mark next to its switch, not pushed to the far edge */
 /* vertical-align top: a 24 px mark on the 22 px text line, set on its baseline, stood a quarter of a pixel off */
 .mst { vertical-align: top; display: inline-flex; align-items: center; gap: 6px; font-size: var(--fs-sm); padding: 2px 9px; border-radius: var(--ctl-r); white-space: nowrap; background: var(--soft); color: var(--muted); }
-.mst::before { content: ""; width: 7px; height: 7px; border-radius: 50%; background: currentColor; flex: none; }
+.mst::before { content: ""; width: 8px; height: 8px; border-radius: 50%; background: currentColor; flex: none; }
 .mst:has(.spin)::before { display: none; }
 .mst.ok { background: var(--ok-soft); color: var(--ok); }
 .mst.slow { background: var(--warn-soft); color: var(--warn); }
