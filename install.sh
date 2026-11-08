@@ -27,10 +27,16 @@ have() {
 }
 
 fetch() { # url [файл]
+	# the same limits as nfqws-ui-setup: a stalled GitHub ends in an error within a minute, not hangs; -t only for
+	# GNU wget (Entware), uclient-fetch (OpenWrt) and busybox know no -t
 	if have wget; then
-		wget -q -O "${2:--}" "$1"
+		if wget --help 2>&1 | grep -q -- '--tries'; then
+			wget -q -T 20 -t 2 -O "${2:--}" "$1"
+		else
+			wget -q -T 20 -O "${2:--}" "$1"
+		fi
 	else
-		curl -fsSL -o "${2:--}" "$1"
+		curl -fsSL -m 20 -o "${2:--}" "$1"
 	fi
 }
 

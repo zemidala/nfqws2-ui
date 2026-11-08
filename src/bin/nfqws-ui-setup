@@ -403,7 +403,13 @@ REPO=zemidala/nfqws2-ui
 
 fetch() { # url [файл]
 	if have wget; then
-		wget -q -T 20 -O "${2:--}" "$1"
+		# GNU wget (Entware) retries a stalled download 20 times — six minutes when GitHub hangs; uclient-fetch
+		# (OpenWrt) and busybox know no -t
+		if wget --help 2>&1 | grep -q -- '--tries'; then
+			wget -q -T 20 -t 2 -O "${2:--}" "$1"
+		else
+			wget -q -T 20 -O "${2:--}" "$1"
+		fi
 	else
 		curl -fsSL -m 20 -o "${2:--}" "$1"
 	fi
