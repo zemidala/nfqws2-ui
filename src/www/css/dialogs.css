@@ -55,7 +55,7 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 /* мониторинг */
 /* chart looks (MON_CHARTS) as in the mockup; widths and gaps are multiples of 4 px — whole screen pixels at 125–175 %.
    Laid out from the right: when the cell is narrower, the oldest are cut, the newest stay */
-.ch-wrap { display: grid; gap: 3px; }
+.ch-wrap { display: grid; gap: 4px; }   /* 16 + 4 + 18: an even cell, or the middle-aligned row stands on half a pixel */
 .ch-axis { display: flex; justify-content: space-between; width: 380px; max-width: 100%; font-size: var(--fs-xs); color: var(--faint); }
 .ch-ticks, .ch-cols, .ch-blocks { display: flex; justify-content: flex-end; gap: 4px; overflow: hidden; }
 .ch-ticks { height: 16px; }

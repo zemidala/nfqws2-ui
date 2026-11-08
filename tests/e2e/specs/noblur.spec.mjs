@@ -24,13 +24,14 @@ const fractions = () => {
   return [...out];
 };
 
-for (const w of [390, 1366]) {
-  test(`без размытия, ${w} px`, async ({ app, page }) => {
+// K is the default style, Z the brand one: both
+for (const variant of ['z', 'k']) for (const w of [390, 1366]) {
+  test(`без размытия, ${w} px, стиль ${variant}`, async ({ app, page }) => {
     test.setTimeout(300_000);
     await page.setViewportSize({ width: w, height: 900 });
     const all = [];
     for (const hash of PAGES) {
-      await app.open(hash, { variant: 'z', mode: 'dark' });
+      await app.open(hash, { variant, mode: 'dark' });
       await page.waitForTimeout(1200);
       for (const x of await page.evaluate(fractions)) all.push(`${hash} ${x}`);
     }
