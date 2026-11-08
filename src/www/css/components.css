@@ -248,11 +248,14 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 /* a data table never grows past most of the window: it scrolls inside its block, the header row stays on top
    (help tables in markdown keep the page's own scroll). The wheel goes on to the page at the table's end or when
    the table fits: no overscroll-behavior here, it left the wheel dead over a short table */
-.scroll:not(.md-tbl):has(> table.tbl) { max-height: min(70vh, 720px); overflow-y: auto; }
+.scroll:not(.md-tbl):has(> table.tbl) { max-height: min(70vh, 720px); max-height: min(round(down, 70vh, 2px), 720px); overflow-y: auto; }   /* 70 % of 922 is 645.4 */
 /* :where — the styles' own header backgrounds (K, B, Z) stay stronger; the shadow keeps the line under a stuck header
    (with border-collapse the border scrolls away) */
 :where(.scroll:not(.md-tbl)) > table.tbl > thead th { position: sticky; top: 0; z-index: 1; background: var(--surface); box-shadow: inset 0 -1px var(--line); }
-.tbl { width: 100%; border-collapse: collapse; font-size: var(--fs-sm); }
+/* separate, not collapse: a collapsed 1 px line is split half and half between the rows, every row came out 0.5 px
+   too high (68.5) and the table under the first row stood on half pixels — its lines and fills blurred. The cells
+   draw only their bottom line, so it looks the same */
+.tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
 .tbl th, .tbl td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
 .tbl th { color: var(--muted); font-weight: 500; font-size: var(--fs-xs); }
 .tbl td.num, .tbl th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }   /* «680 мс» never splits into two lines */

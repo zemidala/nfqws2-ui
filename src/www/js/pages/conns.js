@@ -22,7 +22,7 @@ async function viewConns(main) {
   // site names come from the device's packets (tcpdump on the router); without tcpdump — an offer to install it
   const namesChk = h('input', { type: 'checkbox', checked: prefs.names !== false, onchange: () => keep('names', namesChk.checked) });
   const namesBox = h('div', {});
-  let onlyBad = false, rec = false, devices = [], tcpdump = false;
+  let tab = 'all', rec = false, devices = [], tcpdump = false;
   main.append(
     h('div', { class: 'vh' }, h('h1', { text: 'Соединения устройства' })),
     h('p', { class: 'muted dns-lead', text: 'Куда ходит программа на устройстве вашей сети и приходят ли ответы. Нужно, когда сайт открывается, а приложение работает плохо: голос в Discord обрывается, игра не входит в мир. Запись только читает таблицу соединений роутера и ничего не меняет.' }),
@@ -118,13 +118,12 @@ async function viewConns(main) {
     const stalled = flows.filter((f) => !f.noans && f.stalled);
     const unseen = flows.filter((f) => f.seen === false);
     const udpBad = flows.filter((f) => f.proto === 'udp' && f.noans === f.n);
-    const sum = h('div', { class: 'conn-sum' },
-      chip(`${plural(flows.length, 'направление', 'направления', 'направлений')}`, ''),
-      nores.length ? chip(`без ответа: ${nores.length}`, 'bad') : null,
-      stalled.length ? chip(`замерли: ${stalled.length}`, 'warn') : null,
-      unseen.length && !s.running ? chip(`nfqws2 не видит: ${unseen.length}`, 'warn') : null,
-      h('span', { class: 'grow' }),
-      flows.some(bad) ? h('label', { class: 'chk' }, h('input', { type: 'checkbox', checked: onlyBad, onchange: (e) => { onlyBad = e.target.checked; draw(s); } }), 'Только с проблемами') : null);
+    // filter buttons with their counts (mockup local/design/bbb.html, Б); an empty one is not shown, «Мимо nfqws2» —
+    // once the recording is annotated, before that nobody knows
+    const tabs = [['all', 'Все', flows], ['noans', 'Без ответа', nores], ['stalled', 'Замерли', stalled], ['unseen', 'Мимо nfqws2', s.running ? [] : unseen]];
+    if (!tabs.some(([k, , l]) => k === tab && (k === 'all' || l.length))) tab = 'all';
+    const sum = h('div', { class: 'conn-tabs', role: 'group', 'aria-label': 'Показать' }, tabs.map(([k, t, l]) => k === 'all' || l.length
+      ? h('button', { type: 'button', class: 'conn-tab' + (k === tab ? ' on' : ''), 'aria-pressed': String(k === tab), text: `${t} ${l.length}`, onclick: () => { tab = k; draw(s); } }) : null));
     // hints say what the table shows, without guessing the fix
     const hints = s.running ? [] : [
       udpBad.length ? notice('bad', 'UDP без ответа', `Устройство шлёт UDP на ${udpBad.slice(0, 3).map((f) => `${f.dst}:${f.dport}`).join(', ')}${udpBad.length > 3 ? ' и ещё ' + (udpBad.length - 3) : ''}, а ответов нет. Так выглядит закрытый голос или игровой сервер. Сайт программы при этом может открываться — у него другие адреса.`) : null,
@@ -134,43 +133,38 @@ async function viewConns(main) {
       s.noacct ? notice('warn', 'Счётчики соединений выключены', 'В системе выключен учёт трафика соединений (nf_conntrack_acct = 0), поэтому записать нечего. Включить: sysctl -w net.netfilter.nf_conntrack_acct=1 — действует до перезагрузки роутера.')
         : !flows.length ? notice('info', 'Соединений не было', 'За время записи устройство никуда не ходило. Запустите программу и запишите ещё раз.') : null,
     ].map((x, i) => keyed(x, 'hint' + i)).filter(Boolean);
-    const rows = flows.filter((f) => !onlyBad || bad(f)).sort((a, b) => bad(b) - bad(a));
+    const rows = (tabs.find(([k]) => k === tab)[2]).slice().sort((a, b) => bad(b) - bad(a));
     // a pick needs a site name and a web port; for anything else (games, voice) the table already says what is wrong
     // a CDN address may carry several names: the first is from the device's own greeting when it had one
     const name = (f) => f.names?.[0];
     const pickable = (f) => !s.running && name(f) && f.proto === 'tcp' && [80, 443].includes(f.dport) && bad(f) && !f.podkop;
     const pickLink = (f) => { const u = pickHref(name(f)); return f.dport === 80 ? u + (u.includes('?') ? '&' : '?') + 'proto=http' : u; };
-    const anyPick = rows.some(pickable);
-    const tbl = h('div', { class: 'scroll' }, h('table', { class: 'tbl conn-tbl' },
-      h('thead', {}, h('tr', {}, ...['Куда', 'Порт', 'Отправлено', 'Получено', 'Итог', 'nfqws2', ...(anyPick ? [''] : [])].map((t, i) => h('th', { class: i === 2 || i === 3 ? 'num' : '', text: t })))),
+    // the site's name over its address; without a name — the network, without that — the address alone
+    const tbl = h('div', { class: 'conn-box' }, h('table', { class: 'conn-b' },
+      h('thead', {}, h('tr', {}, ...['Куда / IP', 'Порт', 'Объём', 'Статус', 'Действие'].map((t) => h('th', { text: t })))),
       h('tbody', {}, rows.map((f) => {
         const [vt, vc] = verdict(f);
-        const [nt, nc] = s.running ? ['…', ''] : nfqText(f);
-        const sub = [(f.names || []).join(', '), f.as_name].filter(Boolean).join(' · ');
-        // data-h: on a phone each row turns into a card and the cells carry their own captions
+        const top = name(f) || f.as_name;
         return h('tr', { 'data-key': `${f.proto}:${f.dst}:${f.dport}` },
-          h('td', { class: 'c-dst' }, h('span', { class: 'mono', text: f.dst }), sub ? h('div', { class: 'sm muted', style: 'overflow-wrap:anywhere', text: sub }) : null),
-          h('td', { class: 'mono nowrap c-port', text: `${f.proto.toUpperCase()} ${f.dport}` }),
-          h('td', { class: 'num', 'data-h': 'Отправлено' }, kb(f.ob), h('div', { class: 'sm muted', text: plural(f.op, 'пакет', 'пакета', 'пакетов') })),
-          h('td', { class: 'num', 'data-h': 'Получено' }, kb(f.rb), h('div', { class: 'sm muted', text: plural(f.rp, 'пакет', 'пакета', 'пакетов') })),
-          h('td', { class: 'c-res' }, chip(vt, vc)),
-          h('td', { class: 'sm c-nfq' + (nc ? ' warnc' : ''), 'data-h': 'nfqws2', text: nt }),
-          anyPick ? h('td', { class: 'c-pick' }, pickable(f) ? h('a', { class: 'btn small', href: pickLink(f),
-            title: `Подбор стратегии для ${name(f)}` }, icon('tests'), h('btn-l', {}, 'Подобрать')) : null) : null);
+          h('td', {}, h('div', { class: 'c-host', text: top || f.dst }), top ? h('div', { class: 'c-ip', text: f.dst }) : null),
+          h('td', { text: `${f.proto.toUpperCase()} ${f.dport}` }),
+          h('td', { title: `отправлено ${plural(f.op, 'пакет', 'пакета', 'пакетов')} / получено ${plural(f.rp, 'пакет', 'пакета', 'пакетов')}`, text: `${kb(f.ob)} / ${kb(f.rb)}` }),
+          // what nfqws2 does with it had a column of its own; now it is the status's hint
+          h('td', { title: s.running ? null : 'nfqws2: ' + nfqText(f)[0] }, h('span', { class: 'c-st ' + vc, text: vt })),
+          h('td', {}, pickable(f) ? h('a', { class: 'c-btn', href: pickLink(f), title: `Подбор стратегии для ${name(f)}`, text: 'Подобрать' }) : '—'));
       }))));
     // the full capture: for the experienced, folded away
-    const pcapBox = !s.running && s.pcap ? h('details', {}, h('summary', { text: 'Для опытных' }),
-      h('div', { class: 'stack', style: 'gap:8px;margin-top:8px' },
-        h('p', { class: 'sm muted', text: `Все пакеты устройства за эту запись (${fmtBytes(s.pcap)}${s.pcap_cut ? ', запись пакетов остановлена на 4 МБ' : ''}). Файл открывается в Wireshark: видно рукопожатие, сбросы и что именно отвечал сервер. Пропадёт со следующей записью.` }),
-        h('div', { class: 'row' }, h('a', { class: 'btn small', href: 'api.php?download=conns-pcap' }, icon('download'), h('btn-l', {}, 'Скачать .pcap'))))) : null;
+    const pcapBox = !s.running && s.pcap ? h('details', { class: 'conn-x' }, h('summary', {}, icon('chev'), 'Для опытных'),
+      h('div', { class: 'conn-xb' }, `Все пакеты устройства за эту запись (${fmtBytes(s.pcap)}${s.pcap_cut ? ', запись пакетов остановлена на 4 МБ' : ''}). Файл открывается в Wireshark: видно рукопожатие, сбросы и что именно отвечал сервер. Пропадёт со следующей записью.`,
+        h('div', {}, h('a', { class: 'c-btn', href: 'api.php?download=conns-pcap' }, icon('download'), 'Скачать .pcap')))) : null;
     // brought up to date in place (morph): the table grows while recording, rows keep their place, nothing blinks
     morphKids(out, [
       keyed(s.running ? (s.step === 'annotate' ? notice('info', 'Запись закончена, определяю сети и профили…', null, h('span', { class: 'spin' }))
         : notice('info', `Записываю… ${s.elapsed || 0} из ${s.secs} с`, 'Пользуйтесь программой на устройстве.', h('span', { class: 'spin' })))
         : s.died ? notice('warn', 'Запись прервалась', 'Запустите ещё раз.') : null, 'run'),
       ...hints,
-      keyed(panel(s.running ? 'Соединения' : `Соединения ${s.ip}`, s.finished ? h('span', { class: 'sm muted', text: fmtDate(s.finished) + (s.stopped ? ` · остановлена на ${s.elapsed || 0} с` : '') }) : null,
-        sum, keyed(flows.length ? tbl : null, 'tbl'), keyed(pcapBox, 'pcap')), 'flows')]);
+      keyed(Object.assign(panel(s.running ? 'Соединения' : `Соединения ${s.ip}`, s.finished ? h('span', { class: 'sm muted', text: fmtDate(s.finished) + (s.stopped ? ` · остановлена на ${s.elapsed || 0} с` : '') }) : null,
+        sum, keyed(flows.length ? tbl : null, 'tbl'), keyed(pcapBox, 'pcap')), { className: 'panel conn-res' }), 'flows')]);
   }
 
   const s0 = await api('conns_get').catch(() => ({}));

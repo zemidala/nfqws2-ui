@@ -4,6 +4,7 @@
 import { test, expect } from '../fixtures.mjs';
 import { auditLayout } from 'pw-lib/layout.mjs';
 import { contrastReport } from 'pw-lib/contrast.mjs';
+import { Z_ACCEPTED } from '../z-palette.mjs';
 
 const filter = ['--filter-tcp=443', '--filter-l7=tls', '--payload=tls_client_hello'];
 const st = (name, steps, x) => ({ name, from: 'стандартный набор', steps, profile: [...filter, ...steps], ...x });
@@ -36,8 +37,9 @@ const RUNS = [[1366, 'light', 'z'], [1366, 'dark', 'z'], [390, 'light', 'z'], [3
 async function check(page, what) {
   await page.waitForTimeout(1000);   // blocks fade in: measured mid-way they look pale
   expect(await page.locator('main').innerText(), `${what}: «null» в тексте`).not.toMatch(/\bnull\b|undefined/);
-  expect(await auditLayout(page, { ignore: ['ПРОКРУТКА ВБОК nav.subtabs'] }), what).toEqual([]);
-  expect(await contrastReport(page), what).toEqual([]);
+  // the connections table scrolls inside its frame on a phone on purpose (local/design/bbb.html, Б)
+  expect(await auditLayout(page, { ignore: ['ПРОКРУТКА ВБОК nav.subtabs', 'ПРОКРУТКА ВБОК div.conn-box'] }), what).toEqual([]);
+  expect(await contrastReport(page, { ignore: Z_ACCEPTED }), what).toEqual([]);
 }
 
 for (const [w, mode, variant] of RUNS) {
@@ -62,11 +64,11 @@ for (const [w, mode, variant] of RUNS) {
     let tcpdump = true;
     await app.mock((b) => b.cmd === 'conns_get' ? CONNS : b.cmd === 'conns_devices' ? DEVICES(tcpdump) : undefined);
     await app.open('#/tests/conns', { variant, mode });
-    const row = (ip) => page.locator('main .conn-tbl tr', { hasText: ip });
+    const row = (ip) => page.locator('main .conn-b tr', { hasText: ip });
     await expect(row('198.51.100.7')).toBeVisible({ timeout: 20_000 });
-    // the address first, the name and network under it
-    await expect(row('198.51.100.7').locator('td.c-dst > .mono')).toHaveText('198.51.100.7');
-    await expect(row('198.51.100.7').locator('td.c-dst > .sm')).toHaveText('gateway.discord.gg, discord.com · CLOUDFLARENET');
+    // the site's name first, the address under it
+    await expect(row('198.51.100.7').locator('.c-host')).toHaveText('gateway.discord.gg');
+    await expect(row('198.51.100.7').locator('.c-ip')).toHaveText('198.51.100.7');
     // «Подобрать»: a named web connection with a problem; not for UDP, not for one that answers
     await expect(row('198.51.100.7').getByRole('link', { name: 'Подобрать' })).toHaveAttribute('href', /host=gateway\.discord\.gg/);
     await expect(row('203.0.113.80').getByRole('link', { name: 'Подобрать' })).toHaveAttribute('href', /host=example\.com&proto=http/);

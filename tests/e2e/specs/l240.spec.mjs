@@ -3,6 +3,7 @@
 import { test, expect } from '../fixtures.mjs';
 import { auditLayout } from 'pw-lib/layout.mjs';
 import { contrastReport } from 'pw-lib/contrast.mjs';
+import { Z_ACCEPTED } from '../z-palette.mjs';
 
 test.afterEach(async ({ page }) => { await page.unrouteAll({ behavior: 'ignoreErrors' }); });
 
@@ -49,7 +50,7 @@ for (const mode of ['light', 'dark']) {
       expect(box.ed.r).toBeLessThanOrEqual(w);
       expect(box.scroll).toBeLessThanOrEqual(box.win);
       expect(box.name.b).toBeLessThanOrEqual(box.row.t);
-      expect(await contrastReport(page)).toEqual([]);
+      expect(await contrastReport(page, { ignore: Z_ACCEPTED })).toEqual([]);
       await page.getByRole('button', { name: 'Отменить' }).click({ timeout: 2000 }).catch(() => {});
     }
   });

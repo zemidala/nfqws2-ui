@@ -133,8 +133,12 @@ function remotePanel(data) {
   const c = data.settings.remote;
   const st = R.state || {};
   const now = Math.floor(Date.now() / 1000);
-  const inp = (id, label, value, attrs = {}, hint = null) => h('div', { class: 'frow' }, h('label', { class: 'lbl', for: id, text: label }),
-    h('input', { class: 'input', id, value: value ?? '', spellcheck: 'false', autocapitalize: 'off', ...attrs }), hint ? h('span', { class: 'hint', text: hint }) : null);
+  // unit — the rest of the label's sentence after the field («5 последних снимков…»): beside the field, not a hint
+  const inp = (id, label, value, attrs = {}, hint = null, unit = null) => {
+    const field = h('input', { class: 'input', id, value: value ?? '', spellcheck: 'false', autocapitalize: 'off', ...attrs });
+    return h('div', { class: 'frow' }, h('label', { class: 'lbl', for: id, text: label }),
+      unit ? h('div', { class: 'row unit-row' }, field, h('span', { text: unit })) : field, hint ? h('span', { class: 'hint', text: hint }) : null);
+  };
   const on = h('input', { type: 'checkbox', id: 'rm-on', checked: !!c.enabled });
   const val = (id) => document.getElementById(id).value.trim();
   const save = async (quiet) => {
@@ -154,7 +158,7 @@ function remotePanel(data) {
     inp('rm-port', 'Порт ssh', c.port, { type: 'number', min: 1, max: 65535, style: 'width:110px' }),
     inp('rm-user', 'Пользователь', c.user, { class: 'input mono', placeholder: 'имя пользователя на NAS' }),
     inp('rm-dir', 'Папка на NAS', c.dir, { class: 'input mono', placeholder: '/volume1/homes/имя/Backups/nfqws2-ui' }, 'Полный путь. Другую папку роутер выбрать не сможет — она записывается в разрешение ключа на NAS.'),
-    inp('rm-keep', 'Оставлять на роутере', c.keep_local, { type: 'number', min: 1, max: 50, style: 'width:110px' }, 'последних снимков, плюс закреплённые'),
+    inp('rm-keep', 'Оставлять на роутере', c.keep_local, { type: 'number', min: 1, max: 50, style: 'width:110px' }, null, 'последних снимков, плюс закреплённые'),
     h('div', { class: 'row' },
       btn('Сохранить', () => save(false), 'primary'),
       btn('Проверить связь', async () => {

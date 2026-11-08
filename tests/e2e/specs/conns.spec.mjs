@@ -23,16 +23,28 @@ test('итог записи: подсказки, таблица, фильтр', 
   await expect(page.locator('main .dd-btn[aria-label="Устройство"]')).toContainText('phone — 192.168.1.50');
   await expect(page.locator('.notice.bad', { hasText: 'UDP без ответа' })).toContainText('203.0.113.7:50003');
   await expect(page.locator('.notice.warn', { hasText: 'Порт мимо nfqws2' })).toContainText('UDP 50003, TCP 6112');
-  const rows = page.locator('.conn-tbl tbody tr');
+  const rows = page.locator('.conn-b tbody tr');
   await expect(rows).toHaveCount(6);
   // problems first: no answer and stalled on top
   await expect(rows.nth(0)).toContainText('нет ответа');
-  await expect(page.locator('.conn-tbl')).toContainText('замер на 16 КБ');
-  await expect(page.locator('.conn-tbl')).toContainText('если это discord');
-  await expect(page.locator('.conn-tbl tr', { hasText: '192.0.2.60' })).toContainText('нет ответа у 3 из 5');
-  await expect(page.locator('.conn-tbl tr', { hasText: '198.18.0.12' })).toContainText('идёт через podkop');
-  await page.locator('label.chk', { hasText: 'Только с проблемами' }).click();
-  await expect(rows).toHaveCount(3);
+  await expect(page.locator('.conn-b')).toContainText('замер на 16 КБ');
+  const row = (ip) => page.locator('.conn-b tr', { hasText: ip });
+  await expect(row('192.0.2.60')).toContainText('нет ответа у 3 из 5');
+  // what nfqws2 does is the status's hint
+  await expect(row('203.0.113.8').locator('td:has(.c-st)')).toHaveAttribute('title', /если это discord/);
+  await expect(row('198.18.0.12').locator('td:has(.c-st)')).toHaveAttribute('title', /идёт через podkop/);
+  // filter buttons with counts
+  const tab = (t) => page.locator('.conn-tab', { hasText: t });
+  await expect(tab('Все')).toHaveText('Все 6');
+  await tab('Без ответа').click();
+  await expect(tab('Без ответа')).toHaveText('Без ответа 2');
+  await expect(rows).toHaveCount(2);
+  await tab('Замерли').click();
+  await expect(rows).toHaveCount(1);
+  await tab('Мимо nfqws2').click();
+  await expect(rows).toHaveCount(2);
+  await tab('Все').click();
+  await expect(rows).toHaveCount(6);
 });
 
 for (const w of [390, 1366]) {
@@ -40,8 +52,9 @@ for (const w of [390, 1366]) {
     await page.setViewportSize({ width: w, height: 900 });
     await app.mock((b) => b.cmd === 'conns_get' ? DATA : b.cmd === 'conns_devices' ? { items: [] } : undefined);
     await app.open('#/tests/conns');
-    await expect(page.locator('.conn-tbl tbody tr')).toHaveCount(6);
-    const over = await page.evaluate(() => [...document.querySelectorAll('main *')].filter((e) => e.getBoundingClientRect().right > document.documentElement.clientWidth + 0.5).length);
+    await expect(page.locator('.conn-b tbody tr')).toHaveCount(6);
+    // the table scrolls inside its own frame on a phone; what stands in the frame is not past the page's edge
+    const over = await page.evaluate(() => [...document.querySelectorAll('main *')].filter((e) => !e.closest('.conn-box') && e.getBoundingClientRect().right > document.documentElement.clientWidth + 0.5).length);
     expect(over).toBe(0);
   });
 }
@@ -52,7 +65,7 @@ test('снимок для Wiki', async ({ app, page }) => {
   await page.setViewportSize({ width: 1366, height: 1000 });
   await app.mock((b) => b.cmd === 'conns_get' ? DATA : b.cmd === 'conns_devices' ? { items: [{ ip: '192.168.1.50', name: 'phone', flows: 12 }] } : undefined);
   await app.open('#/tests/conns', { variant: 'k', mode: 'light' });
-  await page.locator('.conn-tbl tbody tr').first().waitFor();
+  await page.locator('.conn-b tbody tr').first().waitFor();
   await page.waitForTimeout(500);
   await page.evaluate(() => scrollTo(0, 0));
   const r = await page.locator('main').boundingBox();   // the sticky header stays out: clip the window, not the element

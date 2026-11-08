@@ -15,24 +15,33 @@ for (const mode of ['light', 'dark']) {
       const c = (s) => getComputedStyle(document.querySelector(s));
       const root = getComputedStyle(document.documentElement);
       return { sans: root.getPropertyValue('--sans'), bg: c('body').backgroundColor, h1: c('main h1').fontFamily,
-        on: { shadow: c('.mnav a.on').boxShadow, weight: c('.mnav a.on').fontWeight, bg: c('.mnav a.on').backgroundColor }, tiles: document.querySelectorAll('.ov-tiles .tile').length };
+        on: { shadow: c('.mnav a.on').boxShadow, weight: c('.mnav a.on').fontWeight, bg: c('.mnav a.on').backgroundColor },
+        head: { size: c('.mnav .nav-h').fontSize, tick: getComputedStyle(document.querySelector('.mnav .nav-h'), '::before').backgroundColor, item: c('.mnav .mlinks a').fontSize },
+        tiles: document.querySelectorAll('.ov-tiles .tile').length };
     });
     console.log(mode, JSON.stringify(r));
     expect(r.sans).toContain('Golos Text');
     expect(r.h1).toContain('Geologica');
-    expect(r.bg).toBe(mode === 'dark' ? 'rgb(27, 33, 48)' : 'rgb(232, 236, 243)');
-    expect(r.on.shadow).toContain('rgb(255, 106, 20)');
-    expect(r.on.weight).toBe('700');
+    expect(r.bg).toBe(mode === 'dark' ? 'rgb(7, 8, 11)' : 'rgb(245, 246, 249)');
+    // the menu, local/design/bbb.html: the open page is a step of the fill, not bold, no bar; a section is an orange
+    // tick and 15 px text over 13 px items
+    expect(r.on.shadow).toBe('none');
+    expect(r.on.weight).toBe('400');
+    expect(r.on.bg).toBe(mode === 'dark' ? 'rgb(26, 30, 40)' : 'rgb(235, 238, 245)');
+    expect(r.head).toEqual({ size: '15px', tick: 'rgb(255, 106, 20)', item: '13px' });
     expect(r.tiles).toBeGreaterThan(3);
   });
 }
 
-// what the layout and contrast checks cannot see: the signs of a template. Only the menu keeps its bar.
+// what the layout and contrast checks cannot see: the signs of a template. A bar on the left is kept by the menu, the
+// notes (.notice), the explanations (an «i» in their margin) and the DNS legend
 const signs = () => {
   const out = new Set();
   for (const e of document.querySelectorAll('body *')) {
     const b = e.getBoundingClientRect();
-    if (!b.width || !b.height || e.closest('.mnav')) continue;
+    if (!b.width || !b.height || e.closest('.mnav, .notice, .dnsx-legend')) continue;
+    const b4 = getComputedStyle(e, '::before');
+    if ((b4.maskImage || b4.webkitMaskImage || '').includes('svg')) continue;
     const s = getComputedStyle(e);
     const name = `${e.tagName.toLowerCase()}.${String(e.className.baseVal ?? e.className).split(' ').slice(0, 2).join('.')}`;
     if (/inset \d+px 0(px)? /.test(s.boxShadow) || /rgba?\([^)]*\) \d+px 0px 0px 0px inset/.test(s.boxShadow)) { if (!/ 0px 0px 0px \d+px inset/.test(s.boxShadow)) out.add(`полоса сбоку: ${name}`); }

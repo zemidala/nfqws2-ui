@@ -42,7 +42,9 @@
 .bottom a, .bottom button { min-width: 0; }
 .site-name { font-family: var(--mono); font-size: var(--fs-lg); overflow-wrap: anywhere; }
 .about-brand { display: flex; gap: 14px; align-items: center; }
-.lthumb { width: 100%; max-width: 200px; height: auto; display: block; }
+/* a whole height: «auto» from the 120×68 picture made 113.33 px, and every card below it stood on a third of a pixel.
+   The picture keeps its proportions inside (it is fitted, not stretched) */
+.lthumb { width: 100%; max-width: 200px; height: 114px; display: block; }
 
 /* страница «Обзор»: четыре вида раскладки одних и тех же блоков */
 .ov .blk { align-content: start; }
@@ -145,32 +147,40 @@ a.over-row:hover { background: var(--soft); }
 /* narrower: the device (the longest names) gets a row of its own; own dropdowns put their button next to the hidden select */
 @media (max-width: 899px) { .conn-form { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); } .conn-form > [aria-label="Устройство"] { grid-column: 1 / -1; grid-row: 1; } }
 @media (max-width: 599px) { .conn-form { grid-template-columns: minmax(0, 1fr); } .conn-form > [aria-label="Устройство"] { grid-row: auto; } }
-.conn-sum { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }   /* the panel's gap is the step to the table */
-.conn-tbl td { vertical-align: top; }
-.conn-tbl td.nowrap { white-space: nowrap; }
-.conn-tbl td.warnc { color: var(--warn); }
-.conn-tbl td.c-pick { white-space: nowrap; }
-/* phone: a row is a card — address and verdict on top, port, then sent / received side by side, nfqws2 below */
-/* :root ×4 — above every style's table cell padding (it gave each cell 12 px top and bottom: half a screen per card).
-   Card: address and verdict on top, the port right under the address, sent / received side by side, nfqws2 below;
-   related lines 2 px apart, groups 8 px, cards 10 px */
-@media (max-width: 599px) {
-  :root:root:root:root .conn-tbl thead { display: none; }
-  :root:root:root:root .scroll > .conn-tbl, :root:root:root:root .conn-tbl tbody { display: block; width: 100%; min-width: 0; }
-  :root:root:root:root .conn-tbl tr { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 8px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); }
-  :root:root:root:root .conn-tbl tr:first-child { padding-top: 0; }
-  :root:root:root:root .conn-tbl td.c-dst > .sm { font-size: var(--fs-xs); overflow-wrap: anywhere; }   /* the network name under the address, not bigger than it */
-  :root:root:root:root .conn-tbl td { display: block; padding: 0; border: 0; text-align: left; background: none; --lh: 1.35; }
-  :root:root:root:root .conn-tbl td.c-dst { grid-column: 1; grid-row: 1; }
-  :root:root:root:root .conn-tbl td.c-res { grid-column: 2; grid-row: 1; justify-self: end; align-self: start; }
-  :root:root:root:root .conn-tbl td.c-port { grid-column: 1 / -1; grid-row: 2; margin-top: -6px; font-size: var(--fs-xs); color: var(--muted); }
-  :root:root:root:root .conn-tbl td.num { grid-row: 3; }
-  :root:root:root:root .conn-tbl td.num + td.num { grid-column: 2; justify-self: end; text-align: right; }
-  :root:root:root:root .conn-tbl td.c-nfq { grid-column: 1 / -1; }
-  :root:root:root:root .conn-tbl td.c-pick { grid-column: 1 / -1; }
-  :root:root:root:root .conn-tbl td.c-pick:empty { display: none; }   /* no empty line in a card without «Подобрать» */
-  :root:root:root:root .conn-tbl td[data-h]::before { content: attr(data-h); display: block; margin-bottom: 2px; font-size: var(--fs-xs); color: var(--muted); }
-}
+/* a field inside a sentence («Оставлять на роутере [5] последних снимков…»): the field keeps its own width on a phone
+   too (phones stretch fields to the column), the words stay beside it */
+.unit-row { align-items: center; gap: 8px; flex-wrap: nowrap; }
+:root:root:root .unit-row > input.input { flex: none; width: 110px; min-width: 0; }
+
+/* the recording's result, mockup local/design/bbb.html (the designer's variant Б, one to one): filter buttons with
+   counts, a framed table on a soft fill with 13 px rows, status plates, «Для опытных» as a framed box (his А).
+   A phone scrolls the table inside its frame. :root ×3 — above every style's buttons, tables and details */
+.conn-tabs { display: flex; flex-wrap: wrap; gap: 6px; }
+:root:root:root .conn-tab { height: 32px; min-height: 0; padding: 0 12px; font: inherit; font-size: 13px; line-height: 20px; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; box-shadow: none; }
+:root:root:root .conn-tab:hover { color: var(--fg); background: var(--soft); }
+:root:root:root .conn-tab.on { background: var(--sel, var(--accent)); border-color: var(--sel, var(--accent)); color: var(--sel-fg, var(--accent-fg)); font-weight: 500; }
+.conn-box { width: 100%; overflow-x: auto; border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+:root:root:root .conn-b { width: 100%; border-collapse: separate; border-spacing: 0; text-align: left; font-size: 13px; line-height: 20px; background: var(--soft); color: var(--fg); }
+:root:root:root .conn-b th { background: var(--soft); padding: 8px 12px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--line); white-space: nowrap; text-align: left; text-transform: none; letter-spacing: 0; }
+:root:root:root .conn-b td { padding: 10px 12px; border-bottom: 1px solid var(--line); vertical-align: middle; white-space: nowrap; font-size: 13px; line-height: 20px; background: none; }
+:root:root:root .conn-b tr:last-child td { border-bottom: 0; }
+.conn-b .c-host { font-weight: 500; }
+:root:root:root .conn-b .c-ip { font-size: 12px; line-height: 16px; color: var(--muted); font-family: var(--mono); margin-top: 2px; }
+:root:root:root .c-st { display: inline-flex; align-items: center; font-size: 12px; line-height: 16px; padding: 2px 8px; border-radius: 4px; white-space: nowrap; border: 1px solid; }
+/* each style's own status fills; style Z puts the designer's tinted plates over them (looks/zemidala.css) */
+.c-st.bad { background: var(--bad-soft); color: var(--bad); border-color: transparent; }
+.c-st.warn { background: var(--warn-soft); color: var(--warn); border-color: transparent; }
+.c-st.ok { background: var(--ok-soft); color: var(--ok); border-color: transparent; }
+:root:root:root .c-btn { display: inline-flex; align-items: center; justify-content: center; gap: 6px; height: 28px; padding: 0 8px; font-size: 12px; line-height: 16px; font-weight: 500; border-radius: var(--radius); border: 1px solid var(--line); background: var(--surface); color: var(--fg); text-decoration: none; white-space: nowrap; }
+:root:root:root .c-btn:hover { background: var(--soft); }
+.c-btn > svg { width: 14px; height: 14px; }
+.conn-x { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); overflow: hidden; }
+:root:root:root .conn-x > summary { padding: 8px 12px; font-size: 13px; line-height: 20px; font-weight: 500; color: var(--muted); background: var(--soft); display: flex; align-items: center; gap: 6px; list-style: none; }
+:root:root:root .conn-x > summary::before { content: none; }
+.conn-x > summary:hover { color: var(--fg); }
+.conn-x > summary > svg { width: 14px; height: 14px; flex: none; }
+.conn-x[open] > summary > svg { transform: rotate(90deg); }
+:root:root:root .conn-xb { padding: 12px; font-size: 12px; line-height: 18px; color: var(--muted); border-top: 1px solid var(--line); display: grid; gap: 6px; justify-items: start; }
 /* «Ваш вклад» on the community page, mockup local/design/share.html, variant A */
 .contrib { display: flex; flex-wrap: wrap; gap: 12px 28px; margin-bottom: 12px; }
 .contrib-n { min-width: 110px; }
