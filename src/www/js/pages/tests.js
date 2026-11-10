@@ -550,6 +550,7 @@ async function viewTests(main, r, bare = false) {
       h('div', { class: 'row' }, h('span', { class: 'spin' }), h('b', { text: `${s.type === 'trace' ? 'Трассировка' : s.type === 'multi' ? 'Подбор для' : 'Тест'} ${s.host}` }), h('span', { class: 'grow' }),
         h('span', { class: 'sm muted num', text: s.total ? `${s.done} из ${s.total}` : 'запуск…' }), btn('Остановить', () => api('test_stop'), 'small danger', 'stop')),
       s.total ? h('div', { class: 'progress', style: 'height:6px;border-radius:99px;background:var(--soft);overflow:hidden' }, h('i', { style: `display:block;height:100%;width:${Math.round(s.done / s.total * 100)}%;background:var(--accent)` })) : null,
+      s.type === 'multi' && MULTI_STEP[s.phase] ? h('div', { class: 'sm' }, h('b', { text: MULTI_STEP[s.phase][0] }), ' — ' + MULTI_STEP[s.phase][1]) : null,
       s.current ? h('p', { class: 'sm muted', text: 'Сейчас: ' + s.current }) : null) : null;
     if (s.type === 'wide') {
       const p = s.pick;
@@ -608,6 +609,14 @@ async function viewTests(main, r, bare = false) {
       panel(`Результаты для ${s.host}` + (s.proto === 'quic' ? ' · QUIC' : '') + (s.tls12 ? ' · TLS 1.2' : ''),h('span', { class: 'sm muted num', text: `${res.length} стратегий · ${rep} повт.` + (s.finished ? ` · ${Math.round((s.finished - s.started))} с` : '') }),
         h('div', { class: 'scroll' }, h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, h('th'), h('th', { text: 'Стратегия' }), h('th', { text: 'Откуда' }), h('th', { text: 'Результат' }), h('th', { class: 'num' }, 'Время', newTag('pick:speed')), h('th'))), h('tbody', {}, rows))))].map((el, i) => keyed(el, NAMES[i])));
   }
+
+  // The steps of a pick for several sites: the counter alone («3 из 10», then «12 из 57») looked like nothing was
+  // happening on the long first step (NFQ-L256)
+  const MULTI_STEP = {
+    baseline: ['Шаг 1 из 3', 'каждый сайт без обхода: что открывается и так, в подборе не участвует. Обычно до минуты'],
+    scan: ['Шаг 2 из 3', 'все стратегии на всех сайтах, пачками'],
+    confirm: ['Шаг 3 из 3', 'лучшие стратегии перепроверяются по одной'],
+  };
 
   // The pick sees that a server answers, not how fast it goes: video is slowed down rather than closed, and QUIC is
   // judged by the reply to its first packet (NFQ-L260: «all green, YouTube does not play»)

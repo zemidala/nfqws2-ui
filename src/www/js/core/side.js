@@ -465,9 +465,18 @@ const FREEZE_HINT = 'Похоже на ограничение ТСПУ «16-20 �
 const wikiDns = () => REPO + '/wiki/' + encodeURIComponent('11.-Решение-возможных-проблем') + '#' + encodeURIComponent('13-dns-роутера-подменяет-адрес-заглушка-провайдера');
 
 // DNS роутера отдаёт не тот адрес (обычно заглушку провайдера): стратегии nfqws2 тут ни при чём
+// 0.0.0.0 or 127.x from the router's resolver: the DNS itself blocks the name (an ad or phishing filter, a block list),
+// not a provider's stub — «turn on DoH/DoT» is the wrong advice there, it may be on already (NFQ-L259)
+const dnsSinkhole = (ips) => (ips || []).some((ip) => ip === '0.0.0.0' || ip.startsWith('127.'));
+
 function dnsSpoofNotice(sp) {
   const sys = sp.system.join(', ');
   const real = sp.real.slice(0, 2).join(', ');
+  if (dnsSinkhole(sp.system)) return notice('bad', 'Не открывается: DNS роутера блокирует это имя',
+    `Роутер получил ${sys}, а защищённый DNS отвечает ${real}. Так отвечают DNS-серверы с фильтром рекламы и фишинга и списки блокировки. `
+    + (sp.real_ok ? `По настоящему адресу сайт через nfqws2 открывается (HTTP ${sp.real_code}, ${sp.real_ms} мс). ` : '')
+    + 'Дело в DNS, а не в nfqws2: уберите имя из блокировки или смените DNS-сервер.',
+    h('div', { class: 'row' }, h('a', { class: 'btn small', href: PAGES.dns[0] }, 'Какой DNS у вас работает')));
   // адрес не из сети провайдера: это не подмена, а другой сервер того же сайта, закрытый по IP
   if (sp.fake === false) return notice('warn', 'Не открывается по адресу, который дал роутер',
     `Роутер получил ${sys}, а защищённый DNS отвечает ${real}. Это не подмена: адрес не из сети провайдера, просто большие сети (Meta, Google, CDN) отдают разным DNS разные серверы. `

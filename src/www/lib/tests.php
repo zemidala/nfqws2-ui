@@ -369,6 +369,7 @@ function speedProbe(string $host, bool $http): ?array
 // $sni — имя в приветствии: от него не зависит обрыв (он по адресу), но без имени не сработает hostfakesplit
 const PAD_REQS = 12;
 const PAD_BYTES = 4000;
+const PAD_FREEZE_FROM = 3;   // answers before the stop: 3 × 4000 bytes ≈ 12 KB, where the provider's cut-off begins
 
 function padProbe(string $ip, int $port, string $sni): array
 {
@@ -404,8 +405,11 @@ function padProbe(string $ip, int $port, string $sni): array
   if ($rc === 0) {
     return ['ok' => true, 'code' => 0, 'ms' => $ms, 'reason' => null];
   }
+  // the cut-off starts at ~12 KB sent (PAD_FREEZE_FROM answers): a stop earlier is something else, a reset later is the
+  // same cut-off (dpi-detector counts it so)
   $reason = match (true) {
-    $rc === 28 && $got > 0 => REASON_FREEZE,
+    in_array($rc, [28, 56], true) && $got >= PAD_FREEZE_FROM => REASON_FREEZE,
+    $rc === 28 && $got > 0 => 'соединение замирает раньше 12 КБ — не похоже на обрыв на объёме',
     $rc === 28 => 'тайм-аут',
     $rc === 7 => 'не удалось подключиться',
     $rc === 35 => 'обрыв TLS',

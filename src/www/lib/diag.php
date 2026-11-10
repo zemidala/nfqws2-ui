@@ -223,6 +223,10 @@ function dnsSpoofReason(array $sp): string
   if (!($sp['fake'] ?? true)) {
     return 'адрес ' . $sp['system'][0] . ' не открывается, а ' . $sp['real'][0] . ' от защищённого DNS открывается — ' . REASON_OTHER_SERVER;
   }
+  // 0.0.0.0 / 127.x: the DNS itself blocks the name (an ad or phishing filter, a block list), not a provider's stub
+  if ($sp['system'][0] === '0.0.0.0' || str_starts_with($sp['system'][0], '127.')) {
+    return 'DNS роутера блокирует имя (отдаёт ' . $sp['system'][0] . ') — фильтр DNS-сервера или список блокировки, не nfqws2';
+  }
   return 'DNS роутера отдаёт ' . $sp['system'][0] . ($sp['isp'] ? ' (сеть провайдера)' : '') . ' вместо ' . $sp['real'][0]
     . ($sp['real_ok'] ? ' — по настоящему адресу открывается' : '');
 }
