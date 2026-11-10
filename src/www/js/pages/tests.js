@@ -583,7 +583,7 @@ async function viewTests(main, r, bare = false) {
         h('td', {}, x.ok || x.community ? h('div', { class: 'row acts-row' }, x.ok ? applyMenu(x, s) : null, full ? wideBtn(x, s) : null, full || x.community ? shareBtn(x, s) : null) : null));
     });
     // blocks by name: a key each for morph, so a notice that appears at the end does not shift the table
-    const NAMES = ['flow', 'dnspin', 'baseline', 'advice', 'best', 'community', 'none', 'refine', 'failed', 'parallel', 'table'];
+    const NAMES = ['flow', 'dnspin', 'baseline', 'advice', 'best', 'community', 'slow', 'none', 'refine', 'failed', 'parallel', 'table'];
     return h('div', { class: 'stack', style: 'gap:14px' }, [
       flow(s, running, res, best),
       dnsPinNote(s.dns_pin, baseline),
@@ -598,6 +598,7 @@ async function viewTests(main, r, bare = false) {
         needsTs(best.steps) ? h('div', { class: 't', text: `На компьютерах с Windows эта стратегия сработает, только если включены временные метки TCP: ${WIN_TS_HINT}.` }) : null),
         h('div', { class: 'notice-actions' }, applyMenu(best, s, 'primary'), btn('Скопировать', () => copyText(best.steps.join('\n')), 'small', 'copy'), shareBtn(best, s, true), newTag('pick:share'))) : null,
       communityNote(s, best),
+      !running && best ? slowNote(s) : null,
       !running && !best && res.length ? notice('bad', 'Ни одна стратегия не помогла', isFreeze(baseline?.reason) ? FREEZE_HINT : 'Попробуйте больше повторов, протокол HTTP или другой сайт. Если без обхода соединение не устанавливается вовсе — возможно, заблокирован IP, тогда nfqws2 не поможет.') : null,
       refinePanel(s, rep),
       s.failed && Object.keys(s.failed).length ? h('p', { class: 'sm muted' }, `Из каталога не помогли ${plural(Object.values(s.failed).reduce((a, b) => a + b, 0), 'стратегия', 'стратегии', 'стратегий')}: `
@@ -606,6 +607,18 @@ async function viewTests(main, r, bare = false) {
         + (s.parallel_max && s.parallel < s.parallel_max ? ` (а не по ${s.parallel_max}: пачка подстраивается под память роутера, чтобы он не начал тормозить)` : '') + '. Когда к одному сайту идёт много разных соединений одновременно, оборудование провайдера иногда путается, и такой итог может разойтись с проверкой по одной. Поэтому находки перепроверяются по одной, начиная с быстрых, пока не наберётся 8 подтверждённых (отметка «перепроверена»). Рабочими считаются только они; открывшие сайт лишь в пачке показаны в таблице, но применить их отсюда нельзя.' }) : null,
       panel(`Результаты для ${s.host}` + (s.proto === 'quic' ? ' · QUIC' : '') + (s.tls12 ? ' · TLS 1.2' : ''),h('span', { class: 'sm muted num', text: `${res.length} стратегий · ${rep} повт.` + (s.finished ? ` · ${Math.round((s.finished - s.started))} с` : '') }),
         h('div', { class: 'scroll' }, h('table', { class: 'tbl' }, h('thead', {}, h('tr', {}, h('th'), h('th', { text: 'Стратегия' }), h('th', { text: 'Откуда' }), h('th', { text: 'Результат' }), h('th', { class: 'num' }, 'Время', newTag('pick:speed')), h('th'))), h('tbody', {}, rows))))].map((el, i) => keyed(el, NAMES[i])));
+  }
+
+  // The pick sees that a server answers, not how fast it goes: video is slowed down rather than closed, and QUIC is
+  // judged by the reply to its first packet (NFQ-L260: «all green, YouTube does not play»)
+  const VIDEO_HOST = /(^|\.)(googlevideo\.com|youtube\.com|ytimg\.com|youtu\.be)$/;
+  function slowNote(s) {
+    const video = VIDEO_HOST.test(s.host || ''), quic = s.proto === 'quic';
+    if (!video && !quic) return null;
+    if (!video) return notice('info', 'По QUIC видно только ответ сервера', 'Засчитывается ответ на первый пакет: замедление дальше по соединению так не видно. После применения проверьте сайт на устройстве.');
+    return notice('info', 'Скорость видео так не проверить', (quic ? 'Подбор видит только ответ сервера на первый пакет QUIC' : 'Подбор видит только, что сервер отвечает и отдаёт первые 64 КБ')
+      + ', а видео обычно замедляют, а не закрывают. После применения проверьте видео на устройстве.'
+      + (quic ? ' Если QUIC не пройдёт, приложение YouTube уйдёт на обычный HTTPS: подберите стратегию и для него.' : ''));
   }
 
   // Ход подбора: без обхода → перебор → уточнение → итог
@@ -954,7 +967,7 @@ async function viewTests(main, r, bare = false) {
     return h('div', { class: 'notice warn' }, icon('alert'),
       h('div', { class: 'grow' }, h('b', { text: 'Рекомендация: применить лучшую стратегию только для этого сайта' }),
         h('div', { class: 't', text: `${why} Отдельный профиль для ${s.host} ничего не сломает у других сайтов. После применения nfqws2 перезапустится с проверкой и сам откатит изменения, если что-то пойдёт не так.` })),
-      h('div', { class: 'notice-actions' }, btn(`Применить только для ${s.host}`, () => addSiteProfile(best.steps, s), 'small primary', 'ok'), applyMenu(best, s, '', 'Другие варианты…')));
+      h('div', { class: 'notice-actions' }, btn('Применить только для этого сайта', () => addSiteProfile(best.steps, s), 'small primary', 'ok', { title: 'Только для ' + s.host }), applyMenu(best, s, '', 'Другие варианты…')));
   }
 
   const hist = await api('tests_history').catch(() => ({ items: [] }));
