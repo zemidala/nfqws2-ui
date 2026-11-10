@@ -17,6 +17,8 @@ async function viewDevices(main) {
   const data = await api('devices_get');
   main.append(h('div', { class: 'vh' }, h('h1', { text: 'Устройства' })));
   if (data.keenetic) {
+    // what the page is for comes first, as on OpenWrt: the how-to alone left the question «what is this page for?» (NFQ-L247)
+    main.append(h('p', { class: 'muted dev-lead', text: 'Кто в домашней сети идёт через nfqws2, а кто напрямую, мимо него. На Keenetic это выбирается не здесь, а в самой прошивке — как, написано ниже.' }));
     main.append(panel(null, null,
       h('p', { text: 'На Keenetic устройства выбираются в самой прошивке — политикой доступа. Создайте политику в веб-интерфейсе Keenetic, добавьте в неё нужные устройства и впишите её имя в конфиг nfqws2 (POLICY_NAME). Можно и наоборот: обходить всех, кроме устройств политики (POLICY_EXCLUDE=1).' }),
       h('p', { class: 'sm muted', text: 'Проверки самого роутера (мониторинг, «Проверить сайт») интерфейс и тогда пропускает через nfqws2.' }),
