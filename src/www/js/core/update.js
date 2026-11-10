@@ -68,10 +68,10 @@ function openUpdate(u, run = false) {
   // a fixed height: a growing log would stretch the centred window and move everything in it on every poll
   const log = h('pre', { class: 'box', style: 'height:40vh' });
   const status = h('div');
-  const about = h('div', { class: 'stack', style: 'gap:12px' },
+  const about = h('div', { class: 'stack' },
     u.notes ? h('div', { class: 'release-notes' }, md(u.notes)) : h('p', { class: 'sm muted', text: 'Описания изменений нет.' }),
     h('p', { class: 'sm muted' }, 'Обновление ставит пакет с GitHub (с проверкой контрольной суммы) и перезапускает веб-сервер интерфейса. nfqws2, конфиг, списки и доступ в интернет не затрагиваются. Из консоли: ', h('code', { text: 'nfqws-ui update' })));
-  const body = h('div', { class: 'modal-b stack', style: 'gap:12px' },
+  const body = h('div', { class: 'modal-b stack' },
     h('p', {}, `Установлено: `, h('b', { text: u.current }), ` · последняя: `, h('b', { text: u.latest || '—' }), ' · ', h('a', { href: u.url || REPO + '/releases', target: '_blank', rel: 'noopener', text: 'страница релиза' })),
     about, status, copyBox(log));
   log.hidden = true;
@@ -129,8 +129,8 @@ function openUpdate(u, run = false) {
 async function openNfqUpdate() {
   const status = h('div');
   const log = h('pre', { class: 'box', style: 'height:40vh', hidden: true });   // fixed height — see openUpdate
-  const head = h('div', { class: 'stack', style: 'gap:12px' }, spinner('Проверяю…'));
-  const body = h('div', { class: 'modal-b stack', style: 'gap:12px' }, head, status, copyBox(log));
+  const head = h('div', { class: 'stack' }, spinner('Проверяю…'));
+  const body = h('div', { class: 'modal-b stack' }, head, status, copyBox(log));
   const go = btn('Обновить', null, 'primary', 'download', { hidden: true });
   const back = btn('Вернуть', null, 'warn', 'undo', { hidden: true });
   const recheck = btn('Проверить снова', () => draw(true), 'ghost', 'refresh');
@@ -141,7 +141,7 @@ async function openNfqUpdate() {
   const result = (r) => {
     const worse = r.worse || [];
     const ok = (r.checks || []).filter((c) => c.ok).length;
-    return h('div', { class: 'stack', style: 'gap:8px' },
+    return h('div', { class: 'stack items' },
       notice(!r.running ? 'bad' : worse.length ? 'warn' : 'ok',
         !r.running ? `nfqws2 ${r.to} не запустился` : worse.length ? `nfqws2 ${r.to} работает, но часть сайтов перестала открываться` : `Готово: nfqws2 ${r.to} работает`,
         (r.checks?.length ? `Сайты мониторинга: открываются ${ok} из ${r.checks.length}.` : 'Сайтов мониторинга нет — проверьте нужные сайты сами.')
@@ -301,7 +301,7 @@ async function openLeftovers() {
     return h('div', { class: 'item' }, h('div', { class: 'item-main' },
       h('span', { class: 'item-title', text: x.name }),
       h('span', { class: 'sm muted', text: `${fmtDate(x.mtime)} · ${fmtBytes(x.size)} · ${state}` }),
-      h('div', { class: 'row', style: 'margin-top:6px' },
+      h('div', { class: 'row' },
         editable && x.own && !x.same ? btn('Сравнить', () => { bg.close(); openHistory(x.base, () => route()); }, 'small', 'history', { title: `Открыть историю ${x.base} — там шаблон можно сравнить с вашим файлом` }) : null,
         btn('Удалить', () => del([x.name]), 'small', 'trash'))));
   };

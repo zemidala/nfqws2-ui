@@ -10,7 +10,7 @@
 const LEARN_OPEN = new Set();
 
 async function viewLearn(main) {
-  const out = h('div', { class: 'stack', style: 'gap:14px' }, skel(1, 4));
+  const out = h('div', { class: 'stack' }, skel(1, 4));
   main.append(
     h('div', { class: 'vh' }, h('h1', { text: 'Что выучил роутер' })),
     h('p', { class: 'muted dns-lead', text: 'Профили с обучением сами выбирают стратегию для каждого сайта: запоминают, какая открывала его, и после неудач переходят на следующую по успеху. Старые результаты со временем весят меньше. Обновляется раз в минуту.' }),
@@ -68,7 +68,7 @@ async function viewLearn(main) {
           bar(x.score),
           h('span', { class: 'sm' + (tried(x) ? '' : ' muted'), text: tried(x) ? `${x.ok} / ${x.fail}` : 'не пробовалась' })];
       })),
-      h('div', { class: 'row', style: 'margin-top:10px' },
+      h('div', { class: 'row', style: 'margin-top:var(--sp-3)' },
         btn('Закрепить для сайта', () => pin(it), 'small', null, { disabled: !s.steps.length }),
         btn('Забыть', () => forget(it), 'small ghost'),
         h('span', { class: 'sm muted grow', text: `«Закрепить» — отдельный профиль только для ${it.host} с этой стратегией, как «Применить» в подборе.` }))));
@@ -90,7 +90,7 @@ async function viewLearn(main) {
     }
     const profiles = [...new Set(items.map((x) => x.profile).filter(Boolean))].map((n) => { const p = prof(n); return `#${n}` + (p ? ` «${profName(p)}»` : ''); });
     morphKids(out, [keyed(h('section', { class: 'panel' },
-      h('div', { class: 'row', style: 'margin-bottom:6px' },
+      h('div', { class: 'row' },
         h('span', { class: 'sm muted grow' }, plural(items.length, 'сайт', 'сайта', 'сайтов'), profiles.length ? ' · ' + (profiles.length > 1 ? 'профили ' : 'профиль ') + profiles.join(', ') : '',
           data.updated ? ' · обновлено ' + fmtAgo(Math.floor(Date.now() / 1000) - data.updated) : ''),
         btn('Забыть всё', () => forget(null), 'small danger')),

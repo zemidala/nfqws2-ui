@@ -13,7 +13,7 @@ const DNS_SITE_TEXT = { ok: ['верно', 'ok'], fake: ['заглушка', 'ba
 async function viewDns(main) {
   const startBtn = btn('Проверить', start, 'primary');
   const when = h('span');
-  const out = h('div', { class: 'stack', style: 'gap:14px' }, skel(1, 4));
+  const out = h('div', { class: 'stack' }, skel(1, 4));
   // own servers: checked with the public ones and kept on the router for the next checks
   const ownIn = h('input', { class: 'input mono grow', placeholder: '1.2.3.4, dns.example.com, https://dns.example.com/dns-query', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Свои DNS-серверы' });
   const onlyIn = h('input', { type: 'checkbox' });
@@ -23,7 +23,7 @@ async function viewDns(main) {
     // the fields and the start button in one block, top to bottom — as on «Обрыв на 16 КБ»
     panel(null, null,
       h('div', { class: 'frow dns-own' }, h('span', { class: 'lbl', text: 'Свои серверы' }),
-        h('div', { class: 'stack', style: 'gap:6px' }, h('div', { class: 'row' }, ownIn, newTag('dns:own')),
+        h('div', { class: 'stack items' }, h('div', { class: 'row' }, ownIn, newTag('dns:own')),
           h('span', { class: 'sm muted', text: 'Необязательно, через запятую, до пяти. Адрес — проверяется обычный DNS (порт 53), имя — DoT, ссылка https://… — DoH. Проверяются вместе с публичными и стоят в таблице первыми; список запоминается.' }),
           h('label', { class: 'chk' }, onlyIn, 'Только свои — без публичных серверов', newTag('dns:only')))),
       h('div', { class: 'row' }, startBtn, newTag('dns:btn'), h('span', { class: 'sm muted grow note-wide', text: 'Настройки DNS роутера страница не меняет — только показывает и советует.' }))),

@@ -264,7 +264,7 @@ async function viewNotify(main) {
   const save = () => guarded(() => api('monitor_set', { tg_token: tgToken.value || '••••', tg_chat: tgChat.value, tg_iface: iface.value, tg_proxy: proxy.value, tg_via: via.value }));
   // «Найти»: роутер сам спрашивает у Telegram, кто недавно писал боту, — ID чата не нужно узнавать на стороне
   const TG_TYPE = { private: 'личный чат', group: 'группа', supergroup: 'группа', channel: 'канал' };
-  const found = h('div', { class: 'stack', style: 'gap:6px', hidden: true });
+  const found = h('div', { class: 'stack items', hidden: true });
   const findChats = async () => {
     if (!await save()) return;
     found.hidden = false;
@@ -301,7 +301,7 @@ async function viewNotify(main) {
         h('p', { class: 'hint', text: 'Если Telegram у провайдера закрыт и проверочное сообщение не уходит, отправляйте через туннель или прокси.' })),
       viaIface, viaProxy,
       h('div', { class: 'frow' }, h('label', { class: 'lbl', for: 'tg-chat', text: 'ID чата' }),
-        h('div', { class: 'stack', style: 'gap:8px' },
+        h('div', { class: 'stack items' },
           h('div', { class: 'row' }, tgChat, btn('Найти', findChats, '', 'search', { title: 'Показать чаты, из которых боту недавно писали' })),
           found)),
       who,
@@ -423,7 +423,7 @@ async function viewTests(main, r, bare = false) {
   // «as old devices»: smart TVs and set-top boxes often speak only TLS 1.2, and a strategy found over TLS 1.3 may not open
   // the site for them — every probe of the pick then goes over TLS 1.2 (HTTPS only)
   const tls12 = h('input', { type: 'checkbox', id: 't-tls12', checked: r.q.get('tls12') === '1' });   // from the diagnosis: ?tls12=1
-  const tlsRow = h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Устройства' }), h('div', { class: 'stack', style: 'gap:2px' },
+  const tlsRow = h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Устройства' }), h('div', { class: 'stack lines' },
     h('label', { class: 'chk' }, tls12, 'проверять как старые устройства (TLS 1.2)', newTag('pick:tls12')),
     h('span', { class: 'sm muted', text: 'Для смарт-ТВ и приставок, у которых сайт не открывается, хотя на телефоне и компьютере всё работает: многие из них умеют только TLS 1.2, а провайдер разбирает такое приветствие иначе. Тогда и подбор проверяет сайт по TLS 1.2.' })));
   // Подбор одной стратегии для нескольких сайтов (списка): поле «Сайт» меняется на список и сайты из него
@@ -452,7 +452,7 @@ async function viewTests(main, r, bare = false) {
   // Своя стратегия: вставленная из чата или написанная — проверяется первой, конфиг не трогается
   const ownTa = h('textarea', { class: 'input mono', rows: 3, style: 'width:100%;resize:vertical', spellcheck: 'false', autocapitalize: 'off', 'aria-label': 'Свои стратегии',
     placeholder: '--lua-desync=fake:blob=fake_default_tls:tcp_md5:repeats=6 --lua-desync=multisplit:pos=1,midsld' });
-  const ownOut = h('div', { class: 'stack', style: 'gap:6px' });
+  const ownOut = h('div', { class: 'stack items' });
   const ownDet = h('details', { class: 'own-st' }, h('summary', {}, 'вставить стратегию из чата или свою ', newTag('pick:own')), ownTa,
     h('span', { class: 'sm muted', text: 'Вставляйте как есть — кавычки, подписи и переносы уберутся. Каждая строка — отдельная стратегия (до 10); профили через --new тоже разделяются. Проверяются шаги --lua-desync, фильтры и списки чужого профиля не нужны: подбор сам ставит фильтр под сайт. Свои стратегии идут первыми; ваш конфиг и трафик не затрагиваются. Чтобы проверить только их, снимите галочки выше.' }),
     ownOut);
@@ -476,7 +476,7 @@ async function viewTests(main, r, bare = false) {
     return chk.items.map((x) => x.steps);
   }
   const multiRow = h('div', { class: 'frow', hidden: true }, h('span', { class: 'lbl', text: 'Сайты' }),
-    h('div', { class: 'stack', style: 'gap:6px' }, h('div', { class: 'row' }, mList, btn('Другие случайные', () => fillMulti(), 'small', 'refresh')), mHosts, mNote,
+    h('div', { class: 'stack items' }, h('div', { class: 'row' }, mList, btn('Другие случайные', () => fillMulti(), 'small', 'refresh')), mHosts, mNote,
       h('span', { class: 'sm muted', text: 'Сначала каждый сайт открывается без обхода: что открывается и так или закрыто по IP, в подборе не участвует. Потом каждая стратегия проверяется на всех оставшихся сайтах; пять лучших и все свои — перепроверяются по одной. Каталог zapret2 и уточнение здесь не участвуют — на десяти сайтах это заняло бы часы. Обычно 3–8 минут.' })));
   const hostLbl = h('label', { class: 'lbl', for: 't-host', text: 'Сайт' });
   function drawMode() {
@@ -491,7 +491,7 @@ async function viewTests(main, r, bare = false) {
     quicNote.hidden = !isQuic() || multi;
     if (multi && !mHosts.value) fillMulti();
   }
-  const out = h('div', { class: 'stack', style: 'gap:14px' });
+  const out = h('div', { class: 'stack' });
   const startBtn = btn(tab === 'trace' ? 'Запустить трассировку' : 'Запустить тест', start, 'primary', 'play');
   let routeInfo = null;
   let routeLoading = null;
@@ -585,7 +585,7 @@ async function viewTests(main, r, bare = false) {
     });
     // blocks by name: a key each for morph, so a notice that appears at the end does not shift the table
     const NAMES = ['flow', 'dnspin', 'baseline', 'advice', 'best', 'community', 'slow', 'none', 'refine', 'failed', 'parallel', 'table'];
-    return h('div', { class: 'stack', style: 'gap:14px' }, [
+    return h('div', { class: 'stack' }, [
       flow(s, running, res, best),
       dnsPinNote(s.dns_pin, baseline),
       baseline && !(baseline.ok && s.dns_pin) ? (baseline.ok ? (s.proto === 'quic' ? notice('info', 'Без обхода по QUIC сайт отвечает', `Ответ за ${baseline.ms} мс — QUIC этого сайта не режут, стратегия не нужна.`)
@@ -687,15 +687,15 @@ async function viewTests(main, r, bare = false) {
     const pre = h('pre', { class: 'box', style: 'max-height:60vh' });
     const draw = () => drawLog(pre, work.filter((l) => !q || l.toLowerCase().includes(q)));
     draw();
-    return h('div', { class: 'stack', style: 'gap:14px' },
+    return h('div', { class: 'stack' },
       s.proto === 'quic'
         ? (s.result.ok ? notice('ok', `Ответил по QUIC через текущую конфигурацию: ${s.result.ms} мс`) : notice('bad', 'Не ответил по QUIC через текущую конфигурацию: ' + s.result.reason, 'Сам сайт при этом может открываться: браузер ждёт ответа по QUIC и потом переходит на обычное соединение.'))
         : s.result.ok ? notice('ok', `Открылся через текущую конфигурацию: HTTP ${s.result.code}, ${s.result.ms} мс`) : notice('bad', 'Не открылся через текущую конфигурацию: ' + s.result.reason),
       panel('Что произошло', null,
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Имя сайта' }), h('span', { class: 'mono', text: hostname || 'не определено (нет SNI/Host)' })),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Профиль' }), profile ? h('a', { href: `#/settings/p${profile}`, text: `#${profile} ${p ? profName(p) : ''}` }) : h('span', { text: 'ни один — соединение прошло без обработки' })),
-        actions.length ? h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Действия' }), h('ol', { class: 'sm mono', style: 'margin:0;padding-left:18px;display:grid;gap:2px' }, actions.map((a) => h('li', { text: a })))) : null,
-        warnings.length ? h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Предупреждения' }), h('div', { class: 'stack', style: 'gap:4px' }, warnings.map((w) => h('div', { class: 'help-iss warning' }, levelIcon('warning'), h('span', { class: 'mono sm', text: w }))))) : null),
+        actions.length ? h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Действия' }), h('ol', { class: 'sm mono', style: 'margin:0;padding-left:18px;display:grid;gap:var(--sp-1)' }, actions.map((a) => h('li', { text: a })))) : null,
+        warnings.length ? h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Предупреждения' }), h('div', { class: 'stack items' }, warnings.map((w) => h('div', { class: 'help-iss warning' }, levelIcon('warning'), h('span', { class: 'mono sm', text: w }))))) : null),
       panel('Журнал обработки', h('span', { class: 'row', style: 'gap:8px' }, h('span', { class: 'sm muted num', text: plural(work.length, 'строка', 'строки', 'строк') }), copyBtn(() => preText(pre))),
         h('input', { class: 'input', placeholder: 'Фильтр', 'aria-label': 'Фильтр журнала', oninput: (e) => { q = e.target.value.toLowerCase(); draw(); } }), pre,
         h('details', {}, h('summary', { text: `запуск nfqws2 (${setup.length} строк)` }), (() => { const p = h('pre', { class: 'box', style: 'max-height:40vh' }); drawLog(p, setup); return copyBox(p); })())));
@@ -742,7 +742,7 @@ async function viewTests(main, r, bare = false) {
     const hosts = s.hosts || [];
     const M = hosts.length;
     const skipped = (s.sites || []).filter((r) => r.skip);
-    const sitesBox = (s.sites || []).length ? h('div', { class: 'stack', style: 'gap:4px' },
+    const sitesBox = (s.sites || []).length ? h('div', { class: 'stack lines' },
       h('div', { class: 'sm' }, h('b', { text: `Подбор для ${plural(M, 'сайта', 'сайтов', 'сайтов')}: ` }), h('span', { class: 'mono', style: 'white-space:normal;overflow-wrap:anywhere', text: hosts.join(', ') || '—' }), s.list ? h('span', { class: 'muted', text: ` (из ${s.list.name})` }) : null, s.tls12 ? h('span', { class: 'muted', text: ' · по TLS 1.2' }) : null),
       skipped.length ? h('div', { class: 'sm muted' }, 'Не участвуют: ', skipped.map((r, i) => [i ? '; ' : '', h('span', { class: 'mono', text: r.host }), ' — ' + r.skip])) : null,
       pinnedNote(s.sites)) : null;
@@ -776,7 +776,7 @@ async function viewTests(main, r, bare = false) {
         h('td', { class: 'num', text: x.ms ? x.ms + ' мс' : '—' }),
         h('td', {}, x.confirmed && x.opened ? actions(x, false) : null));
     });
-    return h('div', { class: 'stack', style: 'gap:14px' }, panel(null, null, sitesBox), verdict,
+    return h('div', { class: 'stack' }, panel(null, null, sitesBox), verdict,
       panel(`Результаты: ${s.candidates || res.length} стратегий на ${plural(M, 'сайте', 'сайтах', 'сайтах')}`, h('span', { class: 'sm muted', text: `${s.repeats} повт. · ${s.finished - s.started >= 90 ? Math.round((s.finished - s.started) / 60) + ' мин' : (s.finished - s.started) + ' с'}` }),
         rows.length ? h('div', { class: 'scroll' }, h('table', { class: 'tbl' },
           h('thead', {}, h('tr', {}, h('th'), h('th', { class: 'wide', text: 'Стратегия' }), h('th', { text: 'Откуда' }), h('th', { text: 'Открыла' }), h('th', { class: 'num', text: 'Время' }), h('th'))),
@@ -992,12 +992,12 @@ async function viewTests(main, r, bare = false) {
           portsLbl,
           h('label', { class: 'chk', title: 'Стратегии из истории подборов: сначала работавшие для этого сайта, затем до пяти помогавших другим сайтам' }, setHist, 'что работало раньше'))),
         ownRow,
-        oneRow(h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Каталог zapret2' }), h('div', { class: 'stack', style: 'gap:2px' },
+        oneRow(h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Каталог zapret2' }), h('div', { class: 'stack lines' },
           h('div', { class: 'row', style: 'min-width:0' }, catSel, newTag('pick:catalog')),
           h('span', { class: 'sm muted', text: 'Те же функции, позиции разреза и способы испортить фейк, что перебирает blockcheck2 из zapret2. Большой набор проверяется параллельно, до 15 стратегий сразу (на роутере со 128 МБ — по 5, чтобы он не тормозил); лучшие находки потом перепроверяются по одной.' })))),
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Повторов' }), h('div', { class: 'row' }, repeats, h('span', { class: 'sm muted', text: 'Стратегия засчитывается, если сайт открылся каждый раз.' }))),
         tlsRow,
-        oneRow(h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Уточнение' }), h('div', { class: 'stack', style: 'gap:2px' },
+        oneRow(h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Уточнение' }), h('div', { class: 'stack lines' },
           h('label', { class: 'chk' }, refine, 'искать вариант полегче, даже если рабочая стратегия найдена'),
           h('span', { class: 'sm muted', text: 'Если рабочих стратегий нет, подбор сам пробует довести лучшую: меняет число фейков (до 20), способ их порчи и имя в фейке. Это ещё 2–5 минут.' }))))] :
         h('p', { class: 'sm muted', text: 'Трассировка открывает сайт через копию текущей конфигурации с подробным журналом nfqws2 — видно, какой профиль сработал и что сделали стратегии.' }),

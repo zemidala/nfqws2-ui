@@ -171,11 +171,11 @@ function remotePanel(data) {
         if (r) { r.error ? toast('Не отправлено: ' + r.error, { err: true }) : toast(r.busy ? 'Отправка уже идёт' : `Отправлено снимков: ${r.sent}`); route(); }
       }, '', null, { disabled: !R.on })),
     h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Ключ роутера' }),
-      R.pub ? h('div', { class: 'stack', style: 'gap:6px' },
+      R.pub ? h('div', { class: 'stack items' },
         h('code', { class: 'sm mono', style: 'overflow-wrap:anywhere', text: R.pub }),
         // когда всё работает, команда для NAS больше не нужна — свёрнута
         R.setup ? h('details', { open: !(R.on && st.ok && !st.error) }, h('summary', { class: 'sm', text: 'Команда для NAS — выполнить один раз под этим пользователем (по ssh): кладёт скрипт приёма снимков и разрешает ключ роутера только для него' }),
-          h('textarea', { class: 'input mono', rows: 6, readonly: true, style: 'width:100%;resize:vertical;font-size:var(--fs-xs);margin-top:6px', text: R.setup }),
+          h('textarea', { class: 'input mono', rows: 6, readonly: true, style: 'width:100%;resize:vertical;font-size:var(--fs-xs)', text: R.setup }),
           h('div', { class: 'row' }, btn('Копировать команду', () => copyText(R.setup), 'small', 'copy')))
           : h('p', { class: 'sm muted', text: 'Укажите папку на NAS и сохраните — здесь появится команда для NAS.' }))
         : btn('Создать ключ роутера', async () => { if (await guarded(() => api('remote_key'), 'Ключ создан')) route(); }, '', 'plus', { disabled: !R.tool })));

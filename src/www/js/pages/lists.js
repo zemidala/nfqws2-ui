@@ -7,7 +7,7 @@
 async function viewSites(main, r) {
   if (r.arg === '~dups') {
     const nav = h('nav', { class: 'nav lnav', 'aria-label': 'Списки' });
-    const content = h('div', { class: 'stack', style: 'gap:14px' });
+    const content = h('div', { class: 'stack' });
     main.append(h('div', { class: 'vh' }, h('h1', { text: 'Списки' })), h('div', { class: 'split lists' }, nav, content));
     drawListNav(nav, '~dups');
     return viewDups(content, r);
@@ -15,7 +15,7 @@ async function viewSites(main, r) {
   const lists = S.state.lists;
   const name = r.arg || (lists.find((l) => l.name === 'user.list') ? 'user.list' : lists[0]?.name);
   const nav = h('nav', { class: 'nav lnav', 'aria-label': 'Списки' });
-  const content = h('div', { class: 'stack', style: 'gap:14px' });
+  const content = h('div', { class: 'stack' });
   main.append(h('div', { class: 'vh' }, h('h1', { text: 'Списки' })), h('div', { class: 'split lists' }, nav, content));
   drawListNav(nav, name);
   if (name) await drawList(content, name);
@@ -250,7 +250,7 @@ async function drawList(content, name) {
   const moreItem = (label, fn, attrs = {}) => h('button', { type: 'button', role: 'menuitem', text: label, onclick: () => { moreList.hidden = true; fn(); }, ...attrs });
   // недоступный пункт — серый, причина прямо в нём: подсказку при наведении на телефоне не увидеть
   const offItem = (label, why) => h('button', { type: 'button', role: 'menuitem', disabled: true },
-    h('span', { class: 'stack', style: 'gap:2px' }, label, h('span', { class: 'sm faint', style: 'white-space:normal', text: why })));
+    h('span', { class: 'stack lines' }, label, h('span', { class: 'sm faint', style: 'white-space:normal', text: why })));
   const STOCK_WHY = 'Стандартный список nfqws2-keenetic: на него ссылается стандартный конфиг, без файла nfqws2 не запустится. Очистить можно';
   moreList.append(meta.stock ? offItem('Переименовать', 'Стандартный список — сделайте копию под новым именем') : moreItem('Переименовать', () => renameList()),
     moreItem('Сделать копию', () => copyList()),
@@ -299,7 +299,7 @@ async function drawList(content, name) {
     await loadState();
     route();
   }
-  const body = h('div', { class: 'stack', style: 'gap:14px' });
+  const body = h('div', { class: 'stack' });
   const panelEl = h('section', { class: 'panel lpanel' }, head, body);
   content.replaceChildren(panelEl);
   const spot = document.createComment('list');

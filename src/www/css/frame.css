@@ -40,5 +40,5 @@ main { padding: 16px; display: grid; grid-template-columns: minmax(0, 1fr); gap:
 .side-in { display: grid; gap: var(--gap); padding: 14px; align-content: start; }
 :root[data-variant="a"] .side-in { padding: 0; background: var(--surface); min-height: 100%; }
 :root[data-variant="a"] .side-in > .blk { border: 0; border-bottom: 1px solid var(--line); border-radius: 0; padding: 14px 16px; box-shadow: none; }
-:root[data-variant="a"] .blk-h h2, :root[data-variant="a"] .nav-h { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+:root[data-variant="a"] .blk-h h2, :root[data-variant="a"] .nav-h { font-size: var(--fs-xs); color: var(--muted); font-weight: 600; }
 :root[data-variant="b"] .side-in { padding: 16px; }

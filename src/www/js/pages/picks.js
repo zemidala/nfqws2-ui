@@ -91,7 +91,7 @@ async function viewPickHistSite(main, host, bare) {
             h('td', { class: 'num nowrap', text: g.ms ? g.ms + ' мс' : '—' }),
             h('td', {}, h('div', { class: 'row acts-row' }, g.full ? shareBtn({ steps: g.steps, ok: g.rep, name: g.name }, { host, proto }) : null, btn('Скопировать', () => copyText(g.steps.join('\n')), 'small', 'copy')))))))) : h('p', { class: 'muted', text: 'Ни одна стратегия этот сайт пока не открыла.' })),
       panel('Запуски', h('span', { class: 'sm muted num', text: String(runs.length) }),
-        h('div', { class: 'stack', style: 'gap:6px' }, runs.map((e) => h('details', { class: 'prun' },
+        h('div', { class: 'stack items' }, runs.map((e) => h('details', { class: 'prun' },
           h('summary', {}, levelIcon(e.baseline?.ok ? 'info' : e.best ? 'ok' : 'error'), h('span', { class: 'date', text: fmtDate(e.ts) }), e.auto ? chip('авто') : null, e.tls12 ? chip('TLS 1.2') : null,
             h('span', { class: 'grow ellipsis', text: pickOutcome(e) }),
             h('span', { class: 'sm muted num nowrap', text: `${e.ok} из ${e.total}` + (e.dur ? ` · ${e.dur} с` : '') })),

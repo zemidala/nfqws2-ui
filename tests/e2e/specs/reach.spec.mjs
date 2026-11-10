@@ -17,6 +17,7 @@ const MAY_MISS = [
   /^page: button «Открывается ли сайт и каким профилем он пойдёт»$/,   // a list line's name itself checks the site
   /^page: button «(Сервер|DoH|DoT|UDP|Подмена \(UDP N\))»$/,   // DNS table header; on a phone the rows are cards
   /^page: button «[A-Z0-9_]+N»$/,            // the config's outline; on a phone the editor is the whole page
+  /^page: button «Забыть»$/,                 // «Обучение»: a phone has it in the opened row (checked below)
 ];
 
 const collect = () => {
@@ -55,6 +56,14 @@ test('всё, что есть на компьютере, есть и на тел
   // what the top bar drops on a phone is in its menu
   await phone.locator('.bottom > button').click();
   await expect(phone.locator('#drawer .drawer-x a', { hasText: 'nfqws2-ui на GitHub' })).toBeVisible();
+  // what «Обучение» leaves out of a phone's row is in the row opened
+  await phone.goto(page.url().replace(/#.*$/, '#/tests/learn'));
+  await phone.waitForFunction(() => S.shownHash === location.hash, null, { timeout: 30_000 });
+  const lex = phone.locator('main button.lex').first();
+  if (await lex.count()) {
+    await lex.click();
+    await expect(phone.locator('main tr.lmore button', { hasText: /^Забыть$/ }).first()).toBeVisible();
+  }
   await phoneCtx.close();
   expect(missing).toEqual([]);
 });

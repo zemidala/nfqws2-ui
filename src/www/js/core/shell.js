@@ -573,7 +573,7 @@ function renderPending() {
         h('b', { text: p.state === 'checking' ? 'nfqws2 перезапущен — проверяю сайты…' : regressed.length ? `После изменений перестали открываться: ${regressed.map((c) => c.host).join(', ')}` : 'nfqws2 перезапущен. Всё работает?' }),
         h('span', { class: 'sm' }, 'Если не подтвердить, через ', timer, ' изменения откатятся сами' + (p.files?.length ? ` (${p.files.join(', ')})` : '') + '.'),
         p.mem_low ? h('span', { class: 'sm', text: `На роутере мало свободной памяти (${p.mem} МБ). Пока идёт проверка, лучше не открывать другие страницы интерфейса.` }) : null,
-        checks.length ? h('div', { class: 'chips', style: 'margin-top:4px' }, checks.map((c) => chip((c.ok ? '✓ ' : '✗ ') + c.host, c.ok ? 'ok' : 'bad'))) : null),
+        checks.length ? h('div', { class: 'chips' }, checks.map((c) => chip((c.ok ? '✓ ' : '✗ ') + c.host, c.ok ? 'ok' : 'bad'))) : null),
       p.state === 'checking' ? h('span', { class: 'spin' }) : null,
       btn('Всё работает — оставить', async () => { if (await guarded(() => api('safe_confirm'), 'Изменения подтверждены')) loadState(); }, regressed.length ? 'small' : 'small primary', 'ok'),
       btn('Откатить сейчас', async () => { if (await guarded(() => api('safe_rollback'), 'Изменения откачены')) { S.conf = null; await loadState(); route(true); } }, regressed.length ? 'small warn' : 'small danger', 'history'))));

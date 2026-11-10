@@ -53,7 +53,7 @@ main { container: main / inline-size; }   /* at every width: the narrow-table ru
 }
 /* Чужой конфиг: карточки со счётом */
 .cfg-card { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 6px 16px; align-items: center; border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; }
-.cfg-card.best { border-color: var(--ok); box-shadow: inset 4px 0 0 var(--ok); }
+.cfg-card.best { border-color: var(--ok); }
 .cfg-act { flex-wrap: nowrap; gap: 8px; }
 .cfg-score { display: grid; justify-items: end; gap: 3px; min-width: 84px; }
 .cfg-score b { font-size: var(--fs-lg); font-weight: 500; font-variant-numeric: tabular-nums; }

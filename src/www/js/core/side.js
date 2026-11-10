@@ -171,7 +171,7 @@ function stopNote(sp) {
       : sp.kind === 'manual' ? h('a', { class: 'btn small', href: PAGES.log[0] }, 'Журнал') : null;
   return h('div', { class: 'notice bad' }, icon('bad'), h('div', { class: 'grow' },
     h('b', { text: 'Почему не работает' }), h('div', { class: 't', text: sp.text }),
-    sp.kind !== 'conf' && sp.log?.length ? h('pre', { class: 'box sm', style: 'max-height:120px;margin-top:6px', text: sp.log.join('\n') }) : null),
+    sp.kind !== 'conf' && sp.log?.length ? h('pre', { class: 'box sm', style: 'max-height:120px;margin-top:var(--sp-2)', text: sp.log.join('\n') }) : null),
     act ? h('div', { class: 'notice-actions' }, act) : null);
 }
 
@@ -368,7 +368,7 @@ function renderSideProblems(el) {
       h('div', { class: 'problem' }, levelIcon(x.level),
         h('div', { class: 'item-main' },
           h('a', { href: x.href, class: 'problem-link' }, h('b', { text: x.title }), x.code ? h('code', { class: 'ellipsis', text: x.code }) : null, h('span', { class: 'sm', text: x.text })),
-          x.fix ? h('div', { style: 'margin-top:4px' }, x.fix) : null)))) : h('div', { class: 'row sm' }, levelIcon('ok'), 'Проблем не найдено'),
+          x.fix ? h('div', { class: 'row' }, x.fix) : null)))) : h('div', { class: 'row sm' }, levelIcon('ok'), 'Проблем не найдено'),
     items.length > LIMIT && !el.dataset.all ? btn(`Показать все (${items.length})`, () => { el.dataset.all = '1'; renderSideProblems(el); }, 'small ghost') : null);
 }
 

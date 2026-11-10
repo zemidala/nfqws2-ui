@@ -11,7 +11,7 @@ async function viewCfg(main) {
   const mon = (S.state.monitor?.sites || []).map((x) => x.host);
   const sites = h('input', { class: 'input mono grow', value: mon.join(', '), placeholder: 'сайты через запятую, например rutracker.org, youtube.com', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Сайты для проверки' });
   const chips = h('div', { class: 'row' });
-  const out = h('div', { class: 'stack', style: 'gap:14px' }, skel(1, 4));
+  const out = h('div', { class: 'stack' }, skel(1, 4));
   const startBtn = btn('Проверить', start, 'primary', 'play');
   const withMine = h('input', { type: 'checkbox', id: 'cfg-mine', checked: true });
   let last = null;
@@ -68,7 +68,7 @@ async function viewCfg(main) {
           btn('Из файла', () => fileInput.click(), 'small', 'upload', { title: 'Файл .conf или .txt с компьютера или телефона, можно несколько' })), fileInput),
       chips,
       h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Сайты' }), sites),
-      h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Сравнение' }), h('div', { class: 'stack', style: 'gap:2px' },
+      h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Сравнение' }), h('div', { class: 'stack lines' },
         h('label', { class: 'chk' }, withMine, 'проверить и текущий конфиг', newTag('cfg:mine')),
         h('span', { class: 'sm muted', text: 'Чтобы видеть, лучше или хуже ваш. Без него проверка короче на один конфиг, но сравнения не будет.' }))),
       h('div', { class: 'row' }, startBtn, h('span', { class: 'sm muted grow note-wide', text: 'Каждый сайт — до трёх раз. Обычно 1–3 минуты на конфиг.' }))),
@@ -115,7 +115,7 @@ async function viewCfg(main) {
       const tag = c.mine || c.skip || !mine || mine.skip ? null
         : c.opened > mine.opened ? h('span', { class: 'chip ok', text: 'лучше вашего' }) : c.opened === mine.opened ? h('span', { class: 'chip', text: 'как ваш' }) : h('span', { class: 'chip bad', text: 'хуже вашего' });
       return h('div', { class: 'cfg-card' + (tag && c.opened > mine.opened ? ' best' : ''), 'data-key': (c.mine ? 'mine:' : 'cfg:') + c.name },
-        h('div', { class: 'stack', style: 'gap:2px;min-width:0' },
+        h('div', { class: 'stack lines' },
           h('div', { class: 'row', style: 'gap:8px' }, h('b', { text: c.name }), tag),
           c.skip ? h('div', { class: 'sm', style: 'color:var(--warn)', text: c.skip }) : [
             // что не открылось: то, что хуже вашего, — отдельной красной строкой; общее с вашим — серым
@@ -148,7 +148,7 @@ async function viewCfg(main) {
         s.current ? h('p', { class: 'sm muted', text: 'Сейчас: ' + s.current }) : null) : null, 'run'),
       keyed(all.length ? panel('Итог', h('span', { class: 'row' }, h('span', { class: 'sm muted', text: (s.finished ? fmtDate(s.finished) + ' · ' : '') + plural(total, 'сайт', 'сайта', 'сайтов') }),
         btn(detail ? 'Скрыть таблицу' : 'Подробно по сайтам', () => { detail = !detail; draw(last); }, 'small ghost')),
-      h('div', { class: 'stack', style: 'gap:10px' }, ...theirs.map(card), mine ? card(mine) : null),
+      h('div', { class: 'stack' }, ...theirs.map(card), mine ? card(mine) : null),
       detail ? table() : null,
       h('p', { class: 'sm faint', text: 'Сайт считается открытым, если открылся каждый раз. «Применить» ставит конфиг целиком: снимок, перезапуск с проверкой мониторинга и откат, если сайты перестанут открываться или вы не подтвердите за 3 минуты. «Профили…» — взять из конфига отдельный профиль, остальное у вас не меняется.', 'data-key': 'note' })) : null, 'result')]);
   }

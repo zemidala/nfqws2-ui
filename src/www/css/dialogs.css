@@ -238,10 +238,10 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
 
 /* ---------- подсветка журналов ---------- */
 pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family: var(--mono); font-size: var(--fs-xs); --lh: 1.55; }
-.logv .lg { white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 12px 0 10px; border-left: 3px solid transparent; }
+.logv .lg { white-space: pre-wrap; overflow-wrap: anywhere; padding: 0 12px 0 13px; }   /* error lines are told by their fill, no stripe down the side */
 .logv .lg:hover { background: var(--soft); }
-.logv .lg-err-line { background: var(--bad-soft); border-left-color: var(--bad); }
-.logv .lg-warn-line { background: var(--warn-soft); border-left-color: var(--warn); }
+.logv .lg-err-line { background: var(--bad-soft); }
+.logv .lg-warn-line { background: var(--warn-soft); }
 .lg-time { color: var(--faint); }
 .lg-lvl { color: var(--muted); }
 .lg-proc { color: var(--accent-ink); font-weight: 600; }
@@ -276,7 +276,7 @@ pre.logv { white-space: normal; word-break: normal; padding: 6px 0; font-family:
 .md .copybox > pre.box { margin: 0; }
 .codewrap { display: inline-flex; align-items: center; gap: 2px; max-width: 100%; min-width: 0; vertical-align: middle; }
 .codewrap > code { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.md blockquote { margin: 8px 0; padding: 8px 12px; border-left: 3px solid var(--warn); background: var(--warn-soft); border-radius: 0 8px 8px 0; }
+.md blockquote { margin: 8px 0; padding: 8px 12px; background: var(--warn-soft); border-radius: var(--radius); }
 .md table { margin: 8px 0; }
 /* phone: a two-column help table keeps its first column readable; long paths in the second one break instead */
 @media (max-width: 599px) {

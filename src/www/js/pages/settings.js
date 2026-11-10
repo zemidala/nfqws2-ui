@@ -7,7 +7,7 @@
 async function viewSettings(main, r) {
   await Promise.all([loadCatalog(), loadConf()]);
   const pane = r.arg || 'p' + (S.state.conf_profiles.find((p) => profIssues(p).some((x) => x.level === 'error'))?.index || 1);
-  const content = h('div', { class: 'stack', style: 'gap:14px' });
+  const content = h('div', { class: 'stack' });
   const m = pane.match(/^p(\d+)$/);
   if (m) {
     // «Профили»: слева список профилей, справа выбранный

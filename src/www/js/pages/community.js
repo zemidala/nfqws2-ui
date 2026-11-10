@@ -178,7 +178,7 @@ const strategyLabel = (x) => x.name || x.steps.map((t) => t.replace('--lua-desyn
 
 async function viewCommunity(main) {
   const site = h('input', { class: 'input mono grow', placeholder: 'сайт для проверки, например rutracker.org', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Сайт для проверки', style: 'max-width:320px' });
-  const body = h('div', { class: 'stack', style: 'gap:14px' }, spinner('Загружаю базу стратегий…'));
+  const body = h('div', { class: 'stack' }, spinner('Загружаю базу стратегий…'));
   main.append(h('div', { class: 'vh' }, h('h1', { text: 'Стратегии сообщества' })), body);
   const host = () => site.value.trim().replace(/^[a-z]+:\/\//i, '').replace(/[/?#].*$/, '');
   // проверка — обычным подбором, только по выбранному: отдельный nfqws2, трафик не затрагивается
@@ -225,7 +225,7 @@ async function viewCommunity(main) {
       d.asn && !d.error && !d.items.length ? panel(null, null, h('p', { class: 'muted', text: `Для AS${d.asn} в базе пока ничего нет${d.total ? ` (всего в базе ${plural(d.total, 'стратегия', 'стратегии', 'стратегий')})` : ''}. Станьте первым: после удачного подбора нажмите «Поделиться».` })) : null,
       tls.length ? panel('HTTPS (TLS)', h('span', { class: 'sm muted num', text: plural(tls.length, 'стратегия', 'стратегии', 'стратегий') }), table(tls)) : null,
       http.length ? panel('HTTP', h('span', { class: 'sm muted num', text: plural(http.length, 'стратегия', 'стратегии', 'стратегий') }), table(http)) : null,
-      panel('Как это устроено', null, h('ul', { class: 'sm', style: 'margin:0;padding-left:18px;display:grid;gap:4px' },
+      panel('Как это устроено', null, h('ul', { class: 'sm', style: 'margin:0;padding-left:18px;display:grid;gap:var(--sp-1)' },
         h('li', { text: 'DPI у провайдеров разный, поэтому стратегии собраны по номеру AS провайдера: здесь только те, что сработали у абонентов вашего.' }),
         h('li', { text: 'Подбор пробует их вместе с остальными (галочка «стратегии сообщества») — и автоподбор при поломке тоже. Применяется только то, что открыло сайт на вашем роутере.' }),
         h('li', { text: 'Поделиться: после подбора у стратегии, открывшей сайт каждый раз, — кнопка «Поделиться» (в результатах и в «Истории подборов»). У стратегии из базы, которая сработала и у вас, — «Подтвердить», которая не сработала, — «Не сработала».' + (sh?.relay ? ' Аккаунт GitHub не нужен: роутер отправляет сам, а новая стратегия попадает в подбор у других после второго подтверждения.' : '') }),

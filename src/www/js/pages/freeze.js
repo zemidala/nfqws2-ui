@@ -8,7 +8,7 @@
 async function viewFreeze(main) {
   const sites = h('input', { class: 'input mono grow', placeholder: 'king.hr, 203.0.113.5:8443 — через запятую, до трёх (необязательно)', autocapitalize: 'off', spellcheck: 'false', 'aria-label': 'Свои сайты и адреса' });
   const only = h('input', { type: 'checkbox' });
-  const out = h('div', { class: 'stack', style: 'gap:14px' }, skel(1, 4));
+  const out = h('div', { class: 'stack' }, skel(1, 4));
   const startBtn = btn('Запустить пробу', start, 'primary', 'play');
   main.append(
     h('div', { class: 'vh' }, h('h1', { text: 'Обрыв на 16 КБ' })),
@@ -16,7 +16,7 @@ async function viewFreeze(main) {
       h('p', { text: 'Многие провайдеры пропускают начало соединения с зарубежными хостингами (Hetzner, OVH, Linode и др.) и замораживают его после 16–20 КБ: сайт начинает открываться и зависает. Обычные стратегии тут не помогают. Помогает фейк с именем сайта, который провайдер не трогает, — и подходящее имя обычно одно для всей сети хостинга, а не для отдельного сайта.' }),
       h('p', { class: 'sm muted', text: 'Проба по очереди открывает опорные адреса в крупных сетях без обхода, а где есть обрыв — подбирает имя для фейка. Найденное ставится одним профилем на все адреса сети (список по ASN обновляется сам раз в сутки).' }),
       h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Свои сайты и адреса' }),
-        h('div', { class: 'stack', style: 'gap:6px' }, h('div', { class: 'row' }, sites, newTag('frz:ip')),
+        h('div', { class: 'stack items' }, h('div', { class: 'row' }, sites, newTag('frz:ip')),
           h('span', { class: 'sm muted', text: 'Адрес — IPv4, можно с портом (по умолчанию 443): например, свой VPS. Проба покажет, соединяется ли он вообще и замирает ли на объёме.' }),
           h('label', { class: 'chk' }, only, 'Только свои — без опорных адресов', newTag('frz:only')))),
       h('div', { class: 'row' }, startBtn, h('span', { class: 'sm muted grow note-wide', text: 'Занимает 2–10 минут. Работает отдельный nfqws2 на проверочных соединениях роутера — ваш трафик не затрагивается.' }))),

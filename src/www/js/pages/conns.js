@@ -5,7 +5,7 @@
 // ============ Device connections: what a program on a home device talks to, and whether answers come back ============
 
 async function viewConns(main) {
-  const out = h('div', { class: 'stack', style: 'gap:14px' });
+  const out = h('div', { class: 'stack' });
   // the chosen length and device order are kept in this browser: a page switch or a reload does not reset them
   const KEY = 'nfqws-ui-conns';
   let prefs = {};

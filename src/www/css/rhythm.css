@@ -1,10 +1,82 @@
-/* Interface styles: one spacing rhythm, compact on a phone. Loaded by index.html in a fixed order (see the list there) — the order matters. */
+/* Interface styles: one spacing grid, the same in every style. Loaded by index.html in a fixed order (see the list there) — the order matters. */
 
-/* ---------- one spacing rhythm, compact on a phone ----------
-   related lines (caption and value, command and its note) 2–4 px; items in a block 8–14 px; blocks 14 px.
-   :root ×3 — above every style's own paddings and margins */
+/* ---------- one spacing grid: four steps, never other numbers ----------
+   4  — lines of one item (a name and its grey line under it, a label over its field on a phone);
+   8  — an item and its caption or explanation, the choices of one field, a fold's title over its content;
+   16 — neighbours in a panel, a panel's padding;
+   24 — panels, and the page heading over them.
+   A container spaces its parts with gap; a caption pulls itself up to 8 from its container's 16.
+   Lists of choices are .stack.items (8), lines of one item .stack.lines (4) — no gap in the markup.
+   :root ×3 — above every style's own paddings, margins and gaps */
+:root { --sp-1: 4px; --sp-2: 8px; --sp-3: 16px; --sp-4: 24px; }
+
+/* panels and the page heading: 24 (main itself is a grid: its parts take its gap, no margins of their own) */
+:root:root:root main { row-gap: var(--sp-4); }
+:root:root:root main > * { margin-block: 0; }
+:root:root:root main > .vh + p { margin-top: calc(var(--sp-2) - var(--sp-4)); }
+:root:root:root :is(.mwrap, .mcol) { gap: var(--sp-4); }
+:root:root:root :is(.mcol, .mwrap) > :is(.panel, .blk, .notice) { margin-block: 0; }
+/* an empty stack (a place for what comes later) takes no room: as a part of a grid it doubled the gap */
+:root:root:root :is(main, .modal) .stack:empty { display: none; }
+/* panels side by side or in pairs */
+:root:root:root :is(.cards2, .ov-pair, .ov-tiles, .ov-groups, .two) { gap: var(--sp-4); }
+/* the overview's blocks in columns (no gap there): 24 under each, 24 between the columns */
+:root:root:root .ov-masonry { column-gap: var(--sp-4); }
+:root:root:root .ov-masonry > .blk { margin-bottom: var(--sp-4); }
+@container main (min-width: 1500px) {
+  :root:root:root .ov-tiles .blk, :root:root:root .ov-tiles > .tiles { margin-bottom: var(--sp-4); }
+}
+/* panels wherever they stand (a page may hold them in a .stack, not in its column) */
+:root:root:root :is(main, .modal) :is(.stack, .mcol, .mwrap):has(> :is(.panel, .blk)) { row-gap: var(--sp-4); }
+/* the page's lead line under its heading: 8 below the heading, the panels 24 below it */
+:root:root:root :is(main, .modal) :is(.mcol, .stack) > .vh + p { margin: calc(var(--sp-2) - var(--sp-4)) 0 0; }
+:root:root:root :is(main, .modal) .stack:not(:has(> :is(.panel, .blk))) > .vh + p { margin-top: calc(var(--sp-2) - var(--sp-3)); }
+
+/* neighbours in a panel: one gap, no margins of their own */
+:root:root:root :is(main, .modal) :is(.panel, .blk) { row-gap: var(--sp-3); }
+:root:root:root :is(main, .modal) :is(.panel, .blk) > * { margin-block: 0; }
+:root:root:root :is(main, .modal) .stack { row-gap: var(--sp-3); }
+:root:root:root :is(main, .modal) .stack.items { row-gap: var(--sp-2); }
+:root:root:root :is(main, .modal) .stack.lines { row-gap: var(--sp-1); }
+:root:root:root :is(main, .modal) .frow + .frow { margin-top: 0; }
+/* the profile editor: groups of fields 16 apart (and 16 on each side of the line between them), a step's lines 8 */
+:root:root:root :is(main, .modal) .group { row-gap: var(--sp-3); }
+:root:root:root :is(main, .modal) .group + .group { padding-top: var(--sp-3); }
+:root:root:root :is(main, .modal) .step-main { row-gap: var(--sp-2); }
+:root:root:root :is(main, .modal) .params { row-gap: var(--sp-2); }   /* its parameters wrap into lines 8 apart */
+/* a list's head: its name row and the action rows under it, 8 */
+:root:root:root :is(main, .modal) .lhead { row-gap: var(--sp-2); }
+
+/* an item and its caption or explanation: 8 */
+:root:root:root :is(main, .modal) .frow { row-gap: var(--sp-2); }
+:root:root:root :is(main, .modal) .frow > :is(.hint, .sm.muted) { margin-top: 0; }
+:root:root:root :is(main, .modal) :is(.panel, .blk, .stack:not(.items, .lines)) > :is(label.chk, .swl, .row, .frow, .stack, .input, textarea, .dd-btn, div:not([class])) + :is(.sm.muted, .hint, p.muted) { margin-top: calc(var(--sp-2) - var(--sp-3)); }
+:root:root:root :is(main, .modal) :is(.panel-h, .blk-h) + :is(p, .sm.muted) { margin-top: calc(var(--sp-2) - var(--sp-3)); }
+/* a caption is a block of its own: the distance is counted from its line, not from its letters */
+:root:root:root :is(main, .modal) :is(.panel, .blk, .stack, details) > .sm.muted { display: block; }
+/* a text area on a line of its own kept a descender's room under it (6 px): a block has none */
+:root:root:root :is(main, .modal) textarea.input { display: block; }
+/* the choices of one field (a list of boxes): 8 */
+:root:root:root :is(main, .modal) .pick-sets { row-gap: var(--sp-2); }
+/* a box's explanation under its title (in Z a card): 8, as any caption; a name and its grey line: 4 */
+:root:root:root :is(main, .modal) label.chk span > br + .sm { display: block; margin-top: var(--sp-2); }
+:root:root:root :is(main, .modal) label.chk > span > :is(b, span:not(.tag)) + :is(.sm, span.sm) { display: block; margin-top: var(--sp-1); }
+
+/* a fold's content: the gap of <details> applies in some styles and not in others, so none — the steps are margins:
+   8 under its title and to a caption, 16 else */
+:root:root:root :is(main, .modal) details { row-gap: 0; }
+:root:root:root :is(main, .modal) details > :not(summary) + :not(.sm.muted, .hint) { margin-top: var(--sp-3); }
+:root:root:root :is(main, .modal) details > :not(summary) ~ :is(.sm.muted, .hint) { margin-top: var(--sp-2); }   /* ~: a hidden part may stand between */
+:root:root:root :is(main, .modal) details > summary + * { margin-top: var(--sp-2); }
+
+/* «О программе»: the name and its grey line under it, 4 */
+:root:root:root :is(main, .modal) .about-brand h2 + .sm { margin-top: var(--sp-1); }
+/* an item of a list (name, its grey line, its buttons): lines 4 apart, its buttons or chips 8 below */
+:root:root:root :is(main, .modal) .item-main { row-gap: var(--sp-1); }
+:root:root:root :is(main, .modal) .item-main > :is(.row, .chips, pre, div:has(> .btn)) { margin-top: calc(var(--sp-2) - var(--sp-1)); }
+
 /* a heading row that did not fit (markWraps in app.js): heading on the first line, the rest from the left under it */
-:root:root:root .wrapped { row-gap: 6px; }
+:root:root:root .wrapped { row-gap: var(--sp-2); }
 :root:root:root .wrapped > :first-child:is(h1, h2, h3, input.input) { flex: 1 1 100%; }
 :root:root:root .wrapped > :not(:first-child) { margin-left: 0; }
 /* in a wrapped heading row the note («0 Б в памяти», a date, a count) takes its own line under the heading and the
@@ -14,20 +86,16 @@
 /* read-only «label — value» rows: one line, close together */
 :root:root:root .frow.kv { grid-template-columns: 170px minmax(0, 1fr); align-items: baseline; }
 @media (max-width: 599px) {
-  :root:root:root :is(.blk, .panel) { padding: 14px; }
-  /* blocks space their parts with gap: a margin on a part only adds a hole (8–12 px on top of the gap) */
-  :root:root:root :is(.blk, .panel) > :is(p, form, details, .row, .scroll, .notice, .conn-form, .dns-sites) { margin-block: 0; }
-  :root:root:root .frow + .frow { margin-top: 0; }             /* the block's gap is the step between fields */
-  /* caption above its field: 4 px, no field-high caption box (beside the field it was centred on the field) */
-  :root:root:root .frow:not(.kv) { row-gap: 4px; }
-  :root:root:root .frow:not(.kv) > .lbl { min-height: 0; display: block; padding: 0; }
+  :root:root:root :is(.blk, .panel) { padding: var(--sp-3); }
+  /* a label over its field: 4 (one item), the field's explanation 8 below it; no field-high label box */
+  :root:root:root .frow:not(.kv) > .lbl { min-height: 0; display: block; padding: 0; margin-bottom: calc(var(--sp-1) - var(--sp-2)); }
   :root:root:root .mon-tile { padding: 12px 14px; }
   /* the phone table has no history column: the chart switch would change nothing (the timeline keeps it) */
   :root:root:root .mon-viewrow:has(+ * .mon-tbl) > .mon-chartseg,
   :root:root:root .mon-viewrow:has(+ * .mon-tbl) > .mon-chartseg + .tag { display: none; }
   :root:root:root .tbl.mon-tbl td { padding-top: 6px; padding-bottom: 6px; }
   /* table rows as cards: lines 2 px apart, cards 8 px apart */
-  :root:root:root:root .tbl.cardy tr { padding: 10px 12px; margin-bottom: 8px; }
+  :root:root:root:root .tbl.cardy tr { padding: 10px 12px; margin-bottom: var(--sp-2); }
   :root:root:root:root .tbl.cardy td { padding: 2px 0; }
   :root:root:root:root .tbl.cardy td:first-child { padding-bottom: 4px; }
   :root:root:root:root .tbl.cardy td:not([data-th]) { padding-top: 6px; }
@@ -35,7 +103,7 @@
   :root:root:root .help:has(> span.muted:only-child) { display: none; }
   :root:root:root .frow.kv { grid-template-columns: max-content minmax(0, 1fr); column-gap: 14px; }
   :root:root:root .frow.kv > .lbl { white-space: nowrap; }   /* «Описание и помощь» in one line, the value wraps instead */
-  :root:root:root .frow.kv + .frow.kv { margin-top: -6px; }     /* 8 px between «label — value» lines */
+  :root:root:root .frow.kv + .frow.kv { margin-top: calc(var(--sp-2) - var(--sp-3)); }   /* 8 between «label — value» lines */
   /* a switch spans the width in equal parts and never breaks into two lines */
   :root:root:root .seg { display: flex; flex-wrap: nowrap; width: 100%; }
   :root:root:root .seg > button { flex: 1 1 0; min-width: 0; padding: 0 6px; white-space: normal; --lh: 1.15; }

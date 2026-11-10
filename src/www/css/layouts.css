@@ -29,7 +29,7 @@
 @media (min-width: 760px) and (max-width: 1099px) { .repo-link { display: none; } .top-in { gap: 8px; } :root[data-layout="site"] .quick { display: none; } .quick .input { width: 130px; } }
 .mnav { padding: 10px 8px 20px; background: var(--surface); min-height: 100%; }
 .soon { display: flex; align-items: center; gap: 8px; padding: 6px 10px; min-height: 34px; font-size: var(--fs-sm); color: var(--faint); cursor: not-allowed; user-select: none; }
-.tag { margin-left: auto; flex: none; font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .04em; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; line-height: 16px; color: var(--faint); }
+.tag { margin-left: auto; flex: none; font-size: var(--fs-xs); font-weight: 700; border: 1px solid var(--line); border-radius: 4px; padding: 0 5px; line-height: 16px; color: var(--faint); }
 .subtabs { display: flex; gap: 2px; border-bottom: 1px solid var(--line); overflow-x: auto; scrollbar-width: none; }
 .subtabs a, .subtabs .soon { flex: none; padding: 7px 12px; min-height: 0; white-space: nowrap; border-bottom: 2px solid transparent; font-weight: 500; font-size: var(--fs-sm); }
 .subtabs a { color: var(--muted); }
@@ -61,7 +61,7 @@
 .tile { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 12px 14px; display: grid; gap: 2px; color: inherit; box-shadow: var(--shadow); min-width: 0; }
 :root[data-variant="b"] .tile { border-color: transparent; }
 .tile:hover { border-color: var(--accent); }
-.tile small { font-size: var(--fs-xs); text-transform: uppercase; letter-spacing: .08em; color: var(--muted); font-weight: 600; }
+.tile small { font-size: var(--fs-xs); color: var(--muted); font-weight: 600; }
 .tile b { font-size: var(--fs-xl); --lh: 1.2; }
 .tile span { font-size: var(--fs-sm); color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tile.ok b { color: var(--ok); } .tile.bad b { color: var(--bad); } .tile.warn b { color: var(--warn); }
@@ -225,12 +225,11 @@ a.over-row:hover { background: var(--soft); }
 /* DNS servers page */
 .dns-lead { margin: -4px 0 14px; max-width: 860px; }
 .dns-tiles { display: grid; grid-template-columns: repeat(auto-fit, minmax(240px, 1fr)); gap: 12px; }
-.dns-tile { display: grid; align-content: start; gap: 6px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-top: 3px solid var(--ok); border-radius: var(--radius); }
-.dns-tile.bad { border-top-color: var(--bad); } .dns-tile.warn { border-top-color: var(--warn); }
+/* the verdict is told by its words and their colour; no coloured edge on the tile */
+.dns-tile { display: grid; align-content: start; gap: 6px; padding: 14px 16px; background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); }
 .dns-tile .v { font-size: var(--fs-xl); --lh: 1.25; }
 .dns-tile.ok .v { color: var(--ok); } .dns-tile.bad .v { color: var(--bad); } .dns-tile.warn .v { color: var(--warn); }
-/* still being checked: the tile keeps its place, a neutral top line and a spinner instead of the verdict */
-.dns-tile.wait { border-top-color: var(--line); }
+/* still being checked: the tile keeps its place, a spinner instead of the verdict */
 .dns-tile.wait .v { display: flex; align-items: center; gap: 8px; font-weight: 500; }
 .dns-adv.wait h2 { font-weight: 500; }
 .dnsx-step { display: inline-flex; align-items: center; gap: 8px; }
@@ -240,8 +239,7 @@ a.over-row:hover { background: var(--soft); }
 .dns-sites { display: grid; }
 .dns-site { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); }
 .dns-site > .sm { grid-column: 1 / -1; overflow-wrap: anywhere; }
-/* DNS page: one advice block (border by verdict), own DNS rows on top of the table, a caption row before the public ones */
-:root:root main .panel.dns-adv.ok { border-top-color: var(--ok); } :root:root main .panel.dns-adv.bad { border-top-color: var(--bad); }   /* outrank the style's own top line */
+/* DNS page: one advice block, own DNS rows on top of the table, a caption row before the public ones */
 .panel.dns-adv p { margin: 0; }
 .tbl.dnsx-tbl tr.own td { background: var(--soft); } .tbl.dnsx-tbl tr.own td.nm { font-weight: 600; }
 .tbl.dnsx-tbl tr.sep td { padding-top: 6px; padding-bottom: 4px; font-size: var(--fs-xs); color: var(--muted); background: none; }
@@ -254,8 +252,6 @@ details.dns-more-panel > summary { cursor: pointer; color: var(--accent-ink); }
 .dnsx-tile.top { border-color: var(--accent); }
 .dnsx-tile .big { font-size: var(--fs-xl); font-weight: 600; }
 .dnsx-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; }
-.tbl.dnsx-tbl td { vertical-align: middle; }
-:root:root:root .tbl.dnsx-tbl td, :root:root:root .tbl.dnsx-tbl th { padding-top: 7px; padding-bottom: 7px; }
 .tbl.dnsx-tbl td.mono, .tbl.dnsx-tbl td.num { white-space: nowrap; }
 /* the table fits its block at any width, never scrolls sideways: «who answered» is cut with «…» (the whole in the
    tooltip), the address column goes when the block is narrow (the address is in the name's tooltip) */
@@ -379,5 +375,5 @@ details.dns-more-panel > summary { cursor: pointer; color: var(--accent-ink); }
 @media (min-width: 1100px) and (max-width: 1919px) { :root[data-layout="site"] .svc-name { display: none; } }
 
 /* боковое меню: названия групп — заметные заголовки, а не ещё один пункт */
-:root .mnav .nav-h { margin: 12px 2px 4px; padding: 12px 8px 6px; border-top: 1px solid var(--line); font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .09em; color: var(--accent-ink); }
+:root .mnav .nav-h { margin: 12px 2px 4px; padding: 12px 8px 6px; border-top: 1px solid var(--line); font-size: var(--fs-xs); font-weight: 700; color: var(--accent-ink); }
 :root .mnav .nav-h::before { content: ""; width: 3px; height: 12px; border-radius: 2px; background: var(--accent); flex: none; }

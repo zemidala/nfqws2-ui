@@ -21,7 +21,7 @@
   :root[data-navmini]:not([data-simple]) .mlinks { display: none; position: absolute; left: 100%; top: 0; z-index: 60; min-width: 240px; padding: 6px 0; background: var(--surface); border: 1px solid var(--line); border-radius: 0 4px 4px 0; box-shadow: 0 8px 24px rgba(0, 0, 0, .18); }
   :root[data-navmini]:not([data-simple]) .mgrp:hover > .mlinks, :root[data-navmini]:not([data-simple]) .mgrp:focus-within > .mlinks { display: block; }
   :root[data-navmini]:not([data-simple]) .mlinks > a { padding: 7px 16px !important; min-height: 34px; }
-  :root[data-navmini]:not([data-simple]) .mfly-h { display: block; padding: 6px 16px 4px; font-size: var(--fs-xs); font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: var(--accent-ink); }
+  :root[data-navmini]:not([data-simple]) .mfly-h { display: block; padding: 6px 16px 4px; font-size: var(--fs-xs); font-weight: 700; color: var(--accent-ink); }
 }
 /* «Структура» в редакторе спрятана — код на всю ширину */
 :root[data-nooutline] .cfg { grid-template-columns: minmax(0, 1fr); }

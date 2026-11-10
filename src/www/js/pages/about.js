@@ -60,7 +60,7 @@ const LAYOUT_THUMB = {
 
 // «Закреплённые в меню»: the pinned pages in their order — ↑↓ move, «Открепить»; pinning itself is the star in the menu
 function pinsPanel() {
-  const box = h('div', { class: 'stack', style: 'gap:8px' });
+  const box = h('div', { class: 'stack items' });
   const draw = () => {
     const pins = menuPins();
     const move = (i, d) => { const p = [...pins]; [p[i], p[i + d]] = [p[i + d], p[i]]; pinPage(p[i], true, p); draw(); };

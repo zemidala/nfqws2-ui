@@ -76,7 +76,7 @@ input[type="number"].input::-webkit-inner-spin-button, input[type="number"].inpu
 .dd-opts { overflow: auto; min-height: 0; }
 .dd-search { padding: 2px 2px 6px; margin-bottom: 4px; border-bottom: 1px solid var(--line); }
 .dd-q { width: 100%; }
-.dd-g { padding: 8px 10px 3px; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); text-transform: uppercase; letter-spacing: .04em; }
+.dd-g { padding: 8px 10px 3px; font-size: var(--fs-xs); font-weight: 600; color: var(--muted); }
 .dd-o { display: flex; align-items: center; gap: 6px; padding: 7px 12px 7px 8px; border-radius: calc(var(--radius) * .5 + 1px); cursor: pointer; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .dd-o::before { content: ""; width: 14px; flex: none; }
 .dd-o[aria-selected="true"] { color: var(--accent-ink); }
@@ -135,7 +135,8 @@ button.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
 .dev-cnt { font-size: var(--fs-md); color: var(--muted); } .dev-cnt b { color: var(--fg); font-weight: 500; }
 .dev-act { display: flex; align-items: center; gap: 4px; }
 /* sortable header: the whole header text is the button; the arrow shows the column and direction */
-.th-sort { all: unset; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font: inherit; color: inherit; white-space: nowrap; }
+.th-sort { all: unset; display: inline-flex; align-items: center; gap: 4px; cursor: pointer; font: inherit; color: inherit; white-space: nowrap;
+  min-height: 24px; margin-block: -4px; }   /* a finger's room over the 16 px head line («%» alone was 10×18); the head keeps its height */
 .th-sort:hover { color: var(--accent-ink); }
 .th-sort:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 2px; }
 .th-sort svg { width: 14px; height: 14px; flex: none; }
@@ -233,6 +234,11 @@ button.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2p
 .frow { display: grid; grid-template-columns: 170px minmax(0, 1fr); gap: 8px 14px; align-items: start; }
 .frow > .lbl { font-size: var(--fs-sm); color: var(--muted); padding-top: 5px; }
 .frow > .hint { grid-column: 2; font-size: var(--fs-xs); color: var(--faint); margin-top: -4px; }
+/* An explanation (what Z shows as a blue card, zemidala.css): in the other styles slanted, with a thin line on the left —
+   in the plain grey it read as the same text as a box's or a field's own label (local/design/expl-other.html, В) */
+:root:not([data-palette="zd"]) main :is(.panel > p.sm.muted, .stack > label.chk + .sm.muted, .stack > .row + .sm.muted, .frow > .hint:not(.error, .warning, .bad, :empty), label.chk span > br + .sm.muted, .own-st > .sm.muted, .row > .btn + .sm.muted, .dns-more-panel p.sm.muted) {
+  font-style: italic; border-left: 2px solid var(--line); padding-left: 10px;
+  text-box: none; }   /* whole lines: the italic face trimmed to its capitals beside a button was 10.5 / 32.5 px high */
 @media (max-width: 759px) { .frow { grid-template-columns: minmax(0, 1fr); } .frow > .hint { grid-column: 1; } .frow > .lbl { padding-top: 0; } }
 /* a service button while its action runs: the icon turns, the button does not fade like a plain disabled one */
 .btn.busy > svg { animation: spin .8s linear infinite; }
@@ -265,9 +271,20 @@ pre.box { background: var(--code, var(--bg)); border: 1px solid var(--line); bor
 /* separate, not collapse: a collapsed 1 px line is split half and half between the rows, every row came out 0.5 px
    too high (68.5) and the table under the first row stood on half pixels — its lines and fills blurred. The cells
    draw only their bottom line, so it looks the same */
-.tbl { width: 100%; border-collapse: separate; border-spacing: 0; font-size: var(--fs-sm); }
-.tbl th, .tbl td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: middle; }
-.tbl th { color: var(--muted); font-weight: 500; font-size: var(--fs-xs); }
+/* A table is one element in every style (style Z's, the owner's word 2026-11-10): a frame, a soft fill, 13 px rows with
+   10 / 12 px padding and lines, a 12 px grey head. :root ×3 — over each page's own cell rules, as it was in Z */
+.tbl { width: 100%; border-collapse: separate; border-spacing: 0; }
+.tbl th, .tbl td { text-align: left; }
+:root:root:root .tbl { font-size: 13px; line-height: 20px; background: var(--soft); }
+:root:root:root .tbl th { background: var(--soft); padding: 8px 12px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--line); vertical-align: middle; }
+/* top, not middle: a row of uneven height put a middle cell on half a pixel (57 px rows, 0.5 px — blurred) */
+:root:root:root .tbl td { padding: 10px 12px; font-size: 13px; line-height: 20px; border-bottom: 1px solid var(--line); vertical-align: top; }
+:root:root:root .tbl tr:last-child td { border-bottom: 0; }
+/* a box and a confidence bar in a cell: on the line's top, not its middle — middle put them on 0.56 px */
+:root:root:root .tbl td > input[type="checkbox"] { vertical-align: top; }
+:root:root:root .tbl td .lbar { vertical-align: top; margin-top: 7px; }
+:root:root .scroll:has(> table.tbl), :root:root :not(.scroll) > table.tbl { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
+:root:root :not(.scroll) > table.tbl { overflow: hidden; }
 .tbl td.num, .tbl th.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }   /* «680 мс» never splits into two lines */
 .tbl tr:last-child td { border-bottom: 0; }
 .list { display: grid; }

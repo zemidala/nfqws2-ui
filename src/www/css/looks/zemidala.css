@@ -47,22 +47,15 @@
 :root[data-palette="zd"] .mnav a.on { background: var(--k-active); color: var(--fg); font-weight: 400; box-shadow: inset 3px 0 #ff6a14; }
 :root[data-palette="zd"] .mnav .tag.new { background: var(--zd-blue-soft); color: var(--fg); }
 /* K paints table heads and the overview backdrop with the menu colour, so they get their own */
-:root[data-palette="zd"] .tbl th { background: var(--soft); color: var(--muted); }
 :root[data-palette="zd"] .ov { background: transparent; }
 /* K panels are flat and flush with the page; in Z every block is a visible card with room inside */
 :root[data-palette="zd"] main .panel, :root[data-palette="zd"] main .panel + .panel { background: var(--surface); border: 1px solid var(--line); padding: 18px 22px 22px; border-radius: var(--radius); }
 @media (max-width: 479px) { :root[data-palette="zd"] main .panel, :root[data-palette="zd"] main .panel + .panel { padding: 14px 14px 16px; } }
 :root[data-palette="zd"] :is(.blk, .tile) { border: 1px solid var(--line); border-radius: var(--radius); }
-/* no coloured stripe down the side of a block, no spaced capitals; notes (.notice) and explanations are the exceptions,
-   further down */
+/* no coloured stripe down the side of a block, no spaced capitals (now in every style); notes (.notice) and
+   explanations are Z's own, further down */
 :root[data-palette="zd"] .notice.info { background: var(--zd-blue-soft); color: var(--fg); }
 :root[data-palette="zd"] .notice.info > svg { color: var(--zd-blue); }
-:root[data-palette="zd"] .md blockquote { border-left: 0; border-radius: var(--radius); }
-:root[data-palette="zd"] .cfg-card.best { box-shadow: none; }
-:root[data-palette="zd"] .logv .lg { border-left-color: transparent; }
-:root:root:root[data-palette="zd"] :is(.dns-tile, .dns-tile.ok, .dns-tile.bad, .dns-tile.warn) { border-top: 1px solid var(--line); }
-:root:root:root:root[data-palette="zd"] main .panel:is(.dns-adv, .dns-adv.ok, .dns-adv.bad) { border-top: 1px solid var(--line); }
-:root[data-palette="zd"] :is(.blk-h h2, .pill, .tag, .dd-g, .mnav .nav-h, .mfly-h, .tbl th) { text-transform: none; letter-spacing: 0; }
 :root[data-palette="zd"] .blk-h h2 { font-size: var(--fs-md); }
 /* status colours above are for text; small bars need a stronger fill, or a failure hardly differs from a success */
 /* the selected fill as the main button: dark text on the brand orange is APCA Lc 49 of 75 */
@@ -112,7 +105,7 @@
 :root[data-palette="zd"][data-mode="dark"] { --ex-bg: #18203a; --ex-ic: #3d5cf5; }
 @media (prefers-color-scheme: dark) { :root[data-palette="zd"]:not([data-mode="light"]) { --ex-bg: #18203a; --ex-ic: #3d5cf5; } }
 :root:root[data-palette="zd"] main :is(.panel > p.sm.muted, .stack > label.chk + .sm.muted, .stack > .row + .sm.muted, .frow > .hint:not(.error, .warning, .bad, :empty), label.chk span > br + .sm.muted, .own-st > .sm.muted, .row > .btn + .sm.muted, .dns-more-panel p.sm.muted) {
-  display: block; position: relative; margin-top: 0; padding: 10px 12px 10px 42px; border: 0; border-radius: 6px; background: var(--ex-bg);
+  display: block; position: relative; padding: 10px 12px 10px 42px; border: 0; border-radius: 6px; background: var(--ex-bg);
   color: var(--fg); font-size: 13px; line-height: 20px; font-weight: 400;
   text-box: none; }   /* whole lines: trimmed to its capitals next to a button the note was 46.5 px high */
 :root:root[data-palette="zd"] main :is(.panel > p.sm.muted, .stack > label.chk + .sm.muted, .stack > .row + .sm.muted, .frow > .hint:not(.error, .warning, .bad, :empty), label.chk span > br + .sm.muted, .own-st > .sm.muted, .row > .btn + .sm.muted, .dns-more-panel p.sm.muted)::before {
@@ -120,16 +113,14 @@
   font: 700 13px/20px var(--sans); text-align: center; }
 /* a field's explanation goes under its control, in the same column: as a card in a column of its own on the right it
    stretched the label's row and the box fell away from its label (Обрабатывать IPv6 / Отладочный журнал) */
-:root:root:root[data-palette="zd"] .frow > .hint:not(:empty) { grid-column: 1 / -1; grid-row: auto; order: 2; align-self: start; justify-self: stretch; max-width: 560px; margin-top: 4px; }
+:root:root:root[data-palette="zd"] .frow > .hint:not(:empty) { grid-column: 1 / -1; grid-row: auto; order: 2; align-self: start; justify-self: stretch; max-width: 560px; }
 /* the status under «Определить автоматически» in whole lines: trimmed to its capitals it was 10.5 px and put
    everything below on half a pixel */
 :root:root:root[data-palette="zd"] .iface-pick > .row > span { text-box: none; }
 /* the DNS legend: the same card, no icon; it stays a wrapping row of entries with gaps — as a block its entries ran
    into one line with no spaces between them */
 :root[data-palette="zd"] main .dnsx-legend { margin-top: 0; padding: 10px 12px; border: 0; border-radius: 6px; background: var(--ex-bg); color: var(--fg); font-weight: 400; }
-:root[data-palette="zd"] main label.chk span > br:has(+ .sm.muted) { display: none; }
-:root[data-palette="zd"] main label.chk span > br + .sm.muted { margin-top: 4px; }
-:root[data-palette="zd"] .stack:has(> label.chk + .sm.muted) { gap: 4px; }
+:root[data-palette="zd"] main label.chk span > br:has(+ .sm.muted) { display: none; }   /* the card's distance: rhythm.css */
 /* the choice of interfaces: one to a line with room around it, the address at the right edge */
 /* one step, 12 px, between the field, the button row, the list and «другие интерфейсы»; 8 px inside a group (between
    the interfaces, between the button and its status when the status goes under it). The note beside the field spans
@@ -176,20 +167,9 @@
 :root:root:root[data-palette="zd"]:not([data-navmini], [data-simple]) .mnav .mtop > a { padding-left: 10px; color: var(--fg); font-weight: 500; }
 :root:root:root[data-palette="zd"]:not([data-navmini], [data-simple]) .mnav a:hover { color: var(--fg); background: var(--soft); }
 :root:root:root[data-palette="zd"]:not([data-navmini], [data-simple]) .mnav a.on { color: var(--fg); background: var(--soft); font-weight: 400; box-shadow: none; }
-/* every table as the designer's: a frame, a soft fill, 13 px rows 10 px tall padding with lines, a 12 px grey head,
-   status chips as his plates */
-:root:root:root[data-palette="zd"] .tbl { font-size: 13px; line-height: 20px; background: var(--soft); }
-:root:root:root[data-palette="zd"] .tbl th { background: var(--soft); padding: 8px 12px; font-size: 12px; line-height: 16px; font-weight: 600; color: var(--muted); border-bottom: 1px solid var(--line); }
-/* top, not middle: a row of uneven height put a middle cell on half a pixel (57 px rows, 0.5 px — blurred) */
-:root:root:root[data-palette="zd"] .tbl td { padding: 10px 12px; font-size: 13px; line-height: 20px; border-bottom: 1px solid var(--line); vertical-align: top; }
-:root:root:root[data-palette="zd"] .tbl tr:last-child td { border-bottom: 0; }
-/* a box and a confidence bar in a cell: on the line's top, not its middle — middle put them on 0.56 px */
-:root:root:root[data-palette="zd"] .tbl td > input[type="checkbox"] { vertical-align: top; }
-:root:root:root[data-palette="zd"] .tbl td .lbar { vertical-align: top; margin-top: 7px; }
+/* the table itself is one element in every style (components.css); Z keeps only its status chips as plates */
 /* a button alone under a problem's text: a flex row, as a baseline-aligned inline box its line was 26.5 px */
 :root[data-palette="zd"] .item-main > div:has(> .btn) { display: flex; flex-wrap: wrap; gap: 8px; }
-:root:root[data-palette="zd"] .scroll:has(> table.tbl), :root:root[data-palette="zd"] :not(.scroll) > table.tbl { border: 1px solid var(--line); border-radius: var(--radius); background: var(--surface); }
-:root:root[data-palette="zd"] :not(.scroll) > table.tbl { overflow: hidden; }
 :root:root:root[data-palette="zd"] .tbl .chip:is(.ok, .warn, .bad) { font-size: 12px; line-height: 16px; padding: 2px 8px; border-radius: 4px; border: 1px solid; }
 :root:root:root[data-palette="zd"] .tbl .chip.bad { background: rgba(239, 68, 68, .15); color: var(--ag-bad); border-color: rgba(239, 68, 68, .3); }
 :root:root:root[data-palette="zd"] .tbl .chip.warn { background: rgba(245, 158, 11, .15); color: var(--ag-warn); border-color: rgba(245, 158, 11, .3); }
