@@ -13,12 +13,22 @@ function readListLines(string $path): array
   }
   $out = [];
   foreach (@file($src, FILE_IGNORE_NEW_LINES) ?: [] as $l) {
-    $l = trim($l);
-    if ($l !== '' && $l[0] !== '#' && $l[0] !== ';') {
-      $out[] = $l;
+    if (($e = listEntry($l)) !== null) {
+      $out[] = $e;
     }
   }
   return $out;
+}
+
+// A list line as nfqws2 reads it (zapret2 nfq2/hostlist.c, ipset.c): «#», «;» or «/» first is a comment, and of the
+// rest only the first word counts — «1.2.3.4 # office» is the address 1.2.3.4. null: nothing on the line for nfqws2
+function listEntry(string $line): ?string
+{
+  $t = ltrim($line, " \t");
+  if ($t === '' || strpbrk($t[0], "#;/\r") !== false) {
+    return null;
+  }
+  return preg_split('/[ \t\r]/', $t, 2)[0];
 }
 
 // Вид списка по подключению: --ipset → ip, --hostlist → host. Профили передаёт listsInventory, иначе читаем сами

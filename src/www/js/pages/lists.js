@@ -374,7 +374,7 @@ async function drawList(content, name) {
     // замечания к списку — плашкой с кнопкой исправления
     const prNow = S.state.lists.find((l) => l.name === name)?.problems || {};
     const prText = [prNow.error && plural(prNow.error, 'ошибка', 'ошибки', 'ошибок'), prNow.warning && plural(prNow.warning, 'повтор', 'повтора', 'повторов'), prNow.info && plural(prNow.info, 'лишняя запись', 'лишние записи', 'лишних записей')].filter(Boolean).join(', ');
-    const tools = prText ? notice(prNow.error ? 'bad' : 'warn', prText[0].toUpperCase() + prText.slice(1), fixable ? '«*.домен» → «домен», повторы и лишние записи удаляются. Текущая версия сохранится в историю.' : 'Исправьте отмеченные записи вручную.',
+    const tools = prText ? notice(prNow.error ? 'bad' : 'warn', prText[0].toUpperCase() + prText.slice(1), fixable ? '«*.домен» → «домен», повторы и лишние записи удаляются, строки, которые nfqws2 не понимает, становятся комментарием. Текущая версия сохранится в историю.' : 'Исправьте отмеченные записи вручную.',
       fixable ? btn(`Исправить (${fixable})`, async () => {
         const r = await guarded(() => api('list_fix', { name }));
         if (r) { toast(`Исправлено: ${r.fixed}`, { undo: () => undoLast(false) }); await reload(); }

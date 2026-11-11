@@ -60,7 +60,7 @@ function subsRun(?string $only = null): array
 
 function readListLinesFromText(string $text): array
 {
-  return array_values(array_filter(array_map('trim', explode("\n", $text)), fn($l) => $l !== '' && $l[0] !== '#'));
+  return array_values(array_filter(array_map('listEntry', explode("\n", $text)), fn($l) => $l !== null));
 }
 
 // ================= podkop =================

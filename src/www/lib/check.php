@@ -26,10 +26,7 @@ function hostInEntries(string $host, array $entries): ?string
 
 function ipInEntry(string $ipBin, string $entry): bool
 {
-  if (str_contains($entry, '-')) {
-    [$a, $b] = array_map(fn($x) => @inet_pton(trim($x)), explode('-', $entry, 2));
-    return $a !== false && $b !== false && strlen($a) === strlen($ipBin) && $ipBin >= $a && $ipBin <= $b;
-  }
+  // no «a-b» ranges: nfqws2 takes an address or a subnet only (parse_cidr4/6) and skips a range
   [$net, $bits] = array_pad(explode('/', $entry, 2), 2, null);
   $netBin = @inet_pton($net);
   if ($netBin === false || strlen($netBin) !== strlen($ipBin)) {

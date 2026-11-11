@@ -16,6 +16,7 @@ function validCidr(string $s): bool
 }
 
 // Замечания по строкам списка: line — номер строки с 0; fix — чем заменить (строка) или null — удалить
+// A line nfqws2 skips is turned into a comment by the fix: nothing changes for nfqws2 and the line stays in the file
 function lintList(string $name, string $content): array
 {
   $isIp = listKind($name, readListLinesFromText($content)) === 'ip';
@@ -24,18 +25,20 @@ function lintList(string $name, string $content): array
   $seen = [];
   $domains = [];
   foreach ($lines as $i => $rawLine) {
-    $t = trim($rawLine);
-    if ($t === '' || $t[0] === '#') {
+    $t = listEntry($rawLine);
+    if ($t === null) {
       continue;
     }
+    $off = '# ' . trim($rawLine);
     $key = strtolower($t);
     if ($isIp) {
       if (!validCidr($t)) {
-        $issues[] = ['line' => $i, 'level' => 'error', 'msg' => 'Не IP-адрес и не подсеть'];
+        $issues[] = ['line' => $i, 'level' => 'error', 'fix' => $off, 'msg' => (preg_match('/^[0-9a-f.:]+-[0-9a-f.:]+$/i', $t)
+          ? 'Диапазоны nfqws2 не понимает — запишите подсетью (1.2.3.0/24)' : 'Не IP-адрес и не подсеть') . ': nfqws2 пропускает эту строку'];
         continue;
       }
     } else {
-      $d = ltrim($key, '^');
+      $d = ltrim($key, '^!');
       if (str_contains($d, '*')) {
         $fix = preg_replace('/^\*\.?/', '', $d);
         $issues[] = ['line' => $i, 'level' => 'error', 'fix' => validHost($fix) ? $fix : null,
@@ -47,10 +50,10 @@ function lintList(string $name, string $content): array
         continue;
       }
       if (!validHost($d)) {
-        $issues[] = ['line' => $i, 'level' => 'error', 'msg' => 'Некорректное имя сайта'];
+        $issues[] = ['line' => $i, 'level' => 'error', 'fix' => $off, 'msg' => 'Некорректное имя сайта: nfqws2 его не найдёт'];
         continue;
       }
-      if ($key[0] !== '^') {
+      if (!str_contains('^!', $key[0])) {
         $domains[$d] = $domains[$d] ?? $i;
       }
     }

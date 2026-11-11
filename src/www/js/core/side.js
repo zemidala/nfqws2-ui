@@ -329,7 +329,7 @@ function problemItems() {
           toast(`${listName(l.name)}: исправлено ${r.fixed}`, { undo: () => undoLast(false) });
           await loadState().catch(() => {});
           route();
-        }, 'small', 'wand', { title: '«*.домен» → «домен», удалить повторы и лишние записи. Отменить можно кнопкой «Отменить».' }) : null });
+        }, 'small', 'wand', { title: '«*.домен» → «домен», удалить повторы и лишние записи, строки, которые nfqws2 не понимает, — в комментарий. Отменить можно кнопкой «Отменить».' }) : null });
     }
   }
   return items.sort((a, b) => LEVEL_RANK[b.level] - LEVEL_RANK[a.level]);
