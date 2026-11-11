@@ -78,6 +78,8 @@ button, input, select, textarea { font: inherit; color: inherit; }
 /* Inter's capitals sit low in their line: in a field they stood 1–2 px under the middle (measured: 11 px above the
    capitals, 9 below). The line goes up a pixel; the code face (.mono) sits in the middle as it is */
 :root:root:root input.input:not(.mono) { padding-top: 0; padding-bottom: 2px; }
+/* K's code face is Roboto Mono, whose capitals sit low as Inter's do (11 above, 9 below); Z's JetBrains Mono does not */
+:root:root:root[data-variant="k"]:not([data-palette]) input.input.mono { padding-top: 0; padding-bottom: 2px; }
 svg { width: 17px; height: 17px; flex: none; }
 .muted { color: var(--muted); } .faint { color: var(--faint); } .sm { font-size: var(--fs-sm); } .num { font-variant-numeric: tabular-nums; }
 .grow { flex: 1; } .row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; } .between { justify-content: space-between; }

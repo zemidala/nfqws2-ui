@@ -3,37 +3,38 @@
 /* ---------- one spacing grid: four steps, never other numbers ----------
    4  — lines of one item (a name and its grey line under it, a label over its field on a phone);
    8  — an item and its caption or explanation, the choices of one field, a fold's title over its content;
-   16 — neighbours in a panel, a panel's padding;
-   24 — panels, and the page heading over them.
+   16 — neighbours in a panel, a panel's padding, panels, and the page heading over them.
+   Panels were 24 apart: with their paddings the text of two neighbours stood 56–66 px apart and pages ran long for
+   nothing — a panel's edge already parts it from the next (the owner, 2026-11-11). 24 is not used.
    A container spaces its parts with gap; a caption pulls itself up to 8 from its container's 16.
    Lists of choices are .stack.items (8), lines of one item .stack.lines (4) — no gap in the markup.
    :root ×3 — above every style's own paddings, margins and gaps */
 :root { --sp-1: 4px; --sp-2: 8px; --sp-3: 16px; --sp-4: 24px; }
 
-/* panels and the page heading: 24 (main itself is a grid: its parts take its gap, no margins of their own) */
-:root:root:root main { row-gap: var(--sp-4); }
+/* panels and the page heading: 16 (main itself is a grid: its parts take its gap, no margins of their own) */
+:root:root:root main { row-gap: var(--sp-3); }
 :root:root:root main > * { margin-block: 0; }
-:root:root:root main > .vh + p { margin-top: calc(var(--sp-2) - var(--sp-4)); }
-:root:root:root :is(.mwrap, .mcol) { gap: var(--sp-4); }
+:root:root:root main > .vh + p { margin-top: calc(var(--sp-2) - var(--sp-3)); }
+:root:root:root :is(.mwrap, .mcol) { gap: var(--sp-3); }
 :root:root:root :is(.mcol, .mwrap) > :is(.panel, .blk, .notice) { margin-block: 0; }
 /* an empty stack (a place for what comes later) takes no room: as a part of a grid it doubled the gap */
 :root:root:root :is(main, .modal) .stack:empty { display: none; }
 /* panels side by side or in pairs */
-:root:root:root :is(.cards2, .ov-pair, .ov-tiles, .ov-groups, .two) { gap: var(--sp-4); }
-/* the overview's blocks in columns (no gap there): 24 under each, 24 between the columns */
-:root:root:root .ov-masonry { column-gap: var(--sp-4); }
-:root:root:root .ov-masonry > .blk { margin-bottom: var(--sp-4); }
+:root:root:root :is(.cards2, .ov-pair, .ov-tiles, .ov-groups, .two) { gap: var(--sp-3); }
+/* the overview's blocks in columns (no gap there): 16 under each, 16 between the columns */
+:root:root:root .ov-masonry { column-gap: var(--sp-3); }
+:root:root:root .ov-masonry > .blk { margin-bottom: var(--sp-3); }
 @container main (min-width: 1500px) {
-  :root:root:root .ov-tiles .blk, :root:root:root .ov-tiles > .tiles { margin-bottom: var(--sp-4); }
+  :root:root:root .ov-tiles .blk, :root:root:root .ov-tiles > .tiles { margin-bottom: var(--sp-3); }
 }
 /* panels wherever they stand (a page may hold them in a .stack, not in its column) */
-:root:root:root :is(main, .modal) :is(.stack, .mcol, .mwrap):has(> :is(.panel, .blk)) { row-gap: var(--sp-4); }
+:root:root:root :is(main, .modal) :is(.stack, .mcol, .mwrap):has(> :is(.panel, .blk)) { row-gap: var(--sp-3); }
 /* notes in a row tell one thing (a pick's result: no bypass → advice → the best): 8 apart, as parts of one item,
-   not 24 as sections — that split one answer into three */
-:root:root:root :is(main, .modal) :is(.stack, .mcol, .mwrap):has(> :is(.panel, .blk)) > .notice + .notice { margin-top: calc(var(--sp-2) - var(--sp-4)); }
+   not 16 as sections */
+:root:root:root :is(main, .modal) :is(.stack, .mcol, .mwrap):has(> :is(.panel, .blk)) > .notice + .notice { margin-top: calc(var(--sp-2) - var(--sp-3)); }
 :root:root:root :is(main, .modal) .stack:not(.items, .lines):not(:has(> :is(.panel, .blk))) > .notice + .notice { margin-top: calc(var(--sp-2) - var(--sp-3)); }
-/* the page's lead line under its heading: 8 below the heading, the panels 24 below it */
-:root:root:root :is(main, .modal) :is(.mcol, .stack) > .vh + p { margin: calc(var(--sp-2) - var(--sp-4)) 0 0; }
+/* the page's lead line under its heading: 8 below the heading, the panels 16 below it */
+:root:root:root :is(main, .modal) :is(.mcol, .stack) > .vh + p { margin: calc(var(--sp-2) - var(--sp-3)) 0 0; }
 :root:root:root :is(main, .modal) .stack:not(:has(> :is(.panel, .blk))) > .vh + p { margin-top: calc(var(--sp-2) - var(--sp-3)); }
 
 /* neighbours in a panel: one gap, no margins of their own */
@@ -91,8 +92,11 @@
 :root:root:root .wrapped > span.grow:empty { display: none; }   /* the spacer only: a field with class grow is :empty too */
 /* read-only «label — value» rows: one line, close together */
 :root:root:root .frow.kv { grid-template-columns: 170px minmax(0, 1fr); align-items: baseline; }
+/* a panel's padding: 16 in every style and at every width (Z had 14–22, A 12/14, B 22/24 — off the grid). K's plain
+   panels are open sections under a line, their text on the page's edge: no side padding there */
+:root:root:root :is(.blk, .panel), :root:root:root :is(main, .modal) .panel + .panel { padding: var(--sp-3); }
+@media (min-width: 600px) { :root:root:root[data-variant="k"]:not([data-scheme], [data-palette]) main :is(.panel, .panel + .panel) { padding-inline: 0; } }
 @media (max-width: 599px) {
-  :root:root:root :is(.blk, .panel) { padding: var(--sp-3); }
   /* a label over its field: 4 (one item), the field's explanation 8 below it; no field-high label box */
   :root:root:root .frow:not(.kv) > .lbl { min-height: 0; display: block; padding: 0; margin-bottom: calc(var(--sp-1) - var(--sp-2)); }
   :root:root:root .mon-tile { padding: 12px 14px; }

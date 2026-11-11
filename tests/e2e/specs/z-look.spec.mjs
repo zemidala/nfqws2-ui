@@ -33,13 +33,13 @@ for (const mode of ['light', 'dark']) {
   });
 }
 
-// what the layout and contrast checks cannot see: the signs of a template. A bar on the left is kept by the menu, the
-// notes (.notice), the explanations (an «i» in their margin) and the DNS legend
+// what the layout and contrast checks cannot see: the signs of a template. Only the menu is passed over; the notes had
+// a 4 px bar on the left until 2026-11-11 and were passed over too, so nothing caught it
 const signs = () => {
   const out = new Set();
   for (const e of document.querySelectorAll('body *')) {
     const b = e.getBoundingClientRect();
-    if (!b.width || !b.height || e.closest('.mnav, .notice, .dnsx-legend')) continue;
+    if (!b.width || !b.height || e.closest('.mnav')) continue;
     const b4 = getComputedStyle(e, '::before');
     if ((b4.maskImage || b4.webkitMaskImage || '').includes('svg')) continue;
     const s = getComputedStyle(e);

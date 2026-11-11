@@ -176,9 +176,10 @@
 :root:root:root[data-palette="zd"] .tbl .chip.bad { background: rgba(239, 68, 68, .15); color: var(--ag-bad); border-color: rgba(239, 68, 68, .3); }
 :root:root:root[data-palette="zd"] .tbl .chip.warn { background: rgba(245, 158, 11, .15); color: var(--ag-warn); border-color: rgba(245, 158, 11, .3); }
 :root:root:root[data-palette="zd"] .tbl .chip.ok { background: rgba(34, 197, 94, .15); color: var(--ag-ok); border-color: rgba(34, 197, 94, .3); }
-/* a note: a soft fill of its kind, a 4 px bar and the icon in the kind's strong colour, the title in the kind's colour,
+/* a note: a soft fill of its kind, a thin frame all round and the icon in the kind's strong colour (the 4 px bar down
+   the left side was the stripe the owner forbids, 2026-11-11), the title in the kind's colour,
    the text in the page's; a button or link goes under the text, a spinner stays at the right */
-:root:root[data-palette="zd"] .notice { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 0 12px; align-items: start; padding: 10px 14px 12px 12px; border-left: 4px solid; border-radius: 0 var(--radius) var(--radius) 0; color: var(--fg); }
+:root:root[data-palette="zd"] .notice { display: grid; grid-template-columns: 16px minmax(0, 1fr) auto; gap: 0 12px; align-items: start; padding: 11px 15px; border: 1px solid; border-radius: var(--radius); color: var(--fg); }
 :root:root[data-palette="zd"] .notice > svg { grid-column: 1; width: 16px; height: 16px; margin-top: 3px; }
 :root:root[data-palette="zd"] .notice > .grow { grid-column: 2; display: grid; gap: 2px; min-width: 0; }
 :root:root[data-palette="zd"] .notice > .grow > b { font-weight: 600; }
