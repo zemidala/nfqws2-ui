@@ -72,6 +72,8 @@ function md(text, onAnchor) {
       const q = [];
       for (; i < lines.length && /^>\s?/.test(lines[i]); i++) q.push(lines[i].replace(/^>\s?/, ''));
       i--;
+      // GitHub's alerts («> [!WARNING]») are for the repository page only (the notice about use and risk): not here
+      if (/^\[!(NOTE|TIP|IMPORTANT|WARNING|CAUTION)\]\s*$/.test(q[0] || '')) continue;
       root.append(h('blockquote', {}, inl(q.join(' '))));
       continue;
     }
