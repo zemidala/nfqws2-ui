@@ -66,6 +66,12 @@ define('INIT_SCRIPT', ROOT ? '/opt/etc/init.d/S51nfqws2' : '/etc/init.d/nfqws2-k
 define('LOG_DIR', ROOT . '/var/log');
 // PATH для фоновых заданий: в Entware программы лежат в /opt
 define('JOB_PATH', (ROOT ? '/opt/sbin:/opt/bin:/opt/usr/sbin:/opt/usr/bin:' : '') . '/usr/sbin:/usr/bin:/sbin:/bin');
+// The page's own requests too: lighttpd passes JOB_PATH only when its setenv works. Without it a Keenetic's commands
+// were the firmware's — its /bin/sh answers «Invalid option "-n"» to the config's syntax check, which showed as an
+// error in a good config (2026-11-11)
+if (!str_starts_with((string)getenv('PATH'), JOB_PATH)) {
+  putenv('PATH=' . JOB_PATH . (getenv('PATH') ? ':' . getenv('PATH') : ''));
+}
 const PROTECTED_LISTS = ['user.list', 'exclude.list', 'auto.list', 'ipset.list', 'ipset_exclude.list'];
 
 const GLOBAL_OPTS = ['user', 'uid', 'qnum', 'fastpath-workaround', 'lua-init', 'lua-gc', 'blob', 'debug',

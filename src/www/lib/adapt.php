@@ -227,6 +227,10 @@ function lintConf(array $raw, string $text): array
   $tmp = tempnam('/tmp', 'nfqlint');
   file_put_contents($tmp, $text);
   exec('sh -n ' . escapeshellarg($tmp) . ' 2>&1', $shOut, $rc);
+  // a shell without «-n» (Keenetic firmware's /bin/sh: «Invalid option "-n"») cannot check: no word on the config
+  if ($rc !== 0 && preg_match('/(invalid|illegal|unknown) option\W+-?n\b/i', implode(' ', $shOut))) {
+    $rc = 0;
+  }
   if ($rc !== 0) {
     unlink($tmp);
     $add(null, null, 'error', 'Ошибка синтаксиса конфига: ' . preg_replace('#^/tmp/\S+: #', '', implode(' ', $shOut)));
