@@ -28,6 +28,10 @@
 }
 /* panels wherever they stand (a page may hold them in a .stack, not in its column) */
 :root:root:root :is(main, .modal) :is(.stack, .mcol, .mwrap):has(> :is(.panel, .blk)) { row-gap: var(--sp-4); }
+/* notes in a row tell one thing (a pick's result: no bypass → advice → the best): 8 apart, as parts of one item,
+   not 24 as sections — that split one answer into three */
+:root:root:root :is(main, .modal) :is(.stack, .mcol, .mwrap):has(> :is(.panel, .blk)) > .notice + .notice { margin-top: calc(var(--sp-2) - var(--sp-4)); }
+:root:root:root :is(main, .modal) .stack:not(.items, .lines):not(:has(> :is(.panel, .blk))) > .notice + .notice { margin-top: calc(var(--sp-2) - var(--sp-3)); }
 /* the page's lead line under its heading: 8 below the heading, the panels 24 below it */
 :root:root:root :is(main, .modal) :is(.mcol, .stack) > .vh + p { margin: calc(var(--sp-2) - var(--sp-4)) 0 0; }
 :root:root:root :is(main, .modal) .stack:not(:has(> :is(.panel, .blk))) > .vh + p { margin-top: calc(var(--sp-2) - var(--sp-3)); }
@@ -52,8 +56,10 @@
 :root:root:root :is(main, .modal) .frow > :is(.hint, .sm.muted) { margin-top: 0; }
 :root:root:root :is(main, .modal) :is(.panel, .blk, .stack:not(.items, .lines)) > :is(label.chk, .swl, .row, .frow, .stack, .input, textarea, .dd-btn, div:not([class])) + :is(.sm.muted, .hint, p.muted) { margin-top: calc(var(--sp-2) - var(--sp-3)); }
 :root:root:root :is(main, .modal) :is(.panel-h, .blk-h) + :is(p, .sm.muted) { margin-top: calc(var(--sp-2) - var(--sp-3)); }
-/* a caption is a block of its own: the distance is counted from its line, not from its letters */
-:root:root:root :is(main, .modal) :is(.panel, .blk, .stack, details) > .sm.muted { display: block; }
+/* a caption is a block of its own: the distance is counted from its line, not from its letters.
+   Inline tags only: a div with its own layout (the legends of «DNS-серверы» and «Мониторинг» are flex rows) was made
+   a block, and its items ran together into one line */
+:root:root:root :is(main, .modal) :is(.panel, .blk, .stack, details) > :is(span, small, a, b, code).sm.muted { display: block; }
 /* a text area on a line of its own kept a descender's room under it (6 px): a block has none */
 :root:root:root :is(main, .modal) textarea.input { display: block; }
 /* the choices of one field (a list of boxes): 8 */
