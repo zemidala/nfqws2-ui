@@ -526,6 +526,7 @@ return array (
       16 => 'update',
       17 => 'state',
       18 => 'report',
+      19 => 'learn',
     ),
     'safe_confirm' => array (
       0 => 'fixes',
@@ -635,6 +636,7 @@ return array (
       13 => 'update',
       14 => 'state',
       15 => 'report',
+      16 => 'learn',
     ),
     'strategy_check' => array (
       0 => 'conf',

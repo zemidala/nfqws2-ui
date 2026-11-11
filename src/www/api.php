@@ -176,6 +176,7 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
   pendingExpire(60);   // задание проверки после перезапуска могло погибнуть — откат не должен потеряться
   devicesEnsure();     // nfqws2 restarted outside the interface or the router rebooted
   interceptCron();     // jumps into the nfqws2 chains lost after a firewall rebuild — put back even with the page closed
+  learnTmpOk();        // /tmp back to 1777 after an nfqws2 package install made it 0755 (the module could not write)
   learnKeep();         // what «learn» learned: the /tmp copy next to nfqws2.conf, so it survives a reboot
   historyScan('auto');
   nfqLogsTrim();

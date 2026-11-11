@@ -446,6 +446,7 @@ function nfqUpdateJob(): void
     }
   }
   nfqLog($pid ? "nfqws2 $to работает (PID $pid)" : 'nfqws2 не запустился');
+  learnTmpOk();   // the package's ./tmp left /tmp 0755: «learn» (user nobody) could not write there
   $checks = [];
   sleep(3);   // nfqws2 только что поднялся: первые соединения сразу после запуска бывают неудачными
   foreach ($before as $h => $was) {

@@ -249,6 +249,20 @@ function tokenIndent(string $text, string $var, int $i): ?string
 }
 
 // cron pass: the fresh /tmp copy goes next to nfqws2.conf (survives a reboot); readable by nfqws2 (user nobody)
+// nfqws2 runs as nobody and writes LEARN_TMP into /tmp. The nfqws2-keenetic package for opkg carries ./tmp (its
+// binaries go to /tmp/nfqws2_binary), and installing it leaves /tmp 0755 root: the module then writes nothing and
+// learns nothing that lasts. Put the usual 1777 back; false when /tmp still is not writable for everyone.
+function learnTmpOk(): bool
+{
+  $m = @fileperms('/tmp');
+  if ($m === false || ($m & 01777) === 01777) {
+    return true;
+  }
+  @chmod('/tmp', 01777);
+  clearstatcache(true, '/tmp');
+  return ((@fileperms('/tmp') ?: 0) & 0777) === 0777;
+}
+
 function learnKeep(): void
 {
   if (is_file(LEARN_TMP) && (@filemtime(LEARN_TMP) > (@filemtime(LEARN_KEEP) ?: 0))) {

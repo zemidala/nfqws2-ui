@@ -253,6 +253,7 @@ function state(): array
     })(),
     'logs' => nfqLogs(),
     'devices' => devicesEnsure(),   // null — bypass for the whole network; false — rules could not be put in place
+    'learn_tmp_locked' => !learnTmpOk() && learnOwners(),   // a «learn» profile whose module cannot write to /tmp
     'leftovers' => array_column(pkgLeftovers(), 'name'),
     'nfq_update' => (function () { $u = nfqUpdateInfo(); return ['latest' => $u['latest'], 'available' => $u['available'], 'running' => $u['running'], 'rollback' => $u['rollback']]; })(),
     'curl' => curlCmdError(),

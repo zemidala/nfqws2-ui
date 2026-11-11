@@ -254,6 +254,10 @@ function problemItems() {
   if (st.running && st.devices === false) {
     items.push({ level: 'warning', title: 'Выбор устройств не действует', text: 'Правила для устройств поставить не удалось — все устройства идут через nfqws2.', href: PAGES.dev[0] });
   }
+  // the router puts /tmp back to 1777 by itself; the warning stays only when that did not help
+  if (st.learn_tmp_locked) {
+    items.push({ level: 'warning', title: 'Обучение не сохраняет выученное', text: 'nfqws2 работает от пользователя nobody, а писать в /tmp ему нельзя: у папки сбиты права (так бывает после установки пакета nfqws2 через opkg). Вернуть их: chmod 1777 /tmp.', href: '#/tests/learn' });
+  }
   const lint = st.lint || { issues: [] };
   if (lint.dry_run && !lint.dry_run.ok) items.push({ level: 'error', title: 'nfqws2 не примет конфиг', text: lint.dry_run.message, href: '#/settings/raw' });
   for (const x of lint.issues) {
