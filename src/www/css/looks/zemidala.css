@@ -109,8 +109,10 @@
   color: var(--fg); font-size: 13px; line-height: 20px; font-weight: 400;
   text-box: none; }   /* whole lines: trimmed to its capitals next to a button the note was 46.5 px high */
 :root:root[data-palette="zd"] main :is(.panel > p.sm.muted, .stack > label.chk + .sm.muted, .stack > .row + .sm.muted, .frow > .hint:not(.error, .warning, .bad, :empty), label.chk span > br + .sm.muted, .own-st > .sm.muted, .row > .btn + .sm.muted, .dns-more-panel p.sm.muted)::before {
-  content: "i"; position: absolute; left: 12px; top: 10px; width: 20px; height: 20px; border-radius: 50%; background: var(--ex-ic); color: #fff;
-  font: 700 13px/20px var(--sans); text-align: center; }
+  /* the «i» is drawn, not typed: Inter's 13 px «i» had its dot almost on the stem and read as a bare stick.
+     Dot 4–7 px, a 2 px gap, stem 9–16 px on whole pixels */
+  content: ""; position: absolute; left: 12px; top: 10px; width: 20px; height: 20px; border-radius: 50%;
+  background: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20'%3E%3Ccircle cx='10' cy='5.5' r='1.5' fill='white'/%3E%3Crect x='9' y='9' width='2' height='7' rx='1' fill='white'/%3E%3C/svg%3E") center / 20px 20px no-repeat, var(--ex-ic); }
 /* a field's explanation goes under its control, in the same column: as a card in a column of its own on the right it
    stretched the label's row and the box fell away from its label (Обрабатывать IPv6 / Отладочный журнал) */
 :root:root:root[data-palette="zd"] .frow > .hint:not(:empty) { grid-column: 1 / -1; grid-row: auto; order: 2; align-self: start; justify-self: stretch; max-width: 560px; }
