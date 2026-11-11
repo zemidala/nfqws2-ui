@@ -173,12 +173,21 @@ function remotePanel(data) {
     h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Ключ роутера' }),
       R.pub ? h('div', { class: 'stack items' },
         h('code', { class: 'sm mono', style: 'overflow-wrap:anywhere', text: R.pub }),
+        h('div', { class: 'stack lines' },
+          h('div', { class: 'row' }, copyBtn(() => R.pub),
+            btn('Удалить ключ', async () => {
+              if (!await ask('Удалить ключ роутера?\n\nОтправка на NAS перестанет работать' + (c.enabled ? ' и выключится' : '') + ': чтобы вернуть её, понадобятся новый ключ и команда на NAS ещё раз.', 'Удалить', 'danger', 'trash')) return;
+              if (await guarded(() => api('remote_key_del'), 'Ключ удалён')) route();
+            }, 'small', 'trash'), newTag('backup:keydel')),
+          h('span', { class: 'sm muted', text: 'Этим ключом роутер сам заходит на NAS и кладёт туда снимки. Войти по нему на роутер нельзя. Не нужен — удалите: появится кнопка, чтобы создать новый.' })),
         // когда всё работает, команда для NAS больше не нужна — свёрнута
         R.setup ? h('details', { open: !(R.on && st.ok && !st.error) }, h('summary', { class: 'sm', text: 'Команда для NAS — выполнить один раз под этим пользователем (по ssh): кладёт скрипт приёма снимков и разрешает ключ роутера только для него' }),
           h('textarea', { class: 'input mono', rows: 6, readonly: true, style: 'width:100%;resize:vertical;font-size:var(--fs-xs)', text: R.setup }),
           h('div', { class: 'row' }, btn('Копировать команду', () => copyText(R.setup), 'small', 'copy')))
           : h('p', { class: 'sm muted', text: 'Укажите папку на NAS и сохраните — здесь появится команда для NAS.' }))
-        : btn('Создать ключ роутера', async () => { if (await guarded(() => api('remote_key'), 'Ключ создан')) route(); }, '', 'plus', { disabled: !R.tool })));
+        : h('div', { class: 'stack lines' },
+          h('div', { class: 'row' }, btn('Создать ключ роутера', async () => { if (await guarded(() => api('remote_key'), 'Ключ создан')) route(); }, '', 'plus', { disabled: !R.tool })),
+          h('span', { class: 'sm muted', text: 'Нужен, только чтобы отправлять снимки на NAS. Войти по нему на роутер нельзя.' }))));
 }
 
 async function compareSnapshot(e) {

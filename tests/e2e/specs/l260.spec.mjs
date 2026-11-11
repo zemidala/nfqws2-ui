@@ -36,6 +36,8 @@ for (const [w, mode, variant] of [[1366, 'dark', 'z'], [390, 'light', 'z'], [136
       await expect(note).toHaveCount(1);
       await expect(note).toContainText(c[2]);
       await expect(note).toContainText(c[3]);
+      // NFQ-L261: video notes send to checking a whole config; the QUIC-only note does not
+      await expect(note.locator('a[href="#/tests/configs"]')).toHaveCount(c[2].startsWith('Скорость') ? 1 : 0);
       expect(await page.locator('main').innerText(), c[0]).not.toMatch(/\bnull\b|undefined/);
       expect(await auditLayout(page, { ignore: ['ПРОКРУТКА ВБОК nav.subtabs'] }), c[0]).toEqual([]);
       expect(await contrastReport(page, { ignore: Z_ACCEPTED }), c[0]).toEqual([]);

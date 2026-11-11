@@ -1140,6 +1140,10 @@ switch ($cmd) {
   case 'remote_key':
     respond(['pub' => remoteKeyCreate()]);
 
+  case 'remote_key_del':
+    remoteKeyDelete();
+    respond(['ok' => true]);
+
   case 'remote_test':
     $c = remoteCfg();
     ($c['host'] !== '' && $c['user'] !== '') || fail('Сначала укажите адрес и пользователя');

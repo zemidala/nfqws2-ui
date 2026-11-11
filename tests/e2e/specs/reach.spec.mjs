@@ -5,7 +5,8 @@ import { test, expect } from '../fixtures.mjs';
 
 const PAGES = ['#/', '#/diag', '#/tests/freeze', '#/tests/dns', '#/tests/conns', '#/tests', '#/tests/trace', '#/tests/history', '#/tests/community',
   '#/tests/configs', '#/tests/monitor', '#/tests/auto', '#/tests/learn', '#/tests/notify', '#/settings', '#/settings/p1', '#/sites', '#/sites/user.list',
-  '#/devices', '#/asn', '#/settings/basic', '#/settings/base', '#/settings/raw', '#/settings/backup', '#/settings/hist', '#/log', '#/settings/report', '#/settings/look', '#/settings/about'];
+  '#/devices', '#/asn', '#/settings/basic', '#/settings/base', '#/settings/raw', '#/settings/backup', '#/settings/hist', '#/log', '#/settings/report', '#/settings/look', '#/settings/about']
+  .filter((p) => !process.env.PW_PAGES || process.env.PW_PAGES.split(',').includes(p));   // PW_PAGES=#/a,#/b — only the pages touched
 
 const MAY_MISS = [
   /^top: a «nfqwsN-ui на GitHub»$/,          // in the phone menu (checked below)

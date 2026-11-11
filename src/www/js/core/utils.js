@@ -156,7 +156,7 @@ const skel = (panels = 1, lines = 4) => h('div', { class: 'skel', role: 'status'
 const levelIcon = (lvl) => h('span', { class: 'lvl ' + lvl }, icon({ error: 'bad', warning: 'alert', info: 'info', ok: 'ok' }[lvl]));
 const notice = (kind, title, text, ...extra) => h('div', { class: 'notice ' + kind },
   icon({ ok: 'ok', bad: 'bad', warn: 'alert', info: 'info' }[kind]),
-  h('div', { class: 'grow' }, h('b', { text: title }), text ? h('div', { class: 't', text }) : null), ...extra);
+  h('div', { class: 'grow' }, h('b', { text: title }), text ? h('div', { class: 't' }, ...[].concat(text)) : null), ...extra);   // text: a string or [string | node]
 const panel = (title, extra, ...body) => h('section', { class: 'panel' },
   title ? h('div', { class: 'panel-h' }, h('h2', { text: title }), extra) : null, ...body);
 const plural = (n, one, few, many) => {

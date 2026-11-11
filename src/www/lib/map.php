@@ -500,6 +500,8 @@ return array (
     ),
     'remote_key' => array (
     ),
+    'remote_key_del' => array (
+    ),
     'remote_push' => array (
     ),
     'remote_set' => array (

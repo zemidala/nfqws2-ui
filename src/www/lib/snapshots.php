@@ -310,6 +310,19 @@ function remoteKeyCreate(): string
   return remotePubKey();
 }
 
+// Without the key nothing can be sent, so sending is switched off too: the page then says so instead of an error
+function remoteKeyDelete(): void
+{
+  foreach ([REMOTE_KEY, REMOTE_KEY . '.pub'] as $f) {
+    (!is_file($f) || @unlink($f)) || fail('Не удалось удалить ' . $f);
+  }
+  $s = uiSettings();
+  if (!empty($s['snapshots']['remote']['enabled'])) {
+    $s['snapshots']['remote']['enabled'] = false;
+    saveUiSettings($s);
+  }
+}
+
 // Одна команда на той стороне: ping | list | put <имя> | get <имя>. $in — файл на вход, $out — куда писать вывод
 function remoteCall(string $op, string $name = '', ?string $in = null, ?string $out = null, int $timeout = 30): array
 {
