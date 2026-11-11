@@ -49,7 +49,9 @@ function ldate(string $fmt, ?int $ts = null): string
 const UI_VERSION = '1.33.4';
 
 // Пути пакета nfqws2-keenetic. На OpenWrt — корень «/», в Entware (Keenetic) — «/opt».
-define('ROOT', !is_file('/usr/bin/nfqws2') && is_file('/opt/usr/bin/nfqws2') ? '/opt' : '');
+// Not OpenWrt with Entware's nfqws2 — «/opt», as install.sh and nfqws-ui-setup decide: a firmware with its own
+// /usr/bin/nfqws2 (Padavan with zapret built in) was taken for OpenWrt and its config looked for in /etc (2026-11-11)
+define('ROOT', is_file('/opt/usr/bin/nfqws2') && (!is_file('/etc/openwrt_release') || !is_file('/usr/bin/nfqws2')) ? '/opt' : '');
 define('CONF_FILE', ROOT . '/etc/nfqws2/nfqws2.conf');
 define('CONF_DIR', ROOT . '/etc/nfqws2');
 define('LISTS_DIR', ROOT . '/etc/nfqws2/lists');
