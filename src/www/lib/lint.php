@@ -283,10 +283,28 @@ function luaArgNames(string $doc): array
   return preg_split('/\s*,\s*/', $x[1]);
 }
 
-function luaCatalog(): array
+function luaCatalog(?array $loadedPaths = null): array
 {
-  $files = luaFiles();
-  return cached('lua', array_values($files), function () use ($files) {
+  if ($loadedPaths === null) {
+    $files = luaFiles();
+  } else {
+    // Let definitions in loaded modules take precedence, in --lua-init order.
+    $files = [];
+    $loadedFiles = [];
+    foreach (luaFiles(true) as $file) {
+      $path = realpath($file) ?: $file;
+      if (isset($loadedPaths[$path])) {
+        $loadedFiles[$file] = $loadedPaths[$path];
+      } else {
+        $files[$file] = $file;
+      }
+    }
+    asort($loadedFiles);
+    foreach ($loadedFiles as $file => $position) {
+      $files[$file] = $file;
+    }
+  }
+  return cached($loadedPaths === null ? 'lua' : 'lua-lint', array_values($files), function () use ($files) {
     $std = [];
     $funcs = [];
     $globals = [];
@@ -416,13 +434,12 @@ function listFileExists(string $path): bool
   return is_file($path) || is_file($path . '.gz');
 }
 
-// Lua-скрипты nfqws2-keenetic кладёт сжатыми (zapret-lib.lua.gz), а в --lua-init пишется имя без .gz:
-// nfqws2 сам берёт сжатый файл, если обычного нет. Возвращает имя.lua => настоящий файл.
-function luaFiles(): array
+// Справочник объединяет .lua и .lua.gz, а проверке нужны оба файла.
+function luaFiles(bool $keepArchives = false): array
 {
   $res = [];
   foreach (glob(LUA_DIR . '/*.lua.gz') ?: [] as $f) {
-    $res[basename($f, '.gz')] = $f;
+    $res[basename($f, $keepArchives ? '' : '.gz')] = $f;
   }
   foreach (glob(LUA_DIR . '/*.lua') ?: [] as $f) {
     $res[basename($f)] = $f;

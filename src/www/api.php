@@ -90,7 +90,7 @@ const CONF_VARS = ['ISP_INTERFACE', 'NFQWS_BASE_ARGS', 'NFQWS_ARGS_CUSTOM', 'NFQ
 // Переменные с аргументами nfqws2 — их проверяет линтер
 const ARG_VARS = ['NFQWS_BASE_ARGS', 'NFQWS_ARGS_CUSTOM', 'NFQWS_ARGS', 'NFQWS_ARGS_QUIC', 'NFQWS_ARGS_UDP', 'NFQWS_ARGS_IPSET'];
 const CACHE_DIR = '/tmp/nfqws-ui-cache';
-const CACHE_VER = 6;  // увеличить при изменении разбора справки/lua/проверок
+const CACHE_VER = 7;  // увеличить при изменении разбора справки/lua/проверок
 
 // The server is split into sections in lib/ (one file each). They are loaded in this order: a later one may use
 // constants of an earlier one. API_FILE — this file: background jobs start it again (php-cgi -f API_FILE)

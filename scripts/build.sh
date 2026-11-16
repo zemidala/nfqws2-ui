@@ -40,6 +40,13 @@ pack() {
 	cp src/www/index.html src/www/app.js src/www/api.php src/www/icon.svg src/www/manifest.json "$W/"
 	cp -R src/www/lib src/www/js src/www/css "$W/"
 	cp src/bin/nfqws-ui-setup src/bin/nfqws-ui "$B/"
+	executables=".$3/nfqws-ui-setup .$3/nfqws-ui"
+	if [ "$1" = openwrt ]; then
+		mkdir -p "$D/etc/init.d" "$D/usr/sbin"
+		cp src/openwrt/nfqws-ui-cgroup "$D/etc/init.d/"
+		cp src/openwrt/nfqws-ui-cgroup-cgi "$D/usr/sbin/"
+		executables="$executables ./etc/init.d/nfqws-ui-cgroup ./usr/sbin/nfqws-ui-cgroup-cgi"
+	fi
 	# the «learn» module: the interface copies it into the nfqws2 lua folder when a profile switches to it
 	mkdir -p "$D$5"; cp src/lua/nfqws-ui.lua "$D$5/"
 	sed -i "s/?v=[0-9A-Za-z.-]*\"/?v=$VERSION-$HASH\"/g" "$W/index.html"
@@ -48,8 +55,9 @@ pack() {
 	grep -q "UI_VERSION = '$VERSION'" "$W/api.php"
 
 	# Права задаются явно: на Windows у файлов нет битов исполнения
-	( cd "$D" && $TAR --mode='u=rwX,go=rX' --exclude=".$3/nfqws-ui-setup" --exclude=".$3/nfqws-ui" -cf "$S/data.tar" . \
-	  && $TAR --mode=0755 -rf "$S/data.tar" ".$3/nfqws-ui-setup" ".$3/nfqws-ui" )
+	( cd "$D" && $TAR --mode='u=rwX,go=rX' --exclude=".$3/nfqws-ui-setup" --exclude=".$3/nfqws-ui" \
+	  --exclude=./etc/init.d/nfqws-ui-cgroup --exclude=./usr/sbin/nfqws-ui-cgroup-cgi -cf "$S/data.tar" . \
+	  && $TAR --mode=0755 -rf "$S/data.tar" $executables )
 	gzip -9n "$S/data.tar"
 
 	C=$S/control
@@ -70,7 +78,7 @@ pack openwrt /www/nfqws-ui /usr/sbin "nfqws2-ui_${VERSION}-1_all.ipk" /usr/share
 pack entware /opt/share/www/nfqws-ui /opt/sbin "nfqws2-ui_${VERSION}-1_all_entware.ipk" /opt/share/nfqws-ui
 
 # Архив файлов — для ручной установки
-( cd "$STAGE/openwrt/data" && $TAR --mode='u=rwX,go=rX' -czf - . ) > "$OUT/nfqws2-ui_${VERSION}.tar.gz"
+cp "$STAGE/openwrt/data.tar.gz" "$OUT/nfqws2-ui_${VERSION}.tar.gz"
 
 # .apk для OpenWrt 25+ — из тех же файлов, что .ipk для OpenWrt. Нужен apk mkpkg (apk-tools 3): свой, если мы root
 # в Alpine 3.23+, иначе Docker с alpine (так в GitHub Actions). Без них — пропускаем (Git Bash на Windows)

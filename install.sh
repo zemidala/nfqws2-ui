@@ -7,10 +7,25 @@ set -e
 
 REPO=zemidala/nfqws2-ui
 VERSION=latest
-[ -n "$1" ] && VERSION=$1
+KEENETIC_MODE=
+KEENETIC_REPO=https://nfqws.github.io/nfqws2-keenetic/openwrt
+KEENETIC_RELEASES=https://github.com/nfqws/nfqws2-keenetic/releases
 
 say() { printf '%s\n' "$*"; }
 die() { printf '\nОшибка: %s\n' "$*" >&2; exit 1; }
+
+version_given=
+for arg do
+	case "$arg" in
+		--nfqws2-keenetic=repo|--nfqws2-keenetic=local)
+			[ -z "$KEENETIC_MODE" ] || die "укажите способ установки nfqws2-keenetic один раз"
+			KEENETIC_MODE=${arg#*=} ;;
+		-*) die "неизвестный параметр: $arg" ;;
+		*) [ -z "$version_given" ] || die "укажите одну версию nfqws2-ui"
+		   VERSION=$arg
+		   version_given=1 ;;
+	esac
+done
 
 # Is a program on PATH. Not «command -v»: some firmwares' shells (Asuswrt-Merlin) lack «command»
 have() {
@@ -94,6 +109,83 @@ my_uid() {
 	[ -n "$u" ] || u=$(awk '/^Uid:/ { print $2; exit }' /proc/self/status 2>/dev/null)
 	echo "${u:-?}"
 }
+
+keenetic_ready() {
+	[ -x /usr/bin/nfqws2 ] && [ -f /etc/nfqws2/nfqws2.conf ] &&
+		/etc/init.d/nfqws2-keenetic running >/dev/null 2>&1
+}
+
+choose_keenetic_mode() {
+	[ -z "$KEENETIC_MODE" ] || return 0
+	if ( : </dev/tty ) 2>/dev/null; then
+		printf '%s\n' 'Для панели требуется nfqws2-keenetic.' \
+			'1. Подключить официальный репозиторий для установки и обновлений' \
+			'2. Скачать подписанный APK без подключения репозитория' \
+			'3. Отменить установку' >/dev/tty
+		printf 'Выберите 1, 2 или 3: ' >/dev/tty
+		IFS= read -r choice </dev/tty || choice=
+		case "$choice" in
+			1) KEENETIC_MODE=repo ;;
+			2) KEENETIC_MODE=local ;;
+			3|'') die "установка отменена" ;;
+			*) die "неизвестный вариант установки" ;;
+		esac
+	else
+		die "укажите --nfqws2-keenetic=repo или --nfqws2-keenetic=local"
+	fi
+}
+
+install_keenetic() {
+	key=nfqws2-keenetic.pem
+	mkdir "$TMP/keenetic-key"
+	if ! fetch "$KEENETIC_REPO/$key" "$TMP/keenetic-key/$key" || [ ! -s "$TMP/keenetic-key/$key" ]; then
+		die "не удалось скачать ключ nfqws2-keenetic"
+	fi
+	if [ "$KEENETIC_MODE" = repo ]; then
+		repo_file=/etc/apk/repositories.d/nfqws2-keenetic.list
+		printf '%s\n' "$KEENETIC_REPO/packages.adb" > "$TMP/keenetic.list"
+		for target in "/etc/apk/keys/$key" "$repo_file"; do
+			case "$target" in
+				*.pem) source=$TMP/keenetic-key/$key ;;
+				*) source=$TMP/keenetic.list ;;
+			esac
+			if [ -e "$target" ] || [ -L "$target" ]; then
+				cmp -s "$source" "$target" || die "существующий файл отличается: $target"
+			fi
+		done
+		mkdir -p /etc/apk/keys /etc/apk/repositories.d
+		[ -e "/etc/apk/keys/$key" ] || (umask 022; set -C; cat "$TMP/keenetic-key/$key" > "/etc/apk/keys/$key")
+		[ -e "$repo_file" ] || (umask 022; set -C; cat "$TMP/keenetic.list" > "$repo_file")
+		pm_limited 600 - --update-cache add nfqws2-keenetic || die "не удалось установить nfqws2-keenetic из репозитория"
+	else
+		keenetic_tag=$(fetch https://api.github.com/repos/nfqws/nfqws2-keenetic/releases/latest |
+			jsonfilter -e '@.tag_name')
+		case "$keenetic_tag" in v[0-9]*) ;; *) die "не удалось определить выпуск nfqws2-keenetic" ;; esac
+		keenetic_version=${keenetic_tag#v}
+		case "$keenetic_version" in *[!0-9.]*) die "неизвестный формат версии nfqws2-keenetic" ;; esac
+		keenetic_file=nfqws2-keenetic_${keenetic_version}_all_openwrt.apk
+		fetch "$KEENETIC_RELEASES/download/$keenetic_tag/$keenetic_file" "$TMP/$keenetic_file" ||
+			die "не удалось скачать APK nfqws2-keenetic"
+		apk --keys-dir "$TMP/keenetic-key" verify "$TMP/$keenetic_file" ||
+			die "подпись APK nfqws2-keenetic не прошла проверку"
+		mkdir "$TMP/apk-keys"
+		cp -RL /etc/apk/keys/. "$TMP/apk-keys/" || die "не удалось скопировать системные ключи APK"
+		cp "$TMP/keenetic-key/$key" "$TMP/apk-keys/$key"
+		pm_limited 600 - --keys-dir "$TMP/apk-keys" --update-cache add "$TMP/$keenetic_file" ||
+			die "не удалось установить локальный APK nfqws2-keenetic"
+	fi
+
+	# В 1.3.3 первый запуск в post-install происходит до копирования бинарника и определения WAN.
+	[ -x /usr/bin/nfqws2 ] && [ -f /etc/nfqws2/nfqws2.conf ] ||
+		die "nfqws2-keenetic установлен, но бинарник или конфигурация отсутствуют"
+	/etc/init.d/nfqws2-keenetic restart || die "не удалось перезапустить установленный nfqws2-keenetic"
+	for attempt in 1 2 3 4 5; do
+		sleep 1
+		keenetic_ready && return 0
+	done
+	die "nfqws2-keenetic установлен, но служба не работает. Проверьте logread и повторите установку панели."
+}
+
 U=$(my_uid)
 [ "$U" = 0 ] || die "запускайте от пользователя с uid 0 (root, на Asuswrt-Merlin — администратор роутера); сейчас uid $U${USER:+, пользователь $USER}"
 
@@ -118,10 +210,6 @@ else
 	die "нужен OpenWrt или Keenetic с Entware (не найдены /etc/openwrt_release и /opt/bin/opkg)"
 fi
 
-if [ ! -x $R/usr/bin/nfqws2 ] || [ ! -f $R/etc/nfqws2/nfqws2.conf ]; then
-	die "nfqws2 не найден. Сначала установите nfqws2-keenetic: https://github.com/nfqws/nfqws2-keenetic"
-fi
-
 if [ -n "$R" ]; then
 	PM=opkg
 elif have opkg; then
@@ -130,6 +218,13 @@ elif have apk; then
 	PM=apk
 else
 	die "не найден менеджер пакетов opkg или apk"
+fi
+
+if [ "$PM" != apk ]; then
+	[ -z "$KEENETIC_MODE" ] || die "--nfqws2-keenetic поддерживается на OpenWrt с APK"
+	if [ ! -x "$R/usr/bin/nfqws2" ] || [ ! -f "$R/etc/nfqws2/nfqws2.conf" ]; then
+		die "nfqws2 не найден. Сначала установите nfqws2-keenetic: https://github.com/nfqws/nfqws2-keenetic"
+	fi
 fi
 
 # --- версия и файлы ---
@@ -151,18 +246,31 @@ else
 	FILE=nfqws2-ui_${V}-1_all.apk
 fi
 
-TMP=/tmp/nfqws2-ui-install.$$
+TMP=$(mktemp -d /tmp/nfqws2-ui-install.XXXXXX) || die "не удалось создать временный каталог"
 trap 'rm -rf "$TMP"' EXIT INT TERM
-mkdir -p "$TMP"
 say "Скачиваю nfqws2-ui $VERSION…"
 fetch "$BASE/sha256sums.txt" "$TMP/sha256sums.txt" || die "не удалось скачать sha256sums.txt"
 # Пакет .apk есть начиная с версии 1.18.0 — более ранние на apk ставятся файлами из архива
-[ "$PM" = apk ] && ! grep -q " $FILE\$" "$TMP/sha256sums.txt" && PM=files FILE=nfqws2-ui_${V}.tar.gz
+[ "$PM" = apk ] && ! grep -q " $FILE\$" "$TMP/sha256sums.txt" && FILE=nfqws2-ui_${V}.tar.gz
 fetch "$BASE/$FILE" "$TMP/$FILE" || {
 	[ -n "$R" ] && die "не удалось скачать $BASE/$FILE (пакет для Keenetic есть начиная с версии 1.4.0)"
 	die "не удалось скачать $BASE/$FILE"
 }
 ( cd "$TMP" && grep " $FILE\$" sha256sums.txt > sum.txt && sha256sum -c sum.txt >/dev/null 2>&1 ) || die "контрольная сумма $FILE не совпала — файл повреждён или подменён"
+
+if [ "$PM" = apk ]; then
+	if busy=$(ps w 2>/dev/null | grep -E '[a]pk .*(add|del|update|upgrade|fix)'); then
+		say "$busy"
+		die "уже работает другой apk (выше). Дождитесь его завершения и повторите установку."
+	fi
+	if ! apk info -e nfqws2-keenetic >/dev/null 2>&1; then
+		choose_keenetic_mode
+		install_keenetic
+	elif ! apk info -e nfqws2-ui >/dev/null 2>&1 && ! keenetic_ready; then
+		die "nfqws2-keenetic уже установлен, но служба не готова. Проверьте её состояние перед установкой панели."
+	fi
+	[ "${FILE##*.}" = apk ] || PM=files
+fi
 
 # --- установка ---
 if [ "$PM" = opkg ]; then
@@ -218,10 +326,6 @@ if [ "$PM" = opkg ]; then
 		die "opkg install не прошёл (см. выше)" ;;
 	esac
 elif [ "$PM" = apk ]; then
-	if busy=$(ps w 2>/dev/null | grep -E '[a]pk .*(add|del|update|upgrade|fix)'); then
-		say "$busy"
-		die "уже работает другой apk (выше). Дождитесь, пока он закончит, или остановите его: kill <число из первой колонки> — и запустите установку снова"
-	fi
 	say "Обновляю список пакетов…"
 	rc=0
 	pm_limited 120 "$TMP/apk-update.log" update || rc=$?
@@ -241,6 +345,9 @@ elif [ "$PM" = apk ]; then
 		mkdir "$TMP/x"
 		apk extract --allow-untrusted --destination "$TMP/x" "$TMP/$FILE" >/dev/null || die "не удалось распаковать $FILE"
 		cp -a "$TMP/x/www" "$TMP/x/usr" / || die "не удалось разложить файлы пакета"
+		if [ -f "$TMP/x/etc/init.d/nfqws-ui-cgroup" ]; then
+			cp -a "$TMP/x/etc/init.d/nfqws-ui-cgroup" /etc/init.d/ || die "не удалось обновить службу nfqws-ui-cgroup"
+		fi
 		/usr/sbin/nfqws-ui-setup apply
 	else
 		rc=0

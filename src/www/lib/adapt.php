@@ -261,20 +261,25 @@ function lintConf(array $raw, string $text): array
   if (!$help['full']) {
     $add(null, null, 'warning', 'nfqws2 не ответил на запрос справки (nfqws2 --help) — названия параметров не проверены. Откройте страницу ещё раз через минуту');
   }
-  $lua = luaCatalog();
-  $funcs = $lua['functions'];
-
   // Что объявлено в параметрах запуска: загруженные lua-файлы и блобы
   $loadedLua = [];
   $blobs = [];
-  foreach (tokens($exp['NFQWS_BASE_ARGS']) as $t) {
+  foreach (tokens($exp['NFQWS_BASE_ARGS']) as $i => $t) {
     if (preg_match('/^--lua-init=@(.+)$/', $t, $m)) {
-      $loadedLua[basename($m[1])] = true;
+      $path = $m[1];
+      if (!is_file($path) && str_ends_with($path, '.lua')) {
+        $path .= '.gz';
+      }
+      if (is_file($path)) {
+        $loadedLua[realpath($path) ?: $path] = $i;
+      }
     } elseif (preg_match('/^--blob=([^:]+):(.*)$/', $t, $m)) {
       // значение — откуда блоб берётся (@файл или 0xHEX): по нему видно, TLS ли это
       $blobs[$m[1]] = $m[2];
     }
   }
+  $lua = luaCatalog($loadedLua);
+  $funcs = $lua['functions'];
   // tls_client_hello_clone:blob=ИМЯ сам создаёт блоб — копию приветствия устройства (для fake:blob=ИМЯ в том же профиле)
   foreach (ARG_VARS as $v) {
     foreach (tokens($exp[$v] ?? '') as $t) {
@@ -631,9 +636,11 @@ function lintDesync(string $var, int $i, string $val, array $funcs, array $lua, 
     return;
   }
   $f = $funcs[$fn];
-  if (!isset($loadedLua[$f['file']])) {
-    $add($var, $i, 'error', "Функция {$fn} из {$f['file']}, а этот файл не подключён через --lua-init",
-      listFileExists(LUA_DIR . "/{$f['file']}") ? ['op' => 'append', 'var' => 'NFQWS_BASE_ARGS', 'tok' => '--lua-init=@' . LUA_DIR . "/{$f['file']}", 'label' => "Подключить {$f['file']}"] : null);
+  $file = $f['file'];
+  if (!isset($loadedLua[realpath($file) ?: $file])) {
+    $name = basename($file);
+    $add($var, $i, 'error', "Функция {$fn} из {$name}, а этот файл не подключён через --lua-init",
+      is_file($file) ? ['op' => 'append', 'var' => 'NFQWS_BASE_ARGS', 'tok' => '--lua-init=@' . $file, 'label' => "Подключить {$name}"] : null);
   }
   $allowed = array_merge(array_keys($f['args']), $f['file_keys'], ['strategy', 'final'], $pic ? ['cond', 'cond_neg'] : []);
   foreach ($f['std'] as $g) {
@@ -908,7 +915,7 @@ function lintCurrent(): array
 // every note, hidden ones included (the help report)
 function lintCurrentRaw(): array
 {
-  $deps = array_merge([CONF_FILE, LISTS_DIR, NFQWS_BIN], array_values(luaFiles()));
+  $deps = array_merge([CONF_FILE, LISTS_DIR, NFQWS_BIN], array_values(luaFiles(true)));
   return cached('lint-current', $deps, function () {
     $text = file_get_contents(CONF_FILE);
     return lintConf(confRawVars($text), $text);

@@ -11,7 +11,8 @@ cp -R "$SRC/." "$W/"
 chown -R 0:0 "$W"
 find "$W" -type d -exec chmod 755 {} +
 find "$W" -type f -exec chmod 644 {} +
-chmod 755 "$W/usr/sbin/nfqws-ui-setup" "$W/usr/sbin/nfqws-ui"
+chmod 755 "$W/usr/sbin/nfqws-ui-setup" "$W/usr/sbin/nfqws-ui" \
+	"$W/etc/init.d/nfqws-ui-cgroup" "$W/usr/sbin/nfqws-ui-cgroup-cgi"
 for s in post-install post-upgrade pre-deinstall post-deinstall; do
 	cp "$SCR/$s" "$W.$s"
 	chmod 755 "$W.$s"

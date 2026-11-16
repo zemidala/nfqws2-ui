@@ -4,6 +4,11 @@ mkdir -p /etc/nfqws-ui
 chmod 700 /etc/nfqws-ui
 # Раньше на OpenWrt с apk интерфейс ставился файлами — теперь им владеет пакет
 rm -f /etc/nfqws-ui/.manual
+if [ ! -x /usr/bin/nfqws2 ] || [ ! -f /etc/nfqws2/nfqws2.conf ] ||
+	! /etc/init.d/nfqws2-keenetic running >/dev/null 2>&1; then
+	echo "nfqws2-ui: настройка отложена. Запустите nfqws2-keenetic, затем выполните nfqws-ui-setup apply." >&2
+	exit 0
+fi
 if /usr/sbin/nfqws-ui-setup apply; then
 	echo ""
 	echo "nfqws2-ui установлен. Вход — логин root и его пароль."
