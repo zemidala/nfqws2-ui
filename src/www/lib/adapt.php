@@ -269,7 +269,7 @@ function lintConf(array $raw, string $text): array
   $blobs = [];
   foreach (tokens($exp['NFQWS_BASE_ARGS']) as $t) {
     if (preg_match('/^--lua-init=@(.+)$/', $t, $m)) {
-      $loadedLua[basename($m[1])] = true;
+      $loadedLua[basename($m[1], '.gz')] = true;
     } elseif (preg_match('/^--blob=([^:]+):(.*)$/', $t, $m)) {
       // значение — откуда блоб берётся (@файл или 0xHEX): по нему видно, TLS ли это
       $blobs[$m[1]] = $m[2];
