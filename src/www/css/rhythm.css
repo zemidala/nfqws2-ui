@@ -116,5 +116,5 @@
   :root:root:root .frow.kv + .frow.kv { margin-top: calc(var(--sp-2) - var(--sp-3)); }   /* 8 between «label — value» lines */
   /* a switch spans the width in equal parts and never breaks into two lines */
   :root:root:root .seg { display: flex; flex-wrap: nowrap; width: 100%; }
-  :root:root:root .seg > button { flex: 1 1 0; min-width: 0; padding: 0 6px; white-space: normal; --lh: 1.15; }
+  :root:root:root .seg > button { flex: 1 1 0; min-width: 0; padding: 4px 6px; white-space: normal; --lh: 1.15; line-height: 16px; text-box: none; }
 }

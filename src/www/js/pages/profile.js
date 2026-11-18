@@ -410,7 +410,7 @@ async function viewProfile(content, index, r) {
       if (it.type === 'range') {
         return wrapStep(i, it, 'orch', h('span', { class: 'sn o', text: 'R' }), h('div', { class: 'step-main' },
           h('div', { class: 'step-t' }, h('b', { text: it.opt === 'out-range' ? 'Исходящие пакеты' : 'Входящие пакеты' }),
-            h('input', { class: 'input mono', style: 'width:120px;min-height:26px;padding:1px 8px', value: it.val, 'data-fk': 'range-' + i, 'aria-label': 'Диапазон', oninput: (e) => { it.val = e.target.value; touch(); } }),
+            h('input', { class: 'input mono', style: 'width:120px;min-height:26px;padding-inline:8px', value: it.val, 'data-fk': 'range-' + i, 'aria-label': 'Диапазон', oninput: (e) => { it.val = e.target.value; touch(); } }),
             h('span', { class: 'sm muted', text: 'например <n2 — первые 2 пакета' })), issueLines(it)));
       }
       if (it.type === 'raw') {

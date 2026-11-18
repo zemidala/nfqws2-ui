@@ -60,3 +60,4 @@
 /* a one-line field and a dropdown are exactly --ctl-h tall in every style: vertical padding on top of the line height
    made them 3 px taller than the buttons beside them (style A: 33 against 30) */
 :root:root input.input, :root:root .select { height: var(--ctl-h); min-height: var(--ctl-h); padding-top: 0; padding-bottom: 0; }
+:root:root[data-variant="k"]:not([data-palette="zd"]) input.input { padding-bottom: 2px; }

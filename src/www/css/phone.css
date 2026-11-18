@@ -22,7 +22,7 @@
 @media (max-width: 599px) {
   .tbl td { overflow-wrap: anywhere; }   /* a long name or message breaks rather than widen the table past the screen */
   .tbl td.nowrap { white-space: normal; }
-  .mon-tbl .mst { padding: 2px 7px; } .mon-tbl .mst::before { display: none; }   /* the colour says it; the dot cost 13 px */
+  .mon-tbl .mst { padding: 2px 7px; white-space: normal; line-height: 16px; } .mon-tbl .mst::before { display: none; }   /* the colour says it; the dot cost 13 px */
   :root .scroll > table.tbl.cardy { min-width: 0; }
   .tbl.cardy, .tbl.cardy tbody { display: block; }
   .tbl.cardy thead { display: none; }

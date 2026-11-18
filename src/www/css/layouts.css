@@ -195,7 +195,7 @@ a.over-row:hover { background: var(--soft); }
 .learn-tbl td.nm { max-width: 320px; overflow-wrap: anywhere; }
 .learn-tbl td.c-cur { min-width: 220px; overflow-wrap: break-word; }
 .learn-tbl td.c-sure { white-space: nowrap; }
-.lex { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 6px 0 0; vertical-align: middle; }
+.lex { border: 0; background: none; color: var(--muted); cursor: pointer; padding: 0 6px 0 0; vertical-align: top; display: inline-flex; align-items: center; height: 20px; }
 .lex svg { width: 14px; height: 14px; }
 .lbar { display: inline-block; width: 70px; height: 6px; border-radius: 3px; background: var(--soft); vertical-align: middle; overflow: hidden; }
 .lbar i { display: block; height: 100%; background: var(--ok); }

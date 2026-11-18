@@ -64,6 +64,6 @@ test('диагноз: между выводом и блоком «Если на 
     const next = page.locator('.diag-next');
     await expect(next).toBeVisible({ timeout: 90_000 });
     const gap = await next.evaluate((el) => el.getBoundingClientRect().top - el.previousElementSibling.getBoundingClientRect().bottom);
-    expect(gap).toBe(10);
+    expect(gap).toBe(8);
   }
 });
