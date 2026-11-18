@@ -247,7 +247,7 @@ async function viewDns(main) {
   }
   function setNotice() {
     const j = info?.job;
-    if (!j || !['failed', 'rolled'].includes(j.state) || Date.now() / 1000 - (j.finished || 0) > 600) return null;
+    if (!j || !['failed', 'rolled'].includes(j.state) || (S.state?.now || Date.now() / 1000) - (j.finished || 0) > 600) return null;
     return notice('bad', j.state === 'failed' ? `${j.name} не поставлен` : 'DNS роутера возвращён как был', j.error || '');
   }
   function routerClosedLine() {

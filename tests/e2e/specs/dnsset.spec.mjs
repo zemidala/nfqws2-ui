@@ -111,6 +111,24 @@ test('плашка «DNS роутера изменён» и запуск с уб
   await expect(banner.getByRole('button', { name: 'Откатить сейчас' })).toBeVisible();
 });
 
+test('плашка об откате считает время по часам роутера, а не браузера', async ({ app, page }) => {
+  const rolled = (fin) => ({ ...KEE, job: { state: 'rolled', name: 'Cloudflare', finished: fin, error: 'DNS не ответил — всё вернулось как было.' } });
+  let info = null;
+  await app.mock((b) => b.cmd === 'dns_get' ? q : b.cmd === 'dnsx_get' ? x : b.cmd === 'dns_set_info' ? info : undefined);
+  await page.route('**/api.php*', async (route) => {
+    let b = {};
+    try { b = JSON.parse(route.request().postData() || '{}'); } catch { /* not JSON */ }
+    if (b.cmd !== 'state') return route.fallback();
+    const r = await route.fetch();
+    const st = await r.json();
+    if (!info) info = rolled(st.now - 60);
+    return route.fulfill({ response: r, json: st });
+  });
+  await page.clock.setFixedTime(Date.now() + 3600 * 1000);
+  await app.open('#/tests/dns');
+  await expect(page.locator('main .notice.bad', { hasText: 'DNS роутера возвращён как был' })).toBeVisible();
+});
+
 test('во всех стилях один и тот же текст окна', async ({ app, page }) => {
   await mock(app, KEE);
   const texts = {};
