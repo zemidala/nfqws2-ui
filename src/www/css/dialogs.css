@@ -95,7 +95,7 @@ select, .select, .mini-sel, .fn-sel { max-width: 100%; min-width: 0; }
   .scroll > table.tbl.mon-tbl:has(th) { min-width: 0; }   /* the tables' 600 px floor: here the table fits without it */
 }
 /* a box as narrow as a phone's (side columns on a 600 px screen): the history column goes, as on a phone */
-@container monbox (max-width: 560px) { .mon-tbl .mon-wide { display: none; } .mon-tbl .mon-narrow { display: inline; } }
+@container monbox (max-width: 600px) { .mon-tbl .mon-wide { display: none; } .mon-tbl .mon-narrow { display: inline; } }
 .ch-words { display: grid; gap: 6px; font-size: var(--fs-sm); }
 .ch-words .ok { color: var(--ok); } .ch-words .bad { color: var(--bad); }
 .ch-blocks { justify-content: flex-start; }
