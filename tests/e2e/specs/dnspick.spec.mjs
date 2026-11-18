@@ -48,11 +48,11 @@ test('во всех стилях один и тот же текст: блок DN
     await app.open('#/tests/dns', { variant });
     const adv = page.locator('.dns-adv').first();
     await expect(adv).toBeVisible();
-    const a = (await adv.innerText()).replace(/\s+/g, ' ').trim();
+    const a = (await adv.innerText()).replace(/новое/g, '').replace(/\s+/g, ' ').trim();
     await app.open('#/tests/pick?dns=dns.google@8.8.8.8', { variant });
     await expect(page.locator('main h1').first()).toHaveText('Подбор стратегии');
     await expect(page.getByRole('checkbox', { name: 'DoT — TLS, порт 853' })).toBeVisible();
-    const f = (await page.locator('main .panel').first().innerText()).replace(/\s+/g, ' ').trim();
+    const f = (await page.locator('main .panel').first().innerText()).replace(/новое/g, '').replace(/\s+/g, ' ').trim();
     texts[variant] = a + ' || ' + f;
   }
   for (const v of ['b', 'c', 'k', 'z']) expect(texts[v], `стиль ${v} против a`).toBe(texts.a);
@@ -72,8 +72,8 @@ for (const [w, hgt] of [[390, 844], [1366, 900]]) {
     await app.mock((b) => b.cmd === 'test_status' ? { state: 'idle' } : undefined);
     await app.open('#/tests/pick?dns=dns.google@8.8.8.8,cloudflare-dns.com@1.1.1.1', { variant: 'a' });
     const main = page.locator('main');
-    await expect(main.getByRole('radio', { name: 'Несколько сайтов или список' })).toHaveAttribute('aria-checked', 'true');
-    await expect(main.getByRole('textbox', { name: 'Сайты, по одному в строке' })).toHaveValue('dns.google\ncloudflare-dns.com');
+    await expect(main.getByRole('radio', { name: 'DNS-серверы' })).toHaveAttribute('aria-checked', 'true');
+    await expect(main.getByRole('textbox', { name: 'DNS-серверы, по одному в строке' })).toHaveValue('dns.google\ncloudflare-dns.com');
     await expect(main.locator('.frow .lbl', { hasText: /^Серверы$/ })).toBeVisible();
     await expect(main.getByRole('checkbox', { name: 'DoH — HTTPS, порт 443' })).toBeChecked();
     await expect(main.getByRole('checkbox', { name: 'DoT — TLS, порт 853' })).toBeChecked();

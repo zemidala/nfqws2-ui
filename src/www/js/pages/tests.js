@@ -429,9 +429,11 @@ async function viewTests(main, r, bare = false) {
   // Подбор одной стратегии для нескольких сайтов (списка): поле «Сайт» меняется на список и сайты из него
   const hostLists = S.state.lists.filter((l) => l.kind === 'host' && l.exists && l.entries > 0);
   let modeVal = 'one';
-  const modeSeg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Что подбираем' }, [['one', 'Один сайт'], ['multi', 'Несколько сайтов или список']].map(([v, t]) =>
+  const modeSeg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Что подбираем' }, [['one', 'Один сайт'], ['multi', 'Несколько сайтов или список'], ['dns', 'DNS-серверы']].map(([v, t]) =>
     h('button', { type: 'button', role: 'radio', class: v === modeVal ? 'on' : '', 'aria-checked': String(v === modeVal), 'data-v': v, text: t, onclick: () => {
       modeVal = v;
+      dnsMode = v === 'dns';
+      if (dnsMode && !dHosts.value) fillDns();
       modeSeg.querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b.dataset.v === v); b.setAttribute('aria-checked', String(b.dataset.v === v)); });
       drawMode();
     } })));
@@ -448,15 +450,30 @@ async function viewTests(main, r, bare = false) {
     mHosts.value = all.slice(0, 10).join('\n');
     mNote.textContent = `Случайные 10 из ${mList.value} — можно поменять. Найденную стратегию можно будет поставить профилем на весь ${mList.value}.`;
   }
-  const dnsQ = (r.q.get('dns') || '').split(',').map((v) => v.trim()).filter(Boolean).map((v) => { const [name, ip] = v.split('@'); return { name, ip: ip || '' }; });
-  let dnsMode = tab === 'pick' && dnsQ.length > 0;
+  const parseDns = (s) => s.split(',').map((v) => v.trim()).filter(Boolean).map((v) => { const [name, ip] = v.split('@'); return { name, ip: ip || '' }; });
+  let dnsList = parseDns(r.q.get('dns') || '');
+  let dnsMode = tab === 'pick' && dnsList.length > 0;
+  const dHosts = h('textarea', { class: 'input mono', rows: 4, placeholder: 'dns.google\ncloudflare-dns.com', 'aria-label': 'DNS-серверы, по одному в строке', autocapitalize: 'off', spellcheck: 'false' });
+  const dNote = h('span', { class: 'sm muted' });
+  async function fillDns() {
+    const x = await api('dnsx_get').catch(() => null);
+    const rows = (x?.servers || []).filter((s) => s.host && !/^[\d.]+$/.test(s.host) && s.ip && (s.dot || s.doh))
+      .sort((a, b) => (a.udp?.ok ? a.udp.ms : 1e9) - (b.udp?.ok ? b.udp.ms : 1e9));
+    const seen = new Set();
+    const best = rows.filter((s) => !seen.has(s.host) && seen.add(s.host)).slice(0, 3);
+    dnsList = best.length ? best.map((s) => ({ name: s.host, ip: s.ip })) : parseDns('dns.google@8.8.8.8,cloudflare-dns.com@1.1.1.1,dns.quad9.net@9.9.9.9');
+    dHosts.value = dnsList.map((v) => v.name).join('\n');
+    dNote.textContent = best.length ? 'Три самых быстрых сервера из последней проверки на странице «DNS-серверы» — можно поменять.' : 'Проверки DNS ещё не было — взяты Google, Cloudflare и Quad9, можно поменять.';
+  }
   if (dnsMode) {
-    modeVal = 'multi';
-    mHosts.value = dnsQ.map((v) => v.name).join('\n');
-    modeSeg.querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b.dataset.v === 'multi'); b.setAttribute('aria-checked', String(b.dataset.v === 'multi')); });
+    modeVal = 'dns';
+    dHosts.value = dnsList.map((v) => v.name).join('\n');
+    modeSeg.querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b.dataset.v === 'dns'); b.setAttribute('aria-checked', String(b.dataset.v === 'dns')); });
   }
   const dDoh = h('input', { type: 'checkbox', checked: true });
   const dDot = h('input', { type: 'checkbox', checked: true });
+  const dnsSrvRow = h('div', { class: 'frow', hidden: !dnsMode }, h('span', { class: 'lbl', text: 'Серверы' }), h('div', { class: 'stack items' }, dHosts, dNote,
+    h('span', { class: 'sm muted', text: 'Подбор ищет стратегию, с которой DoT и DoH к этим серверам проходят через блокировку провайдера. Если они открываются и без обхода, подбор так и скажет — значит, у вас обход для DNS не нужен.' })));
   const dnsRow = h('div', { class: 'frow', hidden: !dnsMode }, h('span', { class: 'lbl', text: 'Проверять' }), h('div', { class: 'stack' },
     h('label', { class: 'chk' }, dDoh, 'DoH — HTTPS, порт 443'), h('label', { class: 'chk' }, dDot, 'DoT — TLS, порт 853')));
   const dnsNote = S.state.intercept?.policy?.mode === 'only' ? h('p', { class: 'sm muted', hidden: !dnsMode, text: 'На Keenetic с политикой доступа интерфейс сам пометит DNS-запросы роутера к этим серверам, чтобы они шли через nfqws2.' }) : null;
@@ -495,15 +512,13 @@ async function viewTests(main, r, bare = false) {
   const hostLbl = h('label', { class: 'lbl', for: 't-host', text: 'Сайт' });
   const protoRow = h('div', { class: 'frow' }, hostLbl, h('div', { class: 'row' }, host, proto, tab === 'pick' ? newTag('pick:quic') : newTag('trace:quic')));
   function drawMode() {
-    const multi = mode.value === 'multi';
-    if (!multi) dnsMode = false;
+    const multi = mode.value === 'multi' || dnsMode;
     if (dnsMode && proto.value !== 'https') proto.value = 'https';
     hostLbl.textContent = multi ? 'Протокол' : 'Сайт';
     host.hidden = multi;
     protoRow.hidden = dnsMode;
-    multiRow.hidden = !multi;
-    multiLbl.textContent = dnsMode ? 'Серверы' : 'Сайты';
-    multiExtra.forEach((el) => { el.hidden = dnsMode; });
+    multiRow.hidden = mode.value !== 'multi';
+    dnsSrvRow.hidden = !dnsMode;
     dnsRow.hidden = !dnsMode;
     if (dnsNote) dnsNote.hidden = !dnsMode;
     ownRow.hidden = multi && isQuic();
@@ -522,13 +537,13 @@ async function viewTests(main, r, bare = false) {
   async function start() {
     const cmd = tab === 'trace' ? 'trace_start' : 'test_start';
     const sets = [setCfg.checked && 'config', setCfg.checked && setPorts.checked && !isQuic() && 'ports', setStd.checked && 'std', setHist.checked && 'hist', setHist.checked && 'other', setComm.checked && 'community', catSel.value].filter(Boolean);
-    const single = tab === 'pick' && mode.value !== 'multi';
+    const single = tab === 'pick' && mode.value === 'one';
     if (tab !== 'trace' && !sets.length && !(tab === 'pick' && ownTa.value.trim())) { toast('Выберите, что пробовать', { err: true }); return; }
     if (tab === 'pick' && dnsMode) {
-      const names = [...new Set(mHosts.value.split(/[\s,]+/).filter(Boolean))];
+      const names = [...new Set(dHosts.value.split(/[\s,]+/).filter(Boolean))];
       if (!dDoh.checked && !dDot.checked) { toast('Выберите DoH, DoT или оба', { err: true }); return; }
       const hosts = names.flatMap((n) => [dDoh.checked ? n : null, dDot.checked ? n + ':853' : null]).filter(Boolean);
-      const ips = Object.fromEntries(dnsQ.filter((v) => v.ip && names.includes(v.name)).map((v) => [v.name, v.ip]));
+      const ips = Object.fromEntries(dnsList.filter((v) => v.ip && names.includes(v.name)).map((v) => [v.name, v.ip]));
       const dOwn = await ownStrategies();
       if (!dOwn) return;
       const dSets = sets.filter((x) => ['config', 'ports', 'std', 'hist', 'community'].includes(x));
@@ -1038,9 +1053,9 @@ async function viewTests(main, r, bare = false) {
   main.append(
     bare ? null : h('div', { class: 'vh' }, h('h1', { text: tab === 'trace' ? 'Трассировка' : 'Подбор стратегии' })),
     panel(null, null,
-      tab === 'pick' ? h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Подбирать' }), h('div', { class: 'row' }, modeSeg, newTag('pick:multi'))) : null,
+      tab === 'pick' ? h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Подбирать' }), h('div', { class: 'row' }, modeSeg, newTag('pick:multi'), newTag('pick:dns'))) : null,
       protoRow,
-      tab === 'pick' ? [multiRow, dnsRow, dnsNote, quicNote,
+      tab === 'pick' ? [multiRow, dnsSrvRow, dnsRow, dnsNote, quicNote,
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Что пробовать' }), h('div', { class: 'pick-sets' },
           h('label', { class: 'chk' }, setCfg, 'стратегии из вашего конфига'), h('label', { class: 'chk' }, setStd, 'стандартный набор'),
           h('label', { class: 'chk', title: 'До восьми стратегий, которые сработали у абонентов вашего провайдера (база на GitHub, раз в сутки). Сначала — открывавшие этот сайт или его сеть.' }, setComm, 'стратегии сообщества', newTag('pick:community')),

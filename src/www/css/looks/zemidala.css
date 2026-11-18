@@ -17,7 +17,7 @@
   --tk-opt: #8f3205; --tk-fn: #0a5a2c; --tk-key: #5e2390; --tk-p: #414c62; --tk-var: #6e4000;
 }
 :root[data-variant="k"][data-palette="zd"][data-mode="dark"] {
-  --bg: #07080b; --surface: #12151c; --soft: #1a1e28; --line: #262c3a; --fg: #f1f4fa; --muted: #9aa1b5; --faint: #9aa1b5;
+  --bg: #07080b; --surface: #12151c; --soft: #1a1e28; --line: #262c3a; --fg: #f1f4fa; --muted: #ced3de; --faint: #ced3de;
   --accent: #ff6a14; --accent-ink: #ffd0b0; --accent-fg: #14161b; --accent-soft: #2a2226;
   --ok: #aef2ca; --ok-soft: #12291f; --warn: #ffe0a3; --warn-soft: #2b2312; --bad: #ffcdc8; --bad-soft: #2e1618;
   --k-side: #12151c; --k-active: #2a2226; --k-field: #4a536a; --zd-blue: #b4c2ff; --zd-blue-soft: #18203a; --shadow: none;
@@ -25,7 +25,7 @@
 }
 @media (prefers-color-scheme: dark) {
   :root[data-variant="k"][data-palette="zd"]:not([data-mode="light"]) {
-    --bg: #07080b; --surface: #12151c; --soft: #1a1e28; --line: #262c3a; --fg: #f1f4fa; --muted: #9aa1b5; --faint: #9aa1b5;
+    --bg: #07080b; --surface: #12151c; --soft: #1a1e28; --line: #262c3a; --fg: #f1f4fa; --muted: #ced3de; --faint: #ced3de;
     --accent: #ff6a14; --accent-ink: #ffd0b0; --accent-fg: #14161b; --accent-soft: #2a2226;
     --ok: #aef2ca; --ok-soft: #12291f; --warn: #ffe0a3; --warn-soft: #2b2312; --bad: #ffcdc8; --bad-soft: #2e1618;
     --k-side: #12151c; --k-active: #2a2226; --k-field: #4a536a; --zd-blue: #b4c2ff; --zd-blue-soft: #18203a; --shadow: none;
@@ -144,13 +144,13 @@
 /* ---------- local/design/bbb.html: the designer's variant Б for the menu and the connections, one to one, in his
    palette (near-black in the dark theme); the notes as coloured plates ---------- */
 :root[data-palette="zd"] { --ag-surface: #ffffff; --ag-soft: #ebeef5; --ag-line: #d5dbe5; --ag-fg: #0d1117; --ag-muted: #4b5565;
-  --ag-bad: #7f1d1d; --ag-warn: #78350f; --ag-ok: #14532d;
+  --ag-bad: #5a1313; --ag-warn: #6a2e0c; --ag-ok: #0f4423;
   --al-info: #1d4dff; --al-warn: #b45309; --al-bad: #c81e1e; --al-ok: #15803d; }
-:root[data-palette="zd"][data-mode="dark"] { --ag-surface: #12151c; --ag-soft: #1a1e28; --ag-line: #262c3a; --ag-fg: #f1f4fa; --ag-muted: #9aa1b5;
-  --ag-bad: #ef4444; --ag-warn: #f59e0b; --ag-ok: #22c55e;
+:root[data-palette="zd"][data-mode="dark"] { --ag-surface: #12151c; --ag-soft: #1a1e28; --ag-line: #262c3a; --ag-fg: #f1f4fa; --ag-muted: #ced3de;
+  --ag-bad: #ffcdc8; --ag-warn: #fcd34d; --ag-ok: #86efac;
   --al-info: #5b7cff; --al-warn: #f59e0b; --al-bad: #f05252; --al-ok: #22c55e; }
-@media (prefers-color-scheme: dark) { :root[data-palette="zd"]:not([data-mode="light"]) { --ag-surface: #12151c; --ag-soft: #1a1e28; --ag-line: #262c3a; --ag-fg: #f1f4fa; --ag-muted: #9aa1b5;
-  --ag-bad: #ef4444; --ag-warn: #f59e0b; --ag-ok: #22c55e;
+@media (prefers-color-scheme: dark) { :root[data-palette="zd"]:not([data-mode="light"]) { --ag-surface: #12151c; --ag-soft: #1a1e28; --ag-line: #262c3a; --ag-fg: #f1f4fa; --ag-muted: #ced3de;
+  --ag-bad: #ffcdc8; --ag-warn: #fcd34d; --ag-ok: #86efac;
   --al-info: #5b7cff; --al-warn: #f59e0b; --al-bad: #f05252; --al-ok: #22c55e; } }
 :root[data-palette="zd"] .conn-res, :root[data-palette="zd"]:not([data-navmini], [data-simple]) .mnav { --surface: var(--ag-surface); --soft: var(--ag-soft); --line: var(--ag-line); --fg: var(--ag-fg); --muted: var(--ag-muted); }
 :root:root[data-palette="zd"] .c-st.bad { background: rgba(239, 68, 68, .15); color: var(--ag-bad); border-color: rgba(239, 68, 68, .3); }

@@ -53,12 +53,33 @@ test('OpenWrt: окно говорит про пакет https-dns-proxy', async
   await expect(page.getByRole('dialog', { name: 'Поставить Quad9 в роутер' })).toContainText('Будет установлен пакет https-dns-proxy (около 100 КБ), в нём сервер https://dns.quad9.net/dns-query. dnsmasq станет спрашивать его вместо DNS провайдера.');
 });
 
-test('podkop: кнопок нет, вместо них объяснение', async ({ app, page }) => {
+test('podkop: кнопка видна и объясняет, почему поставить нельзя', async ({ app, page }) => {
   await mock(app, PODKOP);
   await app.open('#/tests/dns');
   await expect(page.locator('.dnsx-tile')).toHaveCount(3);
-  await expect(page.getByRole('button', { name: 'Поставить в роутер' })).toHaveCount(0);
   await expect(page.locator('.dns-adv')).toContainText('Поставить сервер отсюда нельзя: DNS роутера ведёт podkop, и менять его в обход podkop нельзя. Сервер задаётся в настройках podkop.');
+  await page.locator('.dnsx-tile').first().getByRole('button', { name: 'Поставить в роутер' }).click();
+  const m = page.getByRole('dialog');
+  await expect(m).toContainText('Поставить сервер отсюда нельзя: DNS роутера ведёт podkop');
+  await expect(m.getByRole('button', { name: 'Поставить' })).toHaveCount(0);
+});
+
+test('подбор для DNS виден всегда: кнопка на странице и режим в подборе', async ({ app, page }) => {
+  await app.mock((b) => b.cmd === 'dns_get' ? {} : b.cmd === 'dnsx_get' ? {} : b.cmd === 'test_status' ? { state: 'idle' } : undefined);
+  await app.open('#/tests/dns', { variant: 'a' });
+  await page.locator('main').getByRole('button', { name: 'Подобрать стратегию для DNS' }).click();
+  await expect(page.locator('main').getByRole('radio', { name: 'DNS-серверы' })).toHaveAttribute('aria-checked', 'true');
+  await expect(page.getByRole('textbox', { name: 'DNS-серверы, по одному в строке' })).toHaveValue('dns.google\ncloudflare-dns.com\ndns.quad9.net');
+  await page.locator('main').getByRole('radio', { name: 'Один сайт' }).click();
+  await page.locator('main').getByRole('radio', { name: 'DNS-серверы' }).click();
+  await expect(page.getByRole('textbox', { name: 'DNS-серверы, по одному в строке' })).toHaveValue('dns.google\ncloudflare-dns.com\ndns.quad9.net');
+  await expect(page.locator('main').getByRole('checkbox', { name: 'DoT — TLS, порт 853' })).toBeVisible();
+  await expect(page.locator('main').getByRole('combobox', { name: 'Протокол' })).toBeHidden();
+  for (const w of [390, 1366]) {
+    await page.setViewportSize({ width: w, height: 900 });
+    await page.waitForTimeout(200);
+    expect(await auditLayout(page), `раскладка ${w}`).toEqual([]);
+  }
 });
 
 test('плашка «DNS роутера изменён» и запуск с убиранием закрытых', async ({ app, page }) => {
