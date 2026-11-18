@@ -168,12 +168,13 @@ const fmtNum = (n) => n >= 1e6 ? (n / 1e6).toFixed(1).replace('.', ',') + ' мл
 const fmtDate = (t) => t ? new Date(t * 1000).toLocaleString('ru-RU', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
 const fmtTime = (t) => new Date(t * 1000).toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
 const fmtDay = (t) => {
-  const d = new Date(t * 1000), now = new Date();
+  const d = new Date(t * 1000), now = new Date(routerNow() * 1000);
   const y = new Date(now); y.setDate(now.getDate() - 1);
   if (d.toDateString() === now.toDateString()) return 'Сегодня';
   if (d.toDateString() === y.toDateString()) return 'Вчера';
   return d.toLocaleDateString('ru-RU', { day: 'numeric', month: 'long', year: d.getFullYear() === now.getFullYear() ? undefined : 'numeric' });
 };
+const routerNow = () => Math.floor(S.state?.now ? S.state.now + (Date.now() - (S.stateAt || Date.now())) / 1000 : Date.now() / 1000);
 const fmtAgo = (s) => s < 90 ? 'только что' : s < 3600 ? Math.round(s / 60) + ' мин назад' : s < 172800 ? Math.round(s / 3600) + ' ч назад' : Math.round(s / 86400) + ' дн назад';
 const listName = (f) => LIST_NAMES[f] || f.replace(/\.list$/, '');
 const base = (p) => String(p).split('/').pop();

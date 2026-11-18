@@ -38,7 +38,7 @@ async function paneAbout(content) {
           h('div', { class: 'notice-actions' }, btn('Что нового', () => openUpdate(u), 'small'), u.can_update ? btn('Обновить', () => openUpdate(u, true), 'small primary', 'download', { disabled: u.running }) : null))
         : u.error ? notice('warn', 'Не удалось проверить обновления', `${u.error}. Попробуйте позже или посмотрите «все релизы».`)
         : u.latest ? notice('ok', 'У вас последняя версия', null) : null,
-      row('Последняя проверка', u.checked ? fmtAgo(Date.now() / 1000 - u.checked) : 'ещё не было', u.error ? h('span', { class: 'status-bad', text: ' — ' + u.error }) : null),
+      row('Последняя проверка', u.checked ? fmtAgo(routerNow() - u.checked) : 'ещё не было', u.error ? h('span', { class: 'status-bad', text: ' — ' + u.error }) : null),
       h('div', { class: 'row' }, btn('Проверить сейчас', check, 'small', 'refresh'), link(u.url || REPO + '/releases', 'все релизы')),
       h('p', { class: 'sm muted', text: 'Интерфейс сам проверяет обновления раз в 12 часов и раз в сутки по расписанию. Если вышла новая версия, сверху появится плашка.' })),
     panel('Из консоли роутера', null,

@@ -92,7 +92,7 @@ async function viewLearn(main) {
     morphKids(out, [keyed(h('section', { class: 'panel' },
       h('div', { class: 'row' },
         h('span', { class: 'sm muted grow' }, plural(items.length, 'сайт', 'сайта', 'сайтов'), profiles.length ? ' · ' + (profiles.length > 1 ? 'профили ' : 'профиль ') + profiles.join(', ') : '',
-          data.updated ? ' · обновлено ' + fmtAgo(Math.floor(Date.now() / 1000) - data.updated) : ''),
+          data.updated ? ' · обновлено ' + fmtAgo(routerNow() - data.updated) : ''),
         btn('Забыть всё', () => forget(null), 'small danger')),
       h('div', { class: 'scroll', 'data-whole': '' }, h('table', { class: 'tbl learn-tbl' },
         h('thead', {}, h('tr', {}, h('th', { text: 'Сайт' }), h('th', { text: 'Сейчас' }), h('th', { text: 'Уверенность' }),

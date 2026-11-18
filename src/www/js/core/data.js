@@ -11,6 +11,7 @@ async function loadState() {
   const st = await api('state');
   if (my !== stateSeq) return S.state;
   S.state = st;
+  S.stateAt = Date.now();
   const since = S.state?.ui?.seen?.since;
   if (since) {
     const def = vcmp(since, ZD_SINCE) >= 0 ? 'z' : 'k';

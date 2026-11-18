@@ -58,7 +58,7 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
 async function autoUpdateCheck() {
   if (!S.state) { setTimeout(autoUpdateCheck, 3000); return; }
   const u = S.state.ui?.update;
-  if (u && Date.now() / 1000 - u.checked < 12 * 3600) return;
+  if (u && routerNow() - u.checked < 12 * 3600) return;
   const r = await api('update_check').catch(() => null);
   if (r && S.state?.ui) { S.state.ui.update = { ...S.state.ui.update, ...r }; updateChrome(); }
 }

@@ -5,6 +5,7 @@ define('DNSSET_FILE', UI_CONF_DIR . '/dnsset.json');
 const DNSSET_LOCK = '/tmp/nfqws-ui-dnsset.lock';
 const DNSSET_WAIT = 180;
 const DNSSET_PORT = 5053;
+const DNSSET_STALE = 660;
 
 function dnsSetNdmc(string $cmd): array
 {
@@ -177,6 +178,10 @@ function dnsSetStart(string $name, array $remove): void
   $remove = array_values(array_intersect(array_map('strval', $remove), $lines));
   $busy = dnsSetLocked(function () use ($name, $k, $t, $remove) {
     $cur = dnsSetData();
+    if (dnsSetStale($cur)) {
+      dnsSetRecover($cur);
+      $cur = dnsSetData();
+    }
     if ($cur && in_array($cur['state'] ?? '', ['working', 'pending'], true)) {
       return true;
     }
@@ -253,6 +258,7 @@ function dnsSetJob(): void
   $installed = true;
   if ($d['kind'] === 'keenetic') {
     $before = dnsSetKeeneticLines();
+    $d['before'] = $before;
     $step('меняю серверы Keenetic');
     $cmds = [];
     $have = array_filter(array_map('dnsSetLineInfo', $before));
@@ -274,15 +280,7 @@ function dnsSetJob(): void
         break;
       }
     }
-    $after = dnsSetKeeneticLines();
-    foreach (array_diff($after, $before) as $line) {
-      if ($i = dnsSetLineInfo($line)) {
-        $undo[] = ['ndmc', $i['del']];
-      }
-    }
-    foreach (array_diff($before, $after) as $line) {
-      $undo[] = ['ndmc', 'dns-proxy ' . $line];
-    }
+    $undo = dnsSetKeeneticUndo($before);
   } else {
     $installed = is_file('/etc/init.d/https-dns-proxy');
     $o = [];
@@ -293,15 +291,6 @@ function dnsSetJob(): void
     $dhcp = implode("\n", $o);
     $enabled = (bool)glob('/etc/rc.d/S*https-dns-proxy');
     $undo[] = ['uci', 'dhcp', $dhcp];
-    if (!$installed) {
-      $step('ставлю пакет https-dns-proxy');
-      $pm = is_file('/usr/bin/apk') || is_file('/sbin/apk') ? 'apk update >/dev/null 2>&1; apk add https-dns-proxy' : 'opkg update >/dev/null 2>&1; opkg install https-dns-proxy';
-      $out = [];
-      exec($pm . ' 2>&1', $out, $rc);
-      if (!is_file('/etc/init.d/https-dns-proxy')) {
-        [$ok, $err] = [false, 'Пакет https-dns-proxy не установился: ' . trim(implode(' ', array_slice($out, -3)))];
-      }
-    }
     if (!$installed || !$enabled) {
       $undo[] = ['sh', '/etc/init.d/https-dns-proxy stop; /etc/init.d/https-dns-proxy disable'];
     }
@@ -312,6 +301,17 @@ function dnsSetJob(): void
       }
     }
     $undo[] = ['sh', '/etc/init.d/dnsmasq restart'];
+    $d['undo'] = $undo;
+    $d['pkg_new'] = !$installed;
+    if (!$installed) {
+      $step('ставлю пакет https-dns-proxy');
+      $pm = is_file('/usr/bin/apk') || is_file('/sbin/apk') ? 'apk update >/dev/null 2>&1; apk add https-dns-proxy' : 'opkg update >/dev/null 2>&1; opkg install https-dns-proxy';
+      $out = [];
+      exec($pm . ' 2>&1', $out, $rc);
+      if (!is_file('/etc/init.d/https-dns-proxy')) {
+        [$ok, $err] = [false, 'Пакет https-dns-proxy не установился: ' . trim(implode(' ', array_slice($out, -3)))];
+      }
+    }
     if ($ok) {
       $step('настраиваю https-dns-proxy');
       $keep = array_filter(dnsSetDnsmasqServers(), fn($v) => $v[0] === '/' && !preg_match('/^\/[^\/]+\/$/', $v));
@@ -348,6 +348,32 @@ function dnsSetJob(): void
   dnsSetCli('dnsset_expire', DNSSET_WAIT + 2);
 }
 
+function dnsSetKeeneticUndo(array $before): array
+{
+  $undo = [];
+  $after = dnsSetKeeneticLines();
+  foreach (array_diff($after, $before) as $line) {
+    if ($i = dnsSetLineInfo($line)) {
+      $undo[] = ['ndmc', $i['del']];
+    }
+  }
+  foreach (array_diff($before, $after) as $line) {
+    $undo[] = ['ndmc', 'dns-proxy ' . $line];
+  }
+  return $undo;
+}
+
+function dnsSetStale(?array $d): bool
+{
+  return $d && ($d['state'] ?? '') === 'working' && time() - (int)($d['started'] ?? 0) > DNSSET_STALE;
+}
+
+function dnsSetRecover(array $d): void
+{
+  dnsSetUndo(isset($d['before']) ? dnsSetKeeneticUndo($d['before']) : ($d['undo'] ?? []));
+  dnsSetSave(['state' => 'failed', 'name' => $d['name'] ?? '', 'kind' => $d['kind'] ?? '', 'error' => 'Изменение прервалось на середине (перезагрузка или нехватка памяти) — DNS роутера возвращён как был.' . dnsSetPkgNote($d), 'finished' => time()]);
+}
+
 function dnsSetUndo(array $undo): void
 {
   foreach ($undo as $u) {
@@ -367,12 +393,14 @@ function dnsSetUndo(array $undo): void
 function dnsSetExpire(): void
 {
   $d = dnsSetData();
-  if (!$d || ($d['state'] ?? '') !== 'pending' || time() < (int)$d['deadline']) {
+  if (!dnsSetStale($d) && (!$d || ($d['state'] ?? '') !== 'pending' || time() < (int)$d['deadline'])) {
     return;
   }
   dnsSetLocked(function () {
     $d = dnsSetData();
-    if ($d && ($d['state'] ?? '') === 'pending' && time() >= (int)$d['deadline']) {
+    if (dnsSetStale($d)) {
+      dnsSetRecover($d);
+    } elseif ($d && ($d['state'] ?? '') === 'pending' && time() >= (int)$d['deadline']) {
       dnsSetUndo($d['undo'] ?? []);
       dnsSetSave(['state' => 'rolled', 'name' => $d['name'], 'kind' => $d['kind'], 'error' => 'Изменение не подтвердили за 3 минуты — DNS роутера возвращён как был.' . dnsSetPkgNote($d), 'finished' => time()]);
     }

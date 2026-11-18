@@ -48,7 +48,7 @@ async function viewMonitor(main) {
   const histOf = (host) => m.data.sites[host] || [];
   const pctOf = (hist) => hist.length ? Math.round(hist.filter((x) => x[1]).length / hist.length * 100) : null;
   const cellTitle = (x) => fmtDate(x[0]) + ' · ' + (x[1] ? `открылся, ${x[2]} мс` : 'не открылся: ' + x[3]);
-  const nowS = () => Math.floor(Date.now() / 1000);
+  const nowS = routerNow;
   // view (table / timeline) and sorting — remembered in this browser
   let view = getLook().monView === 'tl' ? 'tl' : 'tbl';
   let sort = { key: 'host', dir: 1 };

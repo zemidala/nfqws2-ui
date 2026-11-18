@@ -132,7 +132,7 @@ function remotePanel(data) {
   const R = data.remote;
   const c = data.settings.remote;
   const st = R.state || {};
-  const now = Math.floor(Date.now() / 1000);
+  const now = routerNow();
   // unit — the rest of the label's sentence after the field («5 последних снимков…»): beside the field, not a hint
   const inp = (id, label, value, attrs = {}, hint = null, unit = null) => {
     const field = h('input', { class: 'input', id, value: value ?? '', spellcheck: 'false', autocapitalize: 'off', ...attrs });
