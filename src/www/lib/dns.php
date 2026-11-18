@@ -27,12 +27,12 @@ const DNS_SITES = ['rutracker.org', 'nnmclub.to', 'linkedin.com', 'x.com', 'inst
 const DNS_SITES_MAX = 10;   // plus monitoring sites up to this many
 
 // One A query over UDP 53 straight from PHP (no dig/nslookup on the routers)
-function dnsUdp(string $server, string $host, float $timeout = 2.0): array
+function dnsUdp(string $server, string $host, float $timeout = 2.0, int $port = 53): array
 {
   $id = random_bytes(2);
   $q = $id . substr(dnsWireQuery($host), 2);
   $t = microtime(true);
-  $s = @stream_socket_client("udp://$server:53", $en, $es, $timeout);
+  $s = @stream_socket_client("udp://$server:$port", $en, $es, $timeout);
   if (!$s) {
     return ['ok' => false, 'ips' => [], 'ms' => 0, 'error' => $es ?: 'нет сокета'];
   }
@@ -154,6 +154,39 @@ function dnsVerdict(array $ips, array $ref): string
   return $ref ? 'other' : 'unknown';   // big networks hand out different addresses to different resolvers
 }
 
+function routerDnsUpstreams(): array
+{
+  $hosts = [];
+  $ips = [];
+  $o = [];
+  if (is_file('/bin/ndmc')) {
+    exec('LD_LIBRARY_PATH=/lib:/usr/lib /bin/ndmc -c ' . escapeshellarg('show dns-proxy') . ' 2>/dev/null', $o);
+    foreach ($o as $l) {
+      if (!preg_match('/^\s*dns_server\s*=\s*\S+\s+\S+\s*#\s*(\S+)/', $l, $m)) {
+        continue;
+      }
+      if (preg_match('#^https://([^/:@]+)#', $m[1], $u)) {
+        isIp4($u[1]) ? $ips[] = $u[1] : $hosts[] = strtolower($u[1]);
+      } elseif (preg_match('/^(\d+\.\d+\.\d+\.\d+)(?::\d+)?(?:@([a-z0-9.-]+))?$/i', $m[1], $u) && isIp4($u[1])) {
+        $ips[] = $u[1];
+        if (!empty($u[2])) {
+          $hosts[] = strtolower($u[2]);
+        }
+      } elseif (preg_match('/^[a-z0-9-]+(\.[a-z0-9-]+)+$/i', $m[1])) {
+        $hosts[] = strtolower($m[1]);
+      }
+    }
+  } elseif (glob('/etc/rc.d/S*https-dns-proxy')) {
+    exec('uci -q show https-dns-proxy 2>/dev/null', $o);
+    foreach ($o as $l) {
+      if (preg_match("#resolver_url='https://([^/:']+)#", $l, $u)) {
+        isIp4($u[1]) ? $ips[] = $u[1] : $hosts[] = strtolower($u[1]);
+      }
+    }
+  }
+  return ['hosts' => array_values(array_unique($hosts)), 'ips' => array_values(array_unique($ips))];
+}
+
 function dnsData(): array
 {
   $d = json_decode((string)@file_get_contents(DNS_FILE), true);
@@ -184,6 +217,7 @@ function dnsJob(): void
   $d = ['running' => true, 'started' => time(), 'servers' => [], 'sites' => [], 'step' => 'servers'];
   $save = function () use (&$d) { file_put_contents(DNS_FILE, json_encode($d, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES)); };
   $save();
+  $d['upstreams'] = routerDnsUpstreams();
   $loc = dnsLocalServers();
   $my = myAsn(true);   // once per job: when it is not saved yet, detecting goes to RIPEstat
   $d['isp_asn'] = $my ?: null;

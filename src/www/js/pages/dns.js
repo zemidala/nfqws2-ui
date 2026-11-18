@@ -26,9 +26,9 @@ async function viewDns(main) {
         h('div', { class: 'stack items' }, h('div', { class: 'row' }, ownIn, newTag('dns:own')),
           h('span', { class: 'sm muted', text: 'Необязательно, через запятую, до пяти. Адрес — проверяется обычный DNS (порт 53), имя — DoT, ссылка https://… — DoH. Проверяются вместе с публичными и стоят в таблице первыми; список запоминается.' }),
           h('label', { class: 'chk' }, onlyIn, 'Только свои — без публичных серверов', newTag('dns:only')))),
-      h('div', { class: 'row' }, startBtn, newTag('dns:btn'), h('span', { class: 'sm muted grow note-wide', text: 'Настройки DNS роутера страница не меняет — только показывает и советует.' }))),
+      h('div', { class: 'row' }, startBtn, btn('Подобрать стратегию для DNS', () => go(dnsPickHref(pickDefault())), '', 'play'), newTag('dns:pick'), h('span', { class: 'sm muted grow note-wide', text: 'Настройки DNS роутера страница меняет только кнопкой «Поставить в роутер» — с проверкой и откатом.' }))),
     out);
-  let q = {}, x = {}, sort = { key: 'best', dir: 1 }, all = false;
+  let q = {}, x = {}, sort = { key: 'best', dir: 1 }, all = false, info = null;
   const busy = () => !!(q.running || x.running);
   async function start() {
     const own = ownIn.value.split(/[\s,;]+/).map((v) => v.trim()).filter(Boolean);
@@ -164,13 +164,111 @@ async function viewDns(main) {
   // One piece of advice. The router gets real addresses — nothing to change (plain DNS intercepted does not matter, the
   // router already asks over a secure channel), with the fastest servers named in one line. It gets stubs — what to set,
   // the three best clean servers from the extended check (or the fastest secure one from the quick check)
+  const secRows = () => (x.servers || []).filter((r) => r.host && !/^[\d.]+$/.test(r.host) && (r.dot || r.doh));
+  const secClosed = (r) => !(r.dot?.ok || r.doh?.ok);
+  const byHost = (rows) => { const seen = new Set(); return rows.filter((r) => !seen.has(r.host) && seen.add(r.host)); };
+  const dnsPickHref = (rows) => PAGES.pick[0] + '?dns=' + encodeURIComponent(rows.map((r) => r.host + (r.ip ? '@' + r.ip : '')).join(','));
+  const andList = (rows) => rows.flatMap((r, i) => [i ? (i === rows.length - 1 ? ' и ' : ', ') : '', h('b', { text: r.name })]);
+  function closedPanel(rows) {
+    return h('section', { class: 'panel dns-adv bad' }, h('div', { class: 'panel-h' }, h('h2', { text: 'Защищённый DNS закрыт провайдером' })),
+      h('p', {}, 'DoT и DoH не проходят ни к одному из проверенных серверов. Провайдер режет их так же, как сайты, и nfqws2 может это обойти: подбор проверит стратегии на самых быстрых серверах, ', ...andList(rows), ', по DoH и по DoT.'),
+      h('div', { class: 'row' }, btn('Подобрать стратегию для DNS', () => go(dnsPickHref(rows)), 'primary', 'play'), newTag('dns:pick')),
+      h('p', { class: 'sm muted', text: info?.kind ? 'Найденную стратегию можно будет применить отдельным профилем только для этих серверов. Потом проверьте DNS снова и поставьте сервер в роутер кнопкой у него.'
+        : 'Найденную стратегию можно будет применить отдельным профилем только для этих серверов. Потом поставьте один из них в роутере: OpenWrt — Сеть → DHCP и DNS; Keenetic — Интернет → DNS.' }));
+  }
+  const WHY = {
+    podkop: 'Поставить сервер отсюда нельзя: DNS роутера ведёт podkop, и менять его в обход podkop нельзя. Сервер задаётся в настройках podkop.',
+    adguard: 'Поставить сервер отсюда нельзя: DNS роутера ведёт AdGuard Home. Сервер задаётся в его настройках.',
+    dnsmasq: 'Поставить сервер отсюда нельзя: в dnsmasq роутера уже заданы свои серверы. Их меняют в Сеть → DHCP и DNS.',
+  };
+  function pickDefault() {
+    const rows = byHost([...secRows()].sort((a, b) => (udpMs(a) ?? 1e9) - (udpMs(b) ?? 1e9))).slice(0, 3);
+    return rows.length ? rows : [{ host: 'dns.google', ip: '8.8.8.8' }, { host: 'cloudflare-dns.com', ip: '1.1.1.1' }, { host: 'dns.quad9.net', ip: '9.9.9.9' }];
+  }
+  function whyDialog(r) {
+    const text = WHY[info?.why] || (info?.kind === 'openwrt' && !r.doh_url ? 'У этого сервера нет DoH, а на OpenWrt ставится только DoH.'
+      : r.mine ? 'Свой сервер ставится вручную: OpenWrt — Сеть → DHCP и DNS; Keenetic — Интернет → DNS.'
+      : 'Поставить сервер отсюда можно на Keenetic и на OpenWrt; на этом роутере — вручную, в его настройках DNS.');
+    modal(`Поставить ${r.name} в роутер`, h('div', { class: 'stack modal-b' }, h('p', { text })), null);
+  }
+  const tilesOf = (best) => h('div', { class: 'dnsx-best' }, best.map((r, i) => h('div', { class: 'dnsx-tile' + (i ? '' : ' top') },
+    h('b', { text: r.name }), h('span', { class: 'big num', text: bestMs(r) + ' мс' }), h('span', { class: 'sm muted', text: `${bestHow(r)} · ${r.ip || 'по имени'}` }),
+    r.ip ? btn('Поставить в роутер', () => (canSet(r) ? setDialog(r) : whyDialog(r)), 'small' + (i ? '' : ' primary')) : null, r.ip && !i ? newTag('dns:set') : null)));
+  const canSet = (r) => !!r.ip && !r.mine && (info?.kind === 'keenetic' ? !!(r.dot_name || r.doh_url) : info?.kind === 'openwrt' ? !!r.doh_url : false);
+  const rowOf = (c) => (x.servers || []).find((s) => (c.ip && s.ip === c.ip) || (c.host && (s.dot_name === c.host || s.host === c.host || (s.doh_url || '').startsWith('https://' + c.host + '/'))));
+  function closedEntries(r) {
+    return (info?.current || []).filter((c) => {
+      if (c.domain) return false;
+      const s = rowOf(c);
+      if (!s || s.name === r.name) return false;
+      const res = c.proto === 'DoT' ? s.dot : s.doh;
+      return res && !res.ok;
+    });
+  }
+  function setDialog(r) {
+    const kee = info.kind === 'keenetic';
+    const cur = info.current || [];
+    const addDot = kee && r.dot_name && !cur.some((c) => c.proto === 'DoT' && c.ip === r.ip && !c.domain);
+    const addDoh = r.doh_url && !cur.some((c) => c.proto === 'DoH' && c.url === r.doh_url && !c.domain);
+    const closed = kee ? closedEntries(r) : [];
+    const groups = {};
+    for (const c of closed) { const k = rowOf(c).name.replace(/ #\d+$/, '') + '\u0001' + c.proto; groups[k] = (groups[k] || 0) + 1; }
+    const label = Object.entries(groups).map(([k, n]) => { const [nm, p] = k.split('\u0001'); return `${nm} (${p}${n > 1 ? `, ${plural(n, 'адрес', 'адреса', 'адресов')}` : ''})`; }).join(', ');
+    const rm = h('input', { type: 'checkbox', checked: true });
+    const srvRow = (what, value) => h('div', { class: 'dnsset-row' }, h('span', {}, what, ' ', h('span', { class: 'mono sm', text: value })), chip('новый', 'ok'));
+    const nothing = !addDot && !addDoh && !closed.length && kee;
+    const go = btn('Поставить', async () => {
+      if (!await guarded(() => api('dns_set_start', { name: r.name, remove: rm.checked ? closed.map((c) => c.line) : [] }))) return;
+      bg.close();
+      await loadState();
+      watchSet();
+    }, 'primary');
+    go.disabled = nothing;
+    const bg = modal(`Поставить ${r.name} в роутер`, h('div', { class: 'stack modal-b' },
+      kee ? [
+        addDot ? h('div', { class: 'dnsset-row' }, h('span', {}, 'Добавится DoT ', h('span', { class: 'mono sm', text: r.ip }), ', имя ', h('span', { class: 'mono sm', text: r.dot_name })), chip('новый', 'ok')) : null,
+        addDoh ? srvRow('Добавится DoH', r.doh_url) : null,
+        nothing ? h('p', { text: `${r.name} уже стоит в роутере.` }) : null,
+        closed.length ? h('label', { class: 'chk' }, rm, h('span', { text: 'Убрать закрытые провайдером: ' + label })) : null,
+        h('p', { class: 'sm muted', text: 'Остальные серверы роутера останутся как есть. Через закрытый сервер каждый запрос ждёт, пока не истечёт время ответа.' }),
+      ] : h('p', {}, info.installed ? 'Пакет https-dns-proxy уже стоит: в нём останется один сервер ' : 'Будет установлен пакет ', info.installed ? null : h('b', { text: 'https-dns-proxy' }),
+        info.installed ? null : ' (около 100 КБ), в нём сервер ', h('span', { class: 'mono sm', text: r.doh_url }), '. dnsmasq станет спрашивать его вместо DNS провайдера.'),
+      h('p', { class: 'sm muted', text: 'Роутер сразу проверит, что DNS отвечает. Если нет — всё вернётся само. Если да — подтвердите за 3 минуты, иначе тоже откат.' })), go);
+  }
+  function watchSet() {
+    const t = setInterval(async () => {
+      if (!out.isConnected) { clearInterval(t); return; }
+      const j = await api('dns_set_info', { job: true }).catch(() => null);
+      if (!j || j.job?.state === 'working') return;
+      clearInterval(t);
+      info = await api('dns_set_info').catch(() => info);
+      draw();
+    }, 5000);
+  }
+  function setNotice() {
+    const j = info?.job;
+    if (!j || !['failed', 'rolled'].includes(j.state) || Date.now() / 1000 - (j.finished || 0) > 600) return null;
+    return notice('bad', j.state === 'failed' ? `${j.name} не поставлен` : 'DNS роутера возвращён как был', j.error || '');
+  }
+  function routerClosedLine() {
+    const up = q.upstreams || { hosts: [], ips: [] };
+    const rows = byHost(secRows().filter((r) => secClosed(r) && (up.hosts.includes(r.host) || up.ips.includes(r.ip))));
+    if (!rows.length) return null;
+    const one = rows.length === 1;
+    return h('p', { class: 'sm' }, ...andList(rows), one ? ', который стоит в роутере, провайдер закрыл. Чтобы оставить его, ' : ', которые стоят в роутере, провайдер закрыл. Чтобы оставить их, ',
+      h('a', { href: dnsPickHref(rows), text: 'подберите стратегию для DNS' }), '.');
+  }
+
   function advice() {
     const sites = q.sites || [];
     const fake = sites.filter((v) => v.router.st === 'fake');
     const silent = sites.filter((v) => v.router.st === 'none');
     const best = (x.servers || []).filter(clean).sort((a, b) => bestMs(a) - bestMs(b)).slice(0, 3);
     const quick = bestOf({ servers: q.servers || [] });
-    const names = best.map((r) => h('b', { text: r.name })).flatMap((b, i) => [i ? ', ' : '', b, ` (${bestMs(best[i])} мс)`]);
+    const sec = secRows();
+    const allClosed = sec.length > 0 && sec.every(secClosed);
+    const pickRows = byHost([...sec].sort((a, b) => (udpMs(a) ?? 1e9) - (udpMs(b) ?? 1e9))).slice(0, 3);
+    const secLine = () => allClosed ? h('p', { class: 'sm' }, 'DoT и DoH провайдер закрыл. Если понадобятся, ', h('a', { href: dnsPickHref(pickRows), text: 'подберите стратегию для DNS' }), '.') : routerClosedLine();
     if (!sites.length) return null;
     if (!fake.length && silent.length) {
       return notice('warn', 'DNS роутера отвечает не на все сайты', `На ${silent.map((v) => v.host).join(', ')} он не вернул адреса. Если эти сайты нужны — проверьте их в «Диагнозе блокировки»: бывает, что DNS провайдера молчит вместо заглушки.`);
@@ -179,18 +277,23 @@ async function viewDns(main) {
       return h('section', { class: 'panel dns-adv ok' }, h('div', { class: 'panel-h' }, h('h2', { text: 'Менять ничего не нужно' })),
         h('p', {}, 'Роутер получает настоящие адреса.',
           (q.servers || []).some((v) => v.udp?.st === 'intercepted') ? ' Обычный DNS к чужим серверам перехвачен, но роутер уже спрашивает по защищённому каналу.' : '',
-          best.length ? [' Если когда-нибудь понадобится сменить DNS, быстрее всех у вас: ', ...names, '.'] : ''));
+          best.length ? ' Если когда-нибудь понадобится сменить DNS, быстрее всех у вас эти:' : ''),
+        best.length ? tilesOf(best) : null,
+        secLine());
     }
-    const how = h('p', { class: 'sm muted' }, 'Как поставить: OpenWrt — Сеть → DHCP и DNS; Keenetic — Интернет → DNS. Подробно — ',
-      h('a', { href: wikiDns(), target: '_blank', rel: 'noopener', text: 'в справке, раздел «DNS»' }), '. Интерфейс DNS роутера не меняет.');
+    const how = WHY[info?.why] ? h('p', { class: 'sm muted', text: WHY[info.why] })
+      : info?.kind ? h('p', { class: 'sm muted' }, 'Как поставить вручную: OpenWrt — Сеть → DHCP и DNS; Keenetic — Интернет → DNS. Подробно — ',
+        h('a', { href: wikiDns(), target: '_blank', rel: 'noopener', text: 'в справке, раздел «DNS»' }), '.')
+      : h('p', { class: 'sm muted' }, 'Как поставить: OpenWrt — Сеть → DHCP и DNS; Keenetic — Интернет → DNS. Подробно — ',
+        h('a', { href: wikiDns(), target: '_blank', rel: 'noopener', text: 'в справке, раздел «DNS»' }), '. Интерфейс DNS роутера не меняет.');
     if (!best.length && !quick) {
-      return notice('warn', 'Защищённый DNS не проходит', 'Провайдер закрыл и DoT, и DoH к проверенным серверам — сменить DNS на роутере не получится.');
+      return allClosed && pickRows.length ? closedPanel(pickRows) : notice('warn', 'Защищённый DNS не проходит', 'Провайдер закрыл и DoT, и DoH к проверенным серверам — сменить DNS на роутере не получится.');
     }
     return h('section', { class: 'panel dns-adv bad' }, h('div', { class: 'panel-h' }, h('h2', { text: 'Что делать' })),
       h('p', { text: 'DNS роутера на часть сайтов отдаёт заглушку — никакая стратегия nfqws2 это не исправит. Поставьте в роутере защищённый DNS: быстрее всех у вас отвечают эти, без перехвата и подмены.' }),
-      best.length ? h('div', { class: 'dnsx-best' }, best.map((r, i) => h('div', { class: 'dnsx-tile' + (i ? '' : ' top') },
-        h('b', { text: r.name }), h('span', { class: 'big num', text: bestMs(r) + ' мс' }), h('span', { class: 'sm muted', text: `${bestHow(r)} · ${r.ip || 'по имени'}` }))))
+      best.length ? tilesOf(best)
         : h('p', {}, 'Быстрее всех ответил ', h('b', { text: `${quick.x.name} по ${quick.p}` }), ` (${quick.ms} мс).`),
+      secLine(),
       how);
   }
 
@@ -266,7 +369,7 @@ async function viewDns(main) {
     morphKids(out, [
       key(died ? notice('warn', 'Проверка прервалась', 'Запустите ещё раз.') : null, 'died'),
       key(!run && x.stopped ? notice('info', 'Проверка остановлена', 'Публичные серверы проверены не все.') : null, 'stopped'),
-      tiles(q), key(run ? adviceWait() : advice(), 'advice'),
+      key(setNotice(), 'set'), tiles(q), key(run ? adviceWait() : advice(), 'advice'),
       key(panel('Серверы', run ? run.head : h('span', { class: 'sm muted', text: count ? `свои и ${count} публичных` : 'свои' }), run?.bar,
         interceptNote(), ...table(),
         h('div', { class: 'dnsx-legend sm muted', 'data-key': 'legend' }, h('span', {}, h('b', { class: 'bad-t', text: 'TLS DROP' }), ' — соединился, TLS оборван (режут по имени)'),
@@ -280,6 +383,8 @@ async function viewDns(main) {
 
   const [a0, b0] = [await api('dns_get').catch(() => ({})), await api('dnsx_get').catch(() => ({}))];
   q = a0; x = b0;
+  info = await api('dns_set_info').catch(() => null);
+  if (info?.job?.state === 'working') watchSet();
   ownIn.value = (a0.own_servers || []).join(', ');
   onlyIn.checked = !!a0.own_only;
   draw();

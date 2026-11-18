@@ -295,24 +295,59 @@ function pinRealServer(string $host, string $ip): bool
   return $rc === 0;
 }
 
-function probePinOpt(string $host, bool $http): string
+function probePinOpt(string $host, bool $http, int $port = 0): string
 {
   $ip = $GLOBALS['PROBE_PIN'][$host] ?? null;
-  return $ip === null ? '' : ' --resolve ' . escapeshellarg($host . ':' . ($http ? 80 : 443) . ':' . $ip);
+  return $ip === null ? '' : ' --resolve ' . escapeshellarg($host . ':' . ($port ?: ($http ? 80 : 443)) . ':' . $ip);
+}
+
+const DOT_PORT = 853;
+
+function targetSplit(string $t): array
+{
+  return preg_match('/^(.+):' . DOT_PORT . '$/', $t, $m) ? [$m[1], DOT_PORT] : [$t, 0];
+}
+
+function isDotTarget(string $t): bool
+{
+  return targetSplit($t)[1] === DOT_PORT;
+}
+
+function dotCurlProbe(string $target): array
+{
+  [$host] = targetSplit($target);
+  $out = [];
+  exec(probeCurl($host, false, DOT_PORT) . ' --no-alpn -m 6 -w "%{time_appconnect}" ' . escapeshellarg('https://' . $host . ':' . DOT_PORT . '/') . ' 2>/dev/null', $out, $rc);
+  $t = (float)trim($out[0] ?? '0');
+  $ok = $t > 0;
+  $reason = $ok ? null : match ($rc) {
+    6 => 'имя не разрешается',
+    126, 127 => 'не запускается программа curl',
+    7 => 'не удалось подключиться',
+    28 => 'тайм-аут',
+    35 => 'обрыв TLS',
+    56 => 'соединение сброшено',
+    default => "ошибка curl $rc",
+  };
+  $ms = $ok ? (int)round($t * 1000) : 0;
+  return ['ok' => $ok, 'code' => 0, 'ms' => $ms, 'ttfb' => $ms, 'reason' => $reason];
 }
 
 // curl of a probe through the test queue: from the test ports, as a browser, with the job's TLS and pinned address.
 // Начальный порт — случайный: curl берёт первый свободный, и соединения подряд шли бы с одного и того же
 // порта к тому же серверу — на следующее может повлиять остаток прошлого (conntrack, состояние у провайдера).
-function probeCurl(string $host, bool $http): string
+function probeCurl(string $host, bool $http, int $port = 0): string
 {
   [$lo, $hi] = array_map('intval', explode(':', TEST_PORTS));
-  return 'curl -4 -sk' . probeTlsOpt() . probePinOpt($host, $http) . ' -o /dev/null --local-port ' . mt_rand($lo, $hi - 50) . '-' . $hi
+  return 'curl -4 -sk' . probeTlsOpt() . probePinOpt($host, $http, $port) . ' -o /dev/null --local-port ' . mt_rand($lo, $hi - 50) . '-' . $hi
     . ' --connect-timeout 4 -A ' . escapeshellarg('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130 Safari/537.36');
 }
 
 function curlProbe(string $host, bool $http, string $path = '/'): array
 {
+  if (isDotTarget($host)) {
+    return dotCurlProbe($host);
+  }
   $url = ($http ? 'http://' : 'https://') . $host . $path;
   $curl = fn() => probeCurl($host, $http);
   $out = [];

@@ -429,9 +429,11 @@ async function viewTests(main, r, bare = false) {
   // Подбор одной стратегии для нескольких сайтов (списка): поле «Сайт» меняется на список и сайты из него
   const hostLists = S.state.lists.filter((l) => l.kind === 'host' && l.exists && l.entries > 0);
   let modeVal = 'one';
-  const modeSeg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Что подбираем' }, [['one', 'Один сайт'], ['multi', 'Несколько сайтов или список']].map(([v, t]) =>
+  const modeSeg = h('div', { class: 'seg', role: 'radiogroup', 'aria-label': 'Что подбираем' }, [['one', 'Один сайт'], ['multi', 'Несколько сайтов или список'], ['dns', 'DNS-серверы']].map(([v, t]) =>
     h('button', { type: 'button', role: 'radio', class: v === modeVal ? 'on' : '', 'aria-checked': String(v === modeVal), 'data-v': v, text: t, onclick: () => {
       modeVal = v;
+      dnsMode = v === 'dns';
+      if (dnsMode && !dHosts.value) fillDns();
       modeSeg.querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b.dataset.v === v); b.setAttribute('aria-checked', String(b.dataset.v === v)); });
       drawMode();
     } })));
@@ -448,6 +450,33 @@ async function viewTests(main, r, bare = false) {
     mHosts.value = all.slice(0, 10).join('\n');
     mNote.textContent = `Случайные 10 из ${mList.value} — можно поменять. Найденную стратегию можно будет поставить профилем на весь ${mList.value}.`;
   }
+  const parseDns = (s) => s.split(',').map((v) => v.trim()).filter(Boolean).map((v) => { const [name, ip] = v.split('@'); return { name, ip: ip || '' }; });
+  let dnsList = parseDns(r.q.get('dns') || '');
+  let dnsMode = tab === 'pick' && dnsList.length > 0;
+  const dHosts = h('textarea', { class: 'input mono', rows: 4, placeholder: 'dns.google\ncloudflare-dns.com', 'aria-label': 'DNS-серверы, по одному в строке', autocapitalize: 'off', spellcheck: 'false' });
+  const dNote = h('span', { class: 'sm muted' });
+  async function fillDns() {
+    const x = await api('dnsx_get').catch(() => null);
+    const rows = (x?.servers || []).filter((s) => s.host && !/^[\d.]+$/.test(s.host) && s.ip && (s.dot || s.doh))
+      .sort((a, b) => (a.udp?.ok ? a.udp.ms : 1e9) - (b.udp?.ok ? b.udp.ms : 1e9));
+    const seen = new Set();
+    const best = rows.filter((s) => !seen.has(s.host) && seen.add(s.host)).slice(0, 3);
+    dnsList = best.length ? best.map((s) => ({ name: s.host, ip: s.ip })) : parseDns('dns.google@8.8.8.8,cloudflare-dns.com@1.1.1.1,dns.quad9.net@9.9.9.9');
+    dHosts.value = dnsList.map((v) => v.name).join('\n');
+    dNote.textContent = best.length ? 'Три самых быстрых сервера из последней проверки на странице «DNS-серверы» — можно поменять.' : 'Проверки DNS ещё не было — взяты Google, Cloudflare и Quad9, можно поменять.';
+  }
+  if (dnsMode) {
+    modeVal = 'dns';
+    dHosts.value = dnsList.map((v) => v.name).join('\n');
+    modeSeg.querySelectorAll('button').forEach((b) => { b.classList.toggle('on', b.dataset.v === 'dns'); b.setAttribute('aria-checked', String(b.dataset.v === 'dns')); });
+  }
+  const dDoh = h('input', { type: 'checkbox', checked: true });
+  const dDot = h('input', { type: 'checkbox', checked: true });
+  const dnsSrvRow = h('div', { class: 'frow', hidden: !dnsMode }, h('span', { class: 'lbl', text: 'Серверы' }), h('div', { class: 'stack items' }, dHosts, dNote,
+    h('span', { class: 'sm muted', text: 'Подбор ищет стратегию, с которой DoT и DoH к этим серверам проходят через блокировку провайдера. Если они открываются и без обхода, подбор так и скажет — значит, у вас обход для DNS не нужен.' })));
+  const dnsRow = h('div', { class: 'frow', hidden: !dnsMode }, h('span', { class: 'lbl', text: 'Проверять' }), h('div', { class: 'stack' },
+    h('label', { class: 'chk' }, dDoh, 'DoH — HTTPS, порт 443'), h('label', { class: 'chk' }, dDot, 'DoT — TLS, порт 853')));
+  const dnsNote = S.state.intercept?.policy?.mode === 'only' ? h('p', { class: 'sm muted', hidden: !dnsMode, text: 'На Keenetic с политикой доступа интерфейс сам пометит DNS-запросы роутера к этим серверам, чтобы они шли через nfqws2.' }) : null;
   const oneRows = [];   // поля, которые есть только у подбора одного сайта (каталог, уточнение)
   // Своя стратегия: вставленная из чата или написанная — проверяется первой, конфиг не трогается
   const ownTa = h('textarea', { class: 'input mono', rows: 3, style: 'width:100%;resize:vertical', spellcheck: 'false', autocapitalize: 'off', 'aria-label': 'Свои стратегии',
@@ -475,21 +504,29 @@ async function viewTests(main, r, bare = false) {
     if (chk.items.some((x) => x.errors.length)) { toast('Поправьте свои стратегии или уберите строки с ошибками', { err: true }); return null; }
     return chk.items.map((x) => x.steps);
   }
-  const multiRow = h('div', { class: 'frow', hidden: true }, h('span', { class: 'lbl', text: 'Сайты' }),
-    h('div', { class: 'stack items' }, h('div', { class: 'row' }, mList, btn('Другие случайные', () => fillMulti(), 'small', 'refresh')), mHosts, mNote,
-      h('span', { class: 'sm muted', text: 'Сначала каждый сайт открывается без обхода: что открывается и так или закрыто по IP, в подборе не участвует. Потом каждая стратегия проверяется на всех оставшихся сайтах; пять лучших и все свои — перепроверяются по одной. Каталог zapret2 и уточнение здесь не участвуют — на десяти сайтах это заняло бы часы. Обычно 3–8 минут.' })));
+  const multiLbl = h('span', { class: 'lbl', text: 'Сайты' });
+  const multiExtra = [h('div', { class: 'row' }, mList, btn('Другие случайные', () => fillMulti(), 'small', 'refresh')), mNote,
+    h('span', { class: 'sm muted', text: 'Сначала каждый сайт открывается без обхода: что открывается и так или закрыто по IP, в подборе не участвует. Потом каждая стратегия проверяется на всех оставшихся сайтах; пять лучших и все свои — перепроверяются по одной. Каталог zapret2 и уточнение здесь не участвуют — на десяти сайтах это заняло бы часы. Обычно 3–8 минут.' })];
+  const multiRow = h('div', { class: 'frow', hidden: true }, multiLbl,
+    h('div', { class: 'stack items' }, multiExtra[0], mHosts, multiExtra[1], multiExtra[2]));
   const hostLbl = h('label', { class: 'lbl', for: 't-host', text: 'Сайт' });
+  const protoRow = h('div', { class: 'frow' }, hostLbl, h('div', { class: 'row' }, host, proto, tab === 'pick' ? newTag('pick:quic') : newTag('trace:quic')));
   function drawMode() {
-    const multi = mode.value === 'multi';
+    const multi = mode.value === 'multi' || dnsMode;
+    if (dnsMode && proto.value !== 'https') proto.value = 'https';
     hostLbl.textContent = multi ? 'Протокол' : 'Сайт';
     host.hidden = multi;
-    multiRow.hidden = !multi;
+    protoRow.hidden = dnsMode;
+    multiRow.hidden = mode.value !== 'multi';
+    dnsSrvRow.hidden = !dnsMode;
+    dnsRow.hidden = !dnsMode;
+    if (dnsNote) dnsNote.hidden = !dnsMode;
     ownRow.hidden = multi && isQuic();
-    tlsRow.hidden = proto.value !== 'https';
+    tlsRow.hidden = proto.value !== 'https' || dnsMode;
     portsLbl.hidden = isQuic();
     oneRows.forEach((el) => { el.hidden = multi || isQuic(); });
     quicNote.hidden = !isQuic() || multi;
-    if (multi && !mHosts.value) fillMulti();
+    if (multi && !dnsMode && !mHosts.value) fillMulti();
   }
   const out = h('div', { class: 'stack' });
   const startBtn = btn(tab === 'trace' ? 'Запустить трассировку' : 'Запустить тест', start, 'primary', 'play');
@@ -500,8 +537,21 @@ async function viewTests(main, r, bare = false) {
   async function start() {
     const cmd = tab === 'trace' ? 'trace_start' : 'test_start';
     const sets = [setCfg.checked && 'config', setCfg.checked && setPorts.checked && !isQuic() && 'ports', setStd.checked && 'std', setHist.checked && 'hist', setHist.checked && 'other', setComm.checked && 'community', catSel.value].filter(Boolean);
-    const single = tab === 'pick' && mode.value !== 'multi';
+    const single = tab === 'pick' && mode.value === 'one';
     if (tab !== 'trace' && !sets.length && !(tab === 'pick' && ownTa.value.trim())) { toast('Выберите, что пробовать', { err: true }); return; }
+    if (tab === 'pick' && dnsMode) {
+      const names = [...new Set(dHosts.value.split(/[\s,]+/).filter(Boolean))];
+      if (!dDoh.checked && !dDot.checked) { toast('Выберите DoH, DoT или оба', { err: true }); return; }
+      const hosts = names.flatMap((n) => [dDoh.checked ? n : null, dDot.checked ? n + ':853' : null]).filter(Boolean);
+      const ips = Object.fromEntries(dnsList.filter((v) => v.ip && names.includes(v.name)).map((v) => [v.name, v.ip]));
+      const dOwn = await ownStrategies();
+      if (!dOwn) return;
+      const dSets = sets.filter((x) => ['config', 'ports', 'std', 'hist', 'community'].includes(x));
+      if (!dSets.length && !dOwn.length) { toast('Выберите, что пробовать', { err: true }); return; }
+      if (!await guarded(() => api('multi_start', { dns: true, hosts, dns_ips: ips, proto: 'https', sets: dSets, own: dOwn, repeats: Number(repeats.value) }))) return;
+      poll();
+      return;
+    }
     if (tab === 'pick' && mode.value === 'multi') {
       if (isQuic()) { toast('Подбор для QUIC — пока только для одного сайта', { err: true }); return; }
       const hosts = mHosts.value.split(/[\s,]+/).filter(Boolean);
@@ -745,7 +795,7 @@ async function viewTests(main, r, bare = false) {
     const M = hosts.length;
     const skipped = (s.sites || []).filter((r) => r.skip);
     const sitesBox = (s.sites || []).length ? h('div', { class: 'stack lines' },
-      h('div', { class: 'sm' }, h('b', { text: `Подбор для ${plural(M, 'сайта', 'сайтов', 'сайтов')}: ` }), h('span', { class: 'mono', style: 'white-space:normal;overflow-wrap:anywhere', text: hosts.join(', ') || '—' }), s.list ? h('span', { class: 'muted', text: ` (из ${s.list.name})` }) : null, s.tls12 ? h('span', { class: 'muted', text: ' · по TLS 1.2' }) : null),
+      h('div', { class: 'sm' }, h('b', { text: s.dns ? 'Подбор для DNS: ' : `Подбор для ${plural(M, 'сайта', 'сайтов', 'сайтов')}: ` }), h('span', { class: 'mono', style: 'white-space:normal;overflow-wrap:anywhere', text: hosts.join(', ') || '—' }), s.list ? h('span', { class: 'muted', text: ` (из ${s.list.name})` }) : null, s.tls12 ? h('span', { class: 'muted', text: ' · по TLS 1.2' }) : null),
       skipped.length ? h('div', { class: 'sm muted' }, 'Не участвуют: ', skipped.map((r, i) => [i ? '; ' : '', h('span', { class: 'mono', text: r.host }), ' — ' + r.skip])) : null,
       pinnedNote(s.sites)) : null;
     if (running || s.state === 'error') return panel(null, null, sitesBox);
@@ -753,10 +803,10 @@ async function viewTests(main, r, bare = false) {
     const conf = res.filter((x) => x.confirmed && x.opened > 0);
     const best = conf[0];
     const missed = (x) => hosts.filter((hh) => !(x.per[hh]?.ok > 0 && x.per[hh].ok === x.per[hh].tries));
-    const target = s.list ? `весь ${s.list.name}` : 'эти сайты';
+    const target = s.dns ? 'эти DNS-серверы' : s.list ? `весь ${s.list.name}` : 'эти сайты';
     const actions = (x, primary) => h('div', primary ? { class: 'notice-actions' } : { class: 'row acts-row' },
-      btn(primary ? `Профилем на ${target}` : 'Применить…', () => addListProfile(x.steps, s), 'small' + (primary ? ' primary' : ''), primary ? 'ok' : null,
-        { title: `Новый профиль первым: эта стратегия для ${s.list ? 'всех сайтов из ' + s.list.name : 'этих сайтов'}; с проверкой и откатом` }),
+      btn(primary ? (s.dns ? 'Профилем «DNS (DoT/DoH)»' : `Профилем на ${target}`) : 'Применить…', () => (s.dns ? addDnsProfile : addListProfile)(x.steps, s), 'small' + (primary ? ' primary' : ''), primary ? 'ok' : null,
+        { title: s.dns ? 'Новый профиль первым: эта стратегия только для DoT и DoH этих серверов; с проверкой и откатом' : `Новый профиль первым: эта стратегия для ${s.list ? 'всех сайтов из ' + s.list.name : 'этих сайтов'}; с проверкой и откатом` }),
       btn(primary ? 'Скопировать' : '', () => copyText(x.steps.join('\n')), 'small' + (primary ? '' : ' ghost'), 'copy', { title: 'Скопировать', 'aria-label': 'Скопировать' }));
     const verdict = !best
       ? notice('bad', 'Ни одна стратегия не открыла эти сайты', 'Попробуйте обычный подбор для каждого сайта отдельно — с каталогом zapret2 и уточнением: возможно, сайтам нужны разные стратегии.')
@@ -796,6 +846,24 @@ async function viewTests(main, r, bare = false) {
     const what = s.list ? `всех сайтов из ${s.list.name}` : s.hosts.join(', ');
     if (!await ask(`Создать профиль для ${what}?\n\nОн встанет первым (#1), остальные профили сдвинутся на один номер и не изменятся. Сайты из ${s.list ? 'списка' : 'этого перечня'} пойдут через новую стратегию.\n\nПосле сохранения nfqws2 перезапустится с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, всё вернётся как было.`, 'Создать профиль')) return;
     if (!await saveVars({ NFQWS_ARGS_CUSTOM: joinParts([part, ...cur]) }, `профиль для ${s.list ? s.list.name : 'нескольких сайтов'} из подбора`)) return;
+    await safeRestart();
+    go('#/settings/p1');
+  }
+
+  async function addDnsProfile(steps, s) {
+    await loadConf();
+    const cur = S.conf.vars.NFQWS_ARGS_CUSTOM.trim() ? splitParts(tokensOf(S.conf.vars.NFQWS_ARGS_CUSTOM)) : [];
+    const names = [...new Set((s.hosts || []).map((t) => t.replace(/:853$/, '')))];
+    const ips = [...new Set(names.map((n) => s.dns_ips?.[n]).filter(Boolean))];
+    const head = ['--filter-tcp=443,853', '--filter-l7=tls'];
+    const tail = ['--payload=tls_client_hello', ...steps];
+    const parts = [[...head, `--hostlist-domains=${names.join(',')}`, ...tail], ips.length ? [...head, `--ipset-ip=${ips.join(',')}`, ...tail] : null].filter(Boolean);
+    const tcp = S.conf.vars.TCP_PORTS || '';
+    const has853 = tcp.split(',').some((x) => { const [a, b] = x.trim().split(/[-:]/).map(Number); return 853 >= a && 853 <= (b || a); });
+    const vars = { NFQWS_ARGS_CUSTOM: joinParts([...parts, ...cur]) };
+    if (!has853) vars.TCP_PORTS = tcp ? tcp + ',853' : '80,443,853';
+    if (!await ask(`Создать профиль для DNS-серверов ${names.join(', ')}?\n\n${parts.length > 1 ? 'Встанут два профиля: по именам серверов и по их адресам (' + ips.join(', ') + '), первыми' : 'Он встанет первым (#1)'}; остальные сдвинутся и не изменятся. Стратегия будет работать только для DoT и DoH этих серверов.${has853 ? '' : '\n\nВ TCP_PORTS добавится порт 853 — без него nfqws2 не видит DoT.'}\n\nПосле сохранения nfqws2 перезапустится с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, всё вернётся как было.`, 'Создать профиль')) return;
+    if (!await saveVars(vars, 'профиль для DNS (DoT/DoH) из подбора')) return;
     await safeRestart();
     go('#/settings/p1');
   }
@@ -985,9 +1053,9 @@ async function viewTests(main, r, bare = false) {
   main.append(
     bare ? null : h('div', { class: 'vh' }, h('h1', { text: tab === 'trace' ? 'Трассировка' : 'Подбор стратегии' })),
     panel(null, null,
-      tab === 'pick' ? h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Подбирать' }), h('div', { class: 'row' }, modeSeg, newTag('pick:multi'))) : null,
-      h('div', { class: 'frow' }, hostLbl, h('div', { class: 'row' }, host, proto, tab === 'pick' ? newTag('pick:quic') : newTag('trace:quic'))),
-      tab === 'pick' ? [multiRow, quicNote,
+      tab === 'pick' ? h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Подбирать' }), h('div', { class: 'row' }, modeSeg, newTag('pick:multi'), newTag('pick:dns'))) : null,
+      protoRow,
+      tab === 'pick' ? [multiRow, dnsSrvRow, dnsRow, dnsNote, quicNote,
         h('div', { class: 'frow' }, h('span', { class: 'lbl', text: 'Что пробовать' }), h('div', { class: 'pick-sets' },
           h('label', { class: 'chk' }, setCfg, 'стратегии из вашего конфига'), h('label', { class: 'chk' }, setStd, 'стандартный набор'),
           h('label', { class: 'chk', title: 'До восьми стратегий, которые сработали у абонентов вашего провайдера (база на GitHub, раз в сутки). Сначала — открывавшие этот сайт или его сеть.' }, setComm, 'стратегии сообщества', newTag('pick:community')),
@@ -1009,6 +1077,6 @@ async function viewTests(main, r, bare = false) {
       h('thead', {}, h('tr', {}, h('th', { text: 'Когда' }), h('th', { text: 'Сайт' }), h('th', { text: 'Без обхода' }), h('th', { class: 'num', text: 'Сработало' }), h('th', { text: 'Лучшая' }))),
       h('tbody', {}, hist.items.slice(0, 5).map((x) => h('tr', {}, h('td', { class: 'date', text: fmtDate(x.ts) }), h('td', { class: 'mono' }, h('a', { href: pickHistHref(x.host), text: x.host })),
         h('td', { text: x.baseline?.ok ? 'открывается' : x.baseline?.reason || '—' }), h('td', { class: 'num', text: `${x.ok} из ${x.total}` }), h('td', { class: 'mono sm', text: x.best || '—' }))))))) : null);
-  if (isQuic()) drawMode();   // пришли из диагноза с ?proto=quic
+  if (isQuic() || dnsMode) drawMode();   // пришли из диагноза с ?proto=quic
   poll();
 }

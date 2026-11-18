@@ -95,7 +95,7 @@ const CACHE_VER = 6;  // увеличить при изменении разбо
 // The server is split into sections in lib/ (one file each). They are loaded in this order: a later one may use
 // constants of an earlier one. API_FILE — this file: background jobs start it again (php-cgi -f API_FILE)
 define('API_FILE', __FILE__);
-const LIB = ['core', 'snapshots', 'service', 'conf', 'lists', 'check', 'devices', 'exclude', 'lint', 'adapt', 'listcheck', 'fixes', 'monitor', 'subs', 'tests', 'parallel', 'multi', 'configs', 'freeze', 'picks', 'auto', 'refine', 'diag', 'dns', 'dnsx', 'conns', 'pcap', 'update', 'state', 'report', 'learn', 'share'];
+const LIB = ['core', 'snapshots', 'service', 'conf', 'lists', 'check', 'devices', 'exclude', 'lint', 'adapt', 'listcheck', 'fixes', 'monitor', 'subs', 'tests', 'parallel', 'multi', 'configs', 'freeze', 'picks', 'auto', 'refine', 'diag', 'dns', 'dnsx', 'dnsset', 'conns', 'pcap', 'update', 'state', 'report', 'learn', 'share'];
 // Sections to load, in LIB order; null — all of them. Loaded once each
 function libLoad(?array $names = null): void
 {
@@ -168,6 +168,14 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
     dnsxJob();
     exit(0);
   }
+  if ($cli === 'dnsset') {
+    dnsSetJob();
+    exit(0);
+  }
+  if ($cli === 'dnsset_expire') {
+    dnsSetExpire();
+    exit(0);
+  }
   if ($cli === 'conns') {
     connJob();
     exit(0);
@@ -184,6 +192,8 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
   pendingExpire(60);   // задание проверки после перезапуска могло погибнуть — откат не должен потеряться
   devicesEnsure();     // nfqws2 restarted outside the interface or the router rebooted
   interceptCron();     // jumps into the nfqws2 chains lost after a firewall rebuild — put back even with the page closed
+  policyProbeEnsure(null, true);
+  dnsSetExpire();
   learnTmpOk();        // /tmp back to 1777 after an nfqws2 package install made it 0755 (the module could not write)
   learnKeep();         // what «learn» learned: the /tmp copy next to nfqws2.conf, so it survives a reboot
   historyScan('auto');
@@ -846,16 +856,18 @@ switch ($cmd) {
     if (diagBusy()) {
       fail('Сейчас идёт диагноз сайта — он использует те же проверочные правила. Повторите через несколько секунд.');
     }
+    $dnsJob = !empty($in['dns']);
     $hosts = [];
     foreach (is_array($in['hosts'] ?? null) ? $in['hosts'] : [] as $h) {
-      $h = cleanHost((string)$h);
+      [$h, $port] = $dnsJob ? targetSplit(trim((string)$h)) : [(string)$h, 0];
+      $h = cleanHost($h);
       if (validHost($h) && !isIp($h)) {
-        $hosts[$h] = true;
+        $hosts[$h . ($port ? ':' . $port : '')] = true;
       }
     }
     $hosts = array_slice(array_keys($hosts), 0, 10);
-    if (count($hosts) < 2) {
-      fail('Укажите хотя бы два сайта — для одного есть обычный подбор');
+    if (count($hosts) < ($dnsJob ? 1 : 2)) {
+      fail($dnsJob ? 'Укажите хотя бы один сервер' : 'Укажите хотя бы два сайта — для одного есть обычный подбор');
     }
     $list = null;
     if (is_string($in['list'] ?? null) && $in['list'] !== '') {
@@ -868,9 +880,9 @@ switch ($cmd) {
     $sets = array_values(array_intersect(is_array($in['sets'] ?? null) ? $in['sets'] : [], ['config', 'ports', 'std', 'hist', 'community']));
     $ownList = ownFromRequest($in['own'] ?? null);   // own strategies alone are a valid run
     curlRequire();
-    launchJob(['type' => 'multi', 'host' => $list ? $list['name'] : 'сайтов: ' . count($hosts), 'hosts' => $hosts, 'list' => $list,
-      'proto' => ($in['proto'] ?? '') === 'http' ? 'http' : 'https', 'sets' => $ownList ? $sets : ($sets ?: ['config', 'std']), 'own' => $ownList,
-      'repeats' => (int)($in['repeats'] ?? 3), 'tls12' => !empty($in['tls12'])]);
+    launchJob(['type' => 'multi', 'host' => $dnsJob ? 'DNS-серверы' : ($list ? $list['name'] : 'сайтов: ' . count($hosts)), 'hosts' => $hosts, 'list' => $list,
+      'proto' => !$dnsJob && ($in['proto'] ?? '') === 'http' ? 'http' : 'https', 'sets' => $ownList ? $sets : ($sets ?: ['config', 'std']), 'own' => $ownList,
+      'repeats' => (int)($in['repeats'] ?? 3), 'tls12' => !empty($in['tls12'])] + ($dnsJob ? ['dns' => true, 'dns_ips' => dnsIpsFromRequest($in['dns_ips'] ?? null, $hosts)] : []));
     respond(['ok' => true]);
 
   case 'wide_start':
@@ -1565,6 +1577,21 @@ switch ($cmd) {
 
   case 'dnsx_get':
     respond(dnsxData());
+
+  case 'dns_set_info':
+    respond(dnsSetInfo(!empty($in['job'])));
+
+  case 'dns_set_start':
+    dnsSetStart((string)($in['name'] ?? ''), is_array($in['remove'] ?? null) ? $in['remove'] : []);
+    respond(dnsSetInfo());
+
+  case 'dns_set_confirm':
+    dnsSetConfirm();
+    respond(dnsSetInfo());
+
+  case 'dns_set_rollback':
+    dnsSetRollback();
+    respond(dnsSetInfo());
 
   case 'dnsx_stop':
     @touch(DNSX_STOP);

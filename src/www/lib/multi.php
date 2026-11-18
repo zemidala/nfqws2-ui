@@ -10,6 +10,18 @@ defined('API_FILE') || exit;
 // на десяти сайтах это часы.
 define('MULTI_CONFIRM', 5);
 
+function dnsIpsFromRequest($in, array $targets): array
+{
+  $names = array_flip(array_map(fn($t) => targetSplit($t)[0], $targets));
+  $out = [];
+  foreach (is_array($in) ? $in : [] as $name => $ip) {
+    if (isset($names[$name]) && is_string($ip) && isIp4($ip) && !ipReserved($ip)) {
+      $out[$name] = $ip;
+    }
+  }
+  return $out;
+}
+
 function multiCandidates(array $job, array $hosts, string $proto, array &$status): array
 {
   $http = $proto === 'http';
@@ -34,6 +46,7 @@ function multiCandidates(array $job, array $hosts, string $proto, array &$status
       $add(['name' => $name, 'from' => 'стандартный набор', 'steps' => $steps]);
     }
   }
+  $hosts = array_values(array_unique(array_map(fn($t) => targetSplit($t)[0], $hosts)));
   if (in_array('hist', $job['sets'], true)) {
     foreach ($hosts as $h) {
       array_map($add, picksCandidates($h, $proto, true, true));
@@ -43,7 +56,7 @@ function multiCandidates(array $job, array $hosts, string $proto, array &$status
     array_map($add, communityCandidates($hosts[0], $proto, $info));
     $status['community'] = $info;
   }
-  foreach ($http || !in_array('std', $job['sets'], true) ? [] : $hosts as $h) {
+  foreach ($http || !empty($job['dns']) || !in_array('std', $job['sets'], true) ? [] : $hosts as $h) {
     array_map($add, freezeCandidates($h));
   }
   $funcs = luaCatalog()['functions'];
@@ -60,10 +73,12 @@ function multiCandidates(array $job, array $hosts, string $proto, array &$status
 function multiJob(array $job, array &$status, ?array &$nfq, string $iface, array $baseArgs): void
 {
   $http = ($job['proto'] ?? 'https') === 'http';
-  $filter = $http ? ['--filter-tcp=80', '--filter-l7=http', '--payload=http_req'] : ['--filter-tcp=443', '--filter-l7=tls', '--payload=tls_client_hello'];
+  $dnsJob = !empty($job['dns']);
+  $filter = $http ? ['--filter-tcp=80', '--filter-l7=http', '--payload=http_req']
+    : ['--filter-tcp=' . ($dnsJob ? '443,' . DOT_PORT : '443'), '--filter-l7=tls', '--payload=tls_client_hello'];
   $repeats = max(1, min(5, (int)($job['repeats'] ?? 3)));
   $stop = fn() => is_file(TEST_DIR . '/stop');
-  $status += ['list' => $job['list'] ?? null, 'sites' => [], 'hosts' => [], 'repeats' => $repeats];
+  $status += ['list' => $job['list'] ?? null, 'sites' => [], 'hosts' => [], 'repeats' => $repeats] + ($dnsJob ? ['dns' => true, 'dns_ips' => $job['dns_ips'] ?? []] : []);
   $status['total'] = count($job['hosts']);
   $status['phase'] = 'baseline';
 
@@ -76,17 +91,22 @@ function multiJob(array $job, array &$status, ?array &$nfq, string $iface, array
     $status['current'] = "$h без обхода";
     testSaveStatus($status);
     $row = ['host' => $h];
-    $dns = diagDns($h);
+    [$bare, $port] = targetSplit($h);
+    $own = $dnsJob ? ($job['dns_ips'][$bare] ?? null) : null;
+    $dns = $own ? ['status' => 'ok', 'ips' => [$own], 'system' => []] : diagDns($bare);
     if ($dns['status'] === 'nxdomain') {
       $row['skip'] = 'имя не находится';
     } else {
-      if ($pin = probePin($h, $dns, $http)) {
+      if ($own) {
+        $GLOBALS['PROBE_PIN'][$bare] = $own;
+        $pin = null;
+      } elseif ($pin = probePin($bare, $dns, $http)) {
         $row['dns_pin'] = $pin;
       }
       $b = curlProbe($h, $http);
       if ($b['ok']) {
         $row['skip'] = $pin ? 'закрыт только подменой DNS: по настоящему адресу открывается без обхода, нужен другой DNS' : 'открывается без обхода';
-      } elseif ($dns['ips'] && !array_filter(diagTcp($dns['ips'], $http ? 80 : 443), fn($x) => $x['ok'])) {
+      } elseif ($dns['ips'] && !array_filter(diagTcp($dns['ips'], $port ?: ($http ? 80 : 443)), fn($x) => $x['ok'])) {
         $row['skip'] = 'с адресом нет соединения — закрыт по IP, стратегия не поможет (нужен туннель)';
       } else {
         $row['baseline'] = $b['reason'] ?? 'не открывается';
@@ -99,11 +119,12 @@ function multiJob(array $job, array &$status, ?array &$nfq, string $iface, array
   $blocked = $status['hosts'];
   if ($stop()) {
     $status['state'] = 'stopped';
-  } elseif (count($blocked) < 2) {
+  } elseif (count($blocked) < ($dnsJob ? 1 : 2)) {
     $status['state'] = 'error';
     $status['title'] = 'Подбор не запущен';
-    $status['error'] = $blocked ? "Из выбранных сайтов заблокирован только {$blocked[0]} — для одного сайта запустите обычный подбор."
-      : 'Ни один из выбранных сайтов не заблокирован так, чтобы его могла открыть стратегия: они открываются без обхода, не находятся по имени или закрыты по IP.';
+    $status['error'] = $dnsJob ? 'Ни один из серверов не закрыт так, чтобы его могла открыть стратегия: DoT и DoH к ним проходят и без обхода, не находятся по имени или закрыты по IP.'
+      : ($blocked ? "Из выбранных сайтов заблокирован только {$blocked[0]} — для одного сайта запустите обычный подбор."
+      : 'Ни один из выбранных сайтов не заблокирован так, чтобы его могла открыть стратегия: они открываются без обхода, не находятся по имени или закрыты по IP.');
   }
   $cands = $status['state'] === 'running' ? multiCandidates($job, $blocked, $http ? 'http' : 'https', $status) : [];
   if ($status['state'] === 'running' && !$cands) {
