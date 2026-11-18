@@ -946,7 +946,9 @@ function lintMark(array $lint): array
 function routerLoad(): array
 {
   $cpu = null;
-  if (preg_match('/^cpu\s+(.+)$/m', (string)@file_get_contents('/proc/stat'), $m)) {
+  $stat = (string)@file_get_contents('/proc/stat');
+  $cores = max(1, preg_match_all('/^cpu\d+\s/m', $stat));
+  if (preg_match('/^cpu\s+(.+)$/m', $stat, $m)) {
     // user nice system idle iowait irq softirq steal; guest time is already inside user and nice
     $v = array_slice(array_map('intval', preg_split('/\s+/', trim($m[1]))), 0, 8);
     $idle = ($v[3] ?? 0) + ($v[4] ?? 0);
@@ -969,5 +971,5 @@ function routerLoad(): array
   $kb = fn($k) => preg_match('/^' . $k . ':\s+(\d+)/m', $mem, $x) ? (int)$x[1] : null;
   $la = explode(' ', (string)@file_get_contents('/proc/loadavg'));
   return ['cpu' => $cpu === null ? null : max(0, min(100, $cpu)), 'mem_total' => $kb('MemTotal'), 'mem_free' => $kb('MemAvailable'),
-    'la' => isset($la[2]) ? array_map('floatval', array_slice($la, 0, 3)) : null, 'uptime' => (int)(float)@file_get_contents('/proc/uptime')];
+    'la' => isset($la[2]) ? array_map('floatval', array_slice($la, 0, 3)) : null, 'cores' => $cores, 'uptime' => (int)(float)@file_get_contents('/proc/uptime')];
 }

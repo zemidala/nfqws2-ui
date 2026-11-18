@@ -130,7 +130,7 @@ function renderSideMonitor(el) {
       levelIcon(!s.last ? 'info' : s.last[1] ? 'ok' : 'error'), h('span', { class: 'ellipsis mono sm', text: s.host }), uptimeBar(s.recent)))));
 }
 
-// Z: three gauges of the router under the head of «Сервис». Load average has no fixed top, a full bar means 2
+// Z: three gauges of the router under the head of «Сервис». Load average has no fixed top, a full bar means one task per core
 function svcGauges(l) {
   if (!l) return null;
   const mem = l.mem_total && l.mem_free != null ? Math.round(100 * (1 - l.mem_free / l.mem_total)) : null;
@@ -139,7 +139,7 @@ function svcGauges(l) {
   return h('div', { class: 'svc-cells' },
     l.cpu != null ? cell('ЦП', l.cpu + ' %', l.cpu, l.cpu > 80) : null,
     mem != null ? cell('Память', mem + ' %', mem, mem > 85) : null,
-    l.la ? cell('Нагрузка', String(l.la[0]).replace('.', ','), l.la[0] * 50, l.la[0] > 2) : null);
+    l.la ? cell('Нагрузка', String(l.la[0]).replace('.', ','), l.la[0] * 100 / (l.cores || 2), l.la[0] > (l.cores || 2)) : null);
 }
 function renderSideService(el) {
   const st = S.state;

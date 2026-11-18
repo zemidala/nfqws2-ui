@@ -114,4 +114,14 @@ document.addEventListener('click', (e) => {
   document.querySelectorAll('.menu-list:not([hidden])').forEach((list) => {
     if (!list.parentElement.contains(e.target)) list.hidden = true;
   });
+  requestAnimationFrame(() => document.querySelectorAll('.menu-list:not([hidden])').forEach(fitMenu));
 });
+function fitMenu(m) {
+  m.style.translate = '';
+  m.style.animation = 'none';
+  const p = m.parentElement.getBoundingClientRect(), r = m.getBoundingClientRect(), W = document.documentElement.clientWidth;
+  m.style.animation = '';
+  if (r.left >= 8 && r.right <= W - 8) return;
+  const x = Math.max(8, Math.min(W - 8 - r.width, r.left < 8 ? p.left : p.right - r.width));
+  m.style.translate = (Math.round(x) - r.left) + 'px 0';
+}
