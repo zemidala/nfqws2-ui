@@ -607,7 +607,14 @@ async function viewTests(main, r, bare = false) {
       put(keyed(podkopNote(s), 'podkop'), keyed(wideResult(s, running), 'wide'), keyed(p && (p.results?.length || p.baseline) ? pickResult(p, false) : null, 'result'));
       return;
     }
-    if (s.state === 'error') { put(keyed(notice('bad', s.title || 'Тест не удался', s.error || '', s.host && s.title ? btn('Подробный диагноз', () => go(diagHref(s.host)), 'small', 'search') : null), 'error')); return; }
+    if (s.state === 'error') {
+      const multi = s.type === 'multi';
+      const who = (r) => s.dns ? [h('span', { class: 'mono', text: r.host.replace(/:853$/, '') }), r.host.endsWith(':853') ? ' (DoT)' : ' (DoH)'] : [h('span', { class: 'mono', text: r.host })];
+      const rows = multi && s.sites?.length ? h('div', { class: 'stack lines' }, s.sites.map((r) => h('div', { class: 'sm' }, ...who(r), ' — ' + (r.skip || 'закрыт, без обхода не открывается')))) : null;
+      put(keyed(notice(s.all_open ? 'ok' : 'bad', s.title || 'Тест не удался', s.error || '', !multi && s.host && s.title ? btn('Подробный диагноз', () => go(diagHref(s.host)), 'small', 'search') : null), 'error'),
+        keyed(rows ? panel(null, null, rows) : null, 'error-sites'));
+      return;
+    }
     if (s.type === 'trace') { put(head, keyed(s.state === 'done' ? traceResult(s) : null, 'trace')); return; }
     if (s.type === 'multi') { put(head, keyed(podkopNote(s), 'podkop'), keyed(multiResult(s, running), 'multi')); return; }
     put(head, keyed(podkopNote(s), 'podkop'), keyed(s.results?.length || s.baseline ? pickResult(s, running) : null, 'result'));

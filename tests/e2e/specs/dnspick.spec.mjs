@@ -90,3 +90,36 @@ for (const [w, hgt] of [[390, 844], [1366, 900]]) {
     await expect(main.locator('#t-host')).toBeVisible();
   });
 }
+
+const pickDone = (sites, extra) => ({ state: 'error', type: 'multi', host: 'DNS-серверы', dns: true, started: now - 20, finished: now - 5, done: sites.length, total: sites.length,
+  hosts: [], results: [], sites, title: 'Подбор не запущен', ...extra });
+const allOpen = pickDone([{ host: 'cloudflare-dns.com', skip: 'открывается без обхода' }, { host: 'cloudflare-dns.com:853', skip: 'открывается без обхода' }],
+  { all_open: true, title: 'Все серверы отвечают без обхода', error: 'Провайдер эти DNS-серверы не закрывает — стратегия для них не нужна.' });
+const mixed = pickDone([{ host: 'dns.google', skip: 'открывается без обхода' }, { host: 'dns.google:853', skip: 'с адресом нет соединения — закрыт по IP, стратегия не поможет (нужен туннель)' }],
+  { error: 'Ни один из серверов не закрыт так, чтобы его могла открыть стратегия. Что с каждым — ниже.' });
+
+for (const [w, hgt] of [[390, 844], [1366, 900]]) {
+  test(`подбор для DNS не нужен: понятный итог и строка по каждому серверу, ${w}`, async ({ app, page }) => {
+    await page.setViewportSize({ width: w, height: hgt });
+    let st = allOpen;
+    await app.mock((b) => b.cmd === 'test_status' ? st : undefined);
+    await app.open('#/tests/pick', { variant: 'a' });
+    const main = page.locator('main');
+    const ok = main.locator('.notice.ok', { hasText: 'Все серверы отвечают без обхода' });
+    await expect(ok).toContainText('Провайдер эти DNS-серверы не закрывает — стратегия для них не нужна.');
+    await expect(main).toContainText('cloudflare-dns.com (DoH) — открывается без обхода');
+    await expect(main).toContainText('cloudflare-dns.com (DoT) — открывается без обхода');
+    await expect(main.getByRole('button', { name: 'Подробный диагноз' })).toHaveCount(0);
+    for (const mode of ['light', 'dark']) {
+      await page.evaluate((m) => { document.documentElement.dataset.mode = m; }, mode);
+      await page.waitForTimeout(200);
+      expect(await auditLayout(page), `раскладка, ${mode}`).toEqual([]);
+      expect(await contrastReport(page), `контраст, ${mode}`).toEqual([]);
+    }
+    st = mixed;
+    await page.goto('about:blank');
+    await app.open('#/tests/pick', { variant: 'a' });
+    await expect(main.locator('.notice.bad', { hasText: 'Подбор не запущен' })).toContainText('Что с каждым — ниже.');
+    await expect(main).toContainText('dns.google (DoT) — с адресом нет соединения — закрыт по IP');
+  });
+}
