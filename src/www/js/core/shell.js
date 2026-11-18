@@ -66,6 +66,7 @@ const FEATURES = [
   ['learn:convert', '1.31.0', 'Кнопка «Перевести на обучение» у профиля с circular'],
   ['comm:share', '1.31.0', '«Поделиться» без аккаунта GitHub, «Помогать базе» и счётчик «Ваш вклад»'],
   ['dns:only', '1.31.0', '«DNS-серверы»: галочка «Только свои» — проверить свои серверы без публичных'],
+  ['dns:set', '1.34.0', '«DNS-серверы»: «Поставить в роутер» — защищённый DNS в Keenetic или через https-dns-proxy на OpenWrt, с проверкой и откатом'],
   ['dns:pick', '1.34.0', '«DNS-серверы»: если провайдер закрыл DoT и DoH — подбор стратегии для DNS и отдельный профиль для него'],
   ['frz:only', '1.31.0', '«Обрыв на 16 КБ»: галочка «Только свои» — проверить свои сайты и адреса без опорных'],
   ['auto:pause', '1.31.0', '«Автоподбор»: своя пауза между попытками — от 1 до 168 часов'],
@@ -554,7 +555,8 @@ function renderPending() {
   if (!box) return;
   const p = S.state?.pending;
   clearInterval(pendingTimer);
-  if (!p) { box.replaceChildren(); return; }
+  clearInterval(dnsSetTimer);
+  if (!p) { box.replaceChildren(...dnsSetNodes()); return; }
   if (pendingActive()) {
     const clientOffset = Date.now() / 1000 - S.state.now;
     const left = () => Math.max(0, Math.round(p.deadline - (Date.now() / 1000 - clientOffset)));
@@ -578,7 +580,7 @@ function renderPending() {
         checks.length ? h('div', { class: 'chips' }, checks.map((c) => chip((c.ok ? '✓ ' : '✗ ') + c.host, c.ok ? 'ok' : 'bad'))) : null),
       p.state === 'checking' ? h('span', { class: 'spin' }) : null,
       btn('Всё работает — оставить', async () => { if (await guarded(() => api('safe_confirm'), 'Изменения подтверждены')) loadState(); }, regressed.length ? 'small' : 'small primary', 'ok'),
-      btn('Откатить сейчас', async () => { if (await guarded(() => api('safe_rollback'), 'Изменения откачены')) { S.conf = null; await loadState(); route(true); } }, regressed.length ? 'small warn' : 'small danger', 'history'))));
+      btn('Откатить сейчас', async () => { if (await guarded(() => api('safe_rollback'), 'Изменения откачены')) { S.conf = null; await loadState(); route(true); } }, regressed.length ? 'small warn' : 'small danger', 'history'))), ...dnsSetNodes());
     return;
   }
   let dismissed = '';
@@ -587,10 +589,32 @@ function renderPending() {
     box.replaceChildren(h('div', { class: 'pending bad' }, h('div', { class: 'pending-in' },
       h('div', { class: 'item-main' }, h('b', { text: 'Изменения откачены: ' + (p.reason || '') }),
         h('span', { class: 'sm', text: (p.rolled_files?.length ? 'Возвращены: ' + p.rolled_files.join(', ') + '. ' : '') + 'nfqws2 перезапущен с прежними настройками.' })),
-      btn('Понятно', () => { try { localStorage.setItem('nfqws-ui-pending-seen', p.id); } catch { /* нет хранилища */ } box.replaceChildren(); }, 'small'))));
+      btn('Понятно', () => { try { localStorage.setItem('nfqws-ui-pending-seen', p.id); } catch { /* нет хранилища */ } clearInterval(dnsSetTimer); box.replaceChildren(...dnsSetNodes()); }, 'small'))), ...dnsSetNodes());
     return;
   }
-  box.replaceChildren();
+  box.replaceChildren(...dnsSetNodes());
+}
+
+let dnsSetTimer = null;
+function dnsSetNodes() {
+  const d = S.state?.dns_set;
+  if (!d) return [];
+  if (d.state === 'working') {
+    dnsSetTimer = setInterval(() => { loadState().catch(() => {}); }, 3000);
+    return [h('div', { class: 'pending warn' }, h('div', { class: 'pending-in' },
+      h('div', { class: 'item-main' }, h('b', { text: 'Меняю DNS роутера…' }), d.step ? h('span', { class: 'sm', text: 'Сейчас: ' + d.step + '.' }) : null),
+      h('span', { class: 'spin' })))];
+  }
+  const offset = Date.now() / 1000 - S.state.now;
+  const left = () => Math.max(0, Math.round(d.deadline - (Date.now() / 1000 - offset)));
+  const timer = h('b', { class: 'num' });
+  const tick = () => { const s = left(); timer.textContent = `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`; if (!s) { clearInterval(dnsSetTimer); loadState().catch(() => {}); } };
+  tick();
+  dnsSetTimer = setInterval(tick, 1000);
+  return [h('div', { class: 'pending warn' }, h('div', { class: 'pending-in' },
+    h('div', { class: 'item-main' }, h('b', { text: 'DNS роутера изменён — DNS отвечает' }), h('span', { class: 'sm' }, 'Если не подтвердить, через ', timer, ' изменения откатятся сами.')),
+    btn('Всё работает — оставить', async () => { if (await guarded(() => api('dns_set_confirm'))) { await loadState(); route(true); } }, 'small primary'),
+    btn('Откатить сейчас', async () => { if (await guarded(() => api('dns_set_rollback'))) { await loadState(); route(true); } }, 'small')))];
 }
 
 // Кнопка автоисправления замечания проверки конфига

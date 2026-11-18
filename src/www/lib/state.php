@@ -279,6 +279,11 @@ function state(): array
       pendingExpire(60);
       return pendingView();
     })(),
+    'dns_set' => (function () {
+      dnsSetExpire();
+      $v = dnsSetView();
+      return $v && in_array($v['state'], ['working', 'pending'], true) ? $v : null;
+    })(),
     'lowmem' => lowMem(),
     'rollback' => (function () {
       $T = confirmPoint();

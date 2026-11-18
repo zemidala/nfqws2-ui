@@ -167,6 +167,24 @@ return array (
     'dns_get' => array (
       0 => 'dns',
     ),
+    'dns_set_confirm' => array (
+      0 => 'diag',
+      1 => 'dnsset',
+    ),
+    'dns_set_info' => array (
+      0 => 'diag',
+      1 => 'dnsset',
+    ),
+    'dns_set_rollback' => array (
+      0 => 'diag',
+      1 => 'dnsset',
+    ),
+    'dns_set_start' => array (
+      0 => 'check',
+      1 => 'diag',
+      2 => 'dnsx',
+      3 => 'dnsset',
+    ),
     'dns_start' => array (
       0 => 'check',
       1 => 'diag',
@@ -529,10 +547,11 @@ return array (
       13 => 'picks',
       14 => 'auto',
       15 => 'diag',
-      16 => 'update',
-      17 => 'state',
-      18 => 'report',
-      19 => 'learn',
+      16 => 'dnsset',
+      17 => 'update',
+      18 => 'state',
+      19 => 'report',
+      20 => 'learn',
     ),
     'safe_confirm' => array (
       0 => 'fixes',
@@ -640,10 +659,11 @@ return array (
       11 => 'configs',
       12 => 'auto',
       13 => 'diag',
-      14 => 'update',
-      15 => 'state',
-      16 => 'report',
-      17 => 'learn',
+      14 => 'dnsset',
+      15 => 'update',
+      16 => 'state',
+      17 => 'report',
+      18 => 'learn',
     ),
     'strategy_check' => array (
       0 => 'conf',

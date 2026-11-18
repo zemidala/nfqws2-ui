@@ -95,7 +95,7 @@ const CACHE_VER = 6;  // увеличить при изменении разбо
 // The server is split into sections in lib/ (one file each). They are loaded in this order: a later one may use
 // constants of an earlier one. API_FILE — this file: background jobs start it again (php-cgi -f API_FILE)
 define('API_FILE', __FILE__);
-const LIB = ['core', 'snapshots', 'service', 'conf', 'lists', 'check', 'devices', 'exclude', 'lint', 'adapt', 'listcheck', 'fixes', 'monitor', 'subs', 'tests', 'parallel', 'multi', 'configs', 'freeze', 'picks', 'auto', 'refine', 'diag', 'dns', 'dnsx', 'conns', 'pcap', 'update', 'state', 'report', 'learn', 'share'];
+const LIB = ['core', 'snapshots', 'service', 'conf', 'lists', 'check', 'devices', 'exclude', 'lint', 'adapt', 'listcheck', 'fixes', 'monitor', 'subs', 'tests', 'parallel', 'multi', 'configs', 'freeze', 'picks', 'auto', 'refine', 'diag', 'dns', 'dnsx', 'dnsset', 'conns', 'pcap', 'update', 'state', 'report', 'learn', 'share'];
 // Sections to load, in LIB order; null — all of them. Loaded once each
 function libLoad(?array $names = null): void
 {
@@ -168,6 +168,14 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
     dnsxJob();
     exit(0);
   }
+  if ($cli === 'dnsset') {
+    dnsSetJob();
+    exit(0);
+  }
+  if ($cli === 'dnsset_expire') {
+    dnsSetExpire();
+    exit(0);
+  }
   if ($cli === 'conns') {
     connJob();
     exit(0);
@@ -185,6 +193,7 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
   devicesEnsure();     // nfqws2 restarted outside the interface or the router rebooted
   interceptCron();     // jumps into the nfqws2 chains lost after a firewall rebuild — put back even with the page closed
   policyProbeEnsure(null, true);
+  dnsSetExpire();
   learnTmpOk();        // /tmp back to 1777 after an nfqws2 package install made it 0755 (the module could not write)
   learnKeep();         // what «learn» learned: the /tmp copy next to nfqws2.conf, so it survives a reboot
   historyScan('auto');
@@ -1568,6 +1577,21 @@ switch ($cmd) {
 
   case 'dnsx_get':
     respond(dnsxData());
+
+  case 'dns_set_info':
+    respond(dnsSetInfo(!empty($in['job'])));
+
+  case 'dns_set_start':
+    dnsSetStart((string)($in['name'] ?? ''), is_array($in['remove'] ?? null) ? $in['remove'] : []);
+    respond(dnsSetInfo());
+
+  case 'dns_set_confirm':
+    dnsSetConfirm();
+    respond(dnsSetInfo());
+
+  case 'dns_set_rollback':
+    dnsSetRollback();
+    respond(dnsSetInfo());
 
   case 'dnsx_stop':
     @touch(DNSX_STOP);

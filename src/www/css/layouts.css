@@ -251,6 +251,8 @@ details.dns-more-panel > summary { cursor: pointer; color: var(--accent-ink); }
 .dnsx-tile { display: grid; gap: 4px; padding: 12px 14px; border: 1px solid var(--line); border-radius: var(--radius); background: var(--soft); }
 .dnsx-tile.top { border-color: var(--accent); }
 .dnsx-tile .big { font-size: var(--fs-xl); font-weight: 600; }
+.dnsx-tile > .btn { justify-self: start; margin-top: 4px; grid-column: 1; }
+.dnsset-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 2px 12px; align-items: center; padding: 8px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .dnsx-legend { display: flex; flex-wrap: wrap; gap: 4px 16px; }
 .tbl.dnsx-tbl td.mono, .tbl.dnsx-tbl td.num { white-space: nowrap; }
 /* the table fits its block at any width, never scrolls sideways: «who answered» is cut with «…» (the whole in the
