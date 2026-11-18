@@ -165,25 +165,74 @@ function policyProbeEnsure(?array $policy = null, bool $fresh = false): bool
     policyProbeRemove();
     return $done = false;
   }
-  $rule = '-p tcp --sport ' . PROBE_PORTS . ' -j MARK --set-xmark ' . $policy['mark'] . '/0x0fffffff';
+  $set = ' -j MARK --set-xmark ' . $policy['mark'] . '/0x0fffffff';
+  $rule = '-p tcp --sport ' . PROBE_PORTS . $set;
+  $dns = dnsMarkTargets();
+  $rules = [$rule => '--sport ' . preg_quote(PROBE_PORTS, '/') . ' ']
+    + ($dns['dot'] ? ['-p tcp --dport ' . DOT_PORT . $set => '^-A ' . PROBE_CHAIN . ' -p tcp -m tcp --dport ' . DOT_PORT . ' '] : []);
+  foreach ($dns['ips'] as $ip) {
+    $rules['-p tcp -d ' . $ip . ' --dport 443' . $set] = ' -d ' . preg_quote($ip, '/') . '(\/32)? .*--dport 443 ';
+  }
   // быстрый путь: правило уже видно в прочитанной таблице — без четырёх запусков iptables -C (на mipsel это заметно)
   $all = mangleRules();
-  $mine = preg_grep('/^-A ' . PROBE_CHAIN . ' /', $all);
-  if (count($mine) === 1 && preg_grep('/^-A OUTPUT .*-j ' . PROBE_CHAIN . '\b/', $all)
-    && preg_match('/--sport ' . preg_quote(PROBE_PORTS, '/') . ' .*--set-xmark (0x[0-9a-f]+)\/0x0?fffffff\b/i', reset($mine), $x)
-    && hexdec($x[1]) === hexdec($policy['mark'])) {
+  $mine = array_values(preg_grep('/^-A ' . PROBE_CHAIN . ' /', $all));
+  $markOk = fn(string $l): bool => preg_match('/--set-xmark (0x[0-9a-f]+)\/0x0?fffffff\b/i', $l, $x) && hexdec($x[1]) === hexdec($policy['mark']);
+  $same = count($mine) === count($rules) && preg_grep('/^-A OUTPUT .*-j ' . PROBE_CHAIN . '\b/', $all);
+  foreach ($same ? $rules : [] as $sig) {
+    if (!array_filter($mine, fn($l) => preg_match('/' . $sig . '/', $l) && $markOk($l))) {
+      $same = false;
+      break;
+    }
+  }
+  if ($same) {
     return $done = true;
   }
   $ok = fn(string $c): bool => exec($ipt . $c . ' 2>/dev/null', $o, $rc) !== null && $rc === 0;
-  if (!$ok('-C ' . PROBE_CHAIN . ' ' . $rule)) {
-    exec($ipt . '-N ' . PROBE_CHAIN . ' 2>/dev/null');
-    exec($ipt . '-F ' . PROBE_CHAIN . ' 2>/dev/null');
-    exec($ipt . '-A ' . PROBE_CHAIN . ' ' . $rule . ' 2>/dev/null');
+  exec($ipt . '-N ' . PROBE_CHAIN . ' 2>/dev/null');
+  exec($ipt . '-F ' . PROBE_CHAIN . ' 2>/dev/null');
+  foreach (array_keys($rules) as $r) {
+    exec($ipt . '-A ' . PROBE_CHAIN . ' ' . $r . ' 2>/dev/null');
   }
   if (!$ok('-C OUTPUT -j ' . PROBE_CHAIN)) {
     exec($ipt . '-I OUTPUT 1 -j ' . PROBE_CHAIN . ' 2>/dev/null');
   }
   return $done = $ok('-C ' . PROBE_CHAIN . ' ' . $rule) && $ok('-C OUTPUT -j ' . PROBE_CHAIN);
+}
+
+function dnsMarkTargets(): array
+{
+  $cache = '/tmp/nfqws-ui-dnsmark.json';
+  $mt = (int)@filemtime(CONF_FILE);
+  $c = json_decode((string)@file_get_contents($cache), true);
+  if (is_array($c) && ($c['mtime'] ?? -1) === $mt && isset($c['dot'], $c['ips'])) {
+    return ['dot' => (bool)$c['dot'], 'ips' => (array)$c['ips']];
+  }
+  $dot = false;
+  $ips = [];
+  foreach (expectedProfiles(confValues()) as $p) {
+    $ports = [];
+    foreach ($p['tokens'] as $t) {
+      if (str_starts_with($t, '--filter-tcp=')) {
+        $ports = parsePorts(str_replace(':', '-', substr($t, 13))) ?? [];
+      }
+    }
+    if (!array_filter($ports, fn($r) => DOT_PORT >= $r[0] && DOT_PORT <= $r[1])) {
+      continue;
+    }
+    $dot = true;
+    foreach ($p['tokens'] as $t) {
+      if (str_starts_with($t, '--ipset-ip=')) {
+        foreach (explode(',', substr($t, 11)) as $ip) {
+          if (isIp4($ip) && !ipReserved($ip)) {
+            $ips[$ip] = true;
+          }
+        }
+      }
+    }
+  }
+  $r = ['dot' => $dot, 'ips' => array_slice(array_keys($ips), 0, 20)];
+  @file_put_contents($cache, json_encode($r + ['mtime' => $mt]));
+  return $r;
 }
 
 function policyProbeRemove(): void

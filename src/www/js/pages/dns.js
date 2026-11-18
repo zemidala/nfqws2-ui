@@ -164,6 +164,26 @@ async function viewDns(main) {
   // One piece of advice. The router gets real addresses — nothing to change (plain DNS intercepted does not matter, the
   // router already asks over a secure channel), with the fastest servers named in one line. It gets stubs — what to set,
   // the three best clean servers from the extended check (or the fastest secure one from the quick check)
+  const secRows = () => (x.servers || []).filter((r) => r.host && !/^[\d.]+$/.test(r.host) && (r.dot || r.doh));
+  const secClosed = (r) => !(r.dot?.ok || r.doh?.ok);
+  const byHost = (rows) => { const seen = new Set(); return rows.filter((r) => !seen.has(r.host) && seen.add(r.host)); };
+  const dnsPickHref = (rows) => PAGES.pick[0] + '?dns=' + encodeURIComponent(rows.map((r) => r.host + (r.ip ? '@' + r.ip : '')).join(','));
+  const andList = (rows) => rows.flatMap((r, i) => [i ? (i === rows.length - 1 ? ' и ' : ', ') : '', h('b', { text: r.name })]);
+  function closedPanel(rows) {
+    return h('section', { class: 'panel dns-adv bad' }, h('div', { class: 'panel-h' }, h('h2', { text: 'Защищённый DNS закрыт провайдером' })),
+      h('p', {}, 'DoT и DoH не проходят ни к одному из проверенных серверов. Провайдер режет их так же, как сайты, и nfqws2 может это обойти: подбор проверит стратегии на самых быстрых серверах, ', ...andList(rows), ', по DoH и по DoT.'),
+      h('div', { class: 'row' }, btn('Подобрать стратегию для DNS', () => go(dnsPickHref(rows)), 'primary', 'play'), newTag('dns:pick')),
+      h('p', { class: 'sm muted', text: 'Найденную стратегию можно будет применить отдельным профилем только для этих серверов. Потом поставьте один из них в роутере: OpenWrt — Сеть → DHCP и DNS; Keenetic — Интернет → DNS.' }));
+  }
+  function routerClosedLine() {
+    const up = q.upstreams || { hosts: [], ips: [] };
+    const rows = byHost(secRows().filter((r) => secClosed(r) && (up.hosts.includes(r.host) || up.ips.includes(r.ip))));
+    if (!rows.length) return null;
+    const one = rows.length === 1;
+    return h('p', { class: 'sm' }, ...andList(rows), one ? ', который стоит в роутере, провайдер закрыл. Чтобы оставить его, ' : ', которые стоят в роутере, провайдер закрыл. Чтобы оставить их, ',
+      h('a', { href: dnsPickHref(rows), text: 'подберите стратегию для DNS' }), '.');
+  }
+
   function advice() {
     const sites = q.sites || [];
     const fake = sites.filter((v) => v.router.st === 'fake');
@@ -171,6 +191,10 @@ async function viewDns(main) {
     const best = (x.servers || []).filter(clean).sort((a, b) => bestMs(a) - bestMs(b)).slice(0, 3);
     const quick = bestOf({ servers: q.servers || [] });
     const names = best.map((r) => h('b', { text: r.name })).flatMap((b, i) => [i ? ', ' : '', b, ` (${bestMs(best[i])} мс)`]);
+    const sec = secRows();
+    const allClosed = sec.length > 0 && sec.every(secClosed);
+    const pickRows = byHost([...sec].sort((a, b) => (udpMs(a) ?? 1e9) - (udpMs(b) ?? 1e9))).slice(0, 3);
+    const secLine = () => allClosed ? h('p', { class: 'sm' }, 'DoT и DoH провайдер закрыл. Если понадобятся, ', h('a', { href: dnsPickHref(pickRows), text: 'подберите стратегию для DNS' }), '.') : routerClosedLine();
     if (!sites.length) return null;
     if (!fake.length && silent.length) {
       return notice('warn', 'DNS роутера отвечает не на все сайты', `На ${silent.map((v) => v.host).join(', ')} он не вернул адреса. Если эти сайты нужны — проверьте их в «Диагнозе блокировки»: бывает, что DNS провайдера молчит вместо заглушки.`);
@@ -179,18 +203,20 @@ async function viewDns(main) {
       return h('section', { class: 'panel dns-adv ok' }, h('div', { class: 'panel-h' }, h('h2', { text: 'Менять ничего не нужно' })),
         h('p', {}, 'Роутер получает настоящие адреса.',
           (q.servers || []).some((v) => v.udp?.st === 'intercepted') ? ' Обычный DNS к чужим серверам перехвачен, но роутер уже спрашивает по защищённому каналу.' : '',
-          best.length ? [' Если когда-нибудь понадобится сменить DNS, быстрее всех у вас: ', ...names, '.'] : ''));
+          best.length ? [' Если когда-нибудь понадобится сменить DNS, быстрее всех у вас: ', ...names, '.'] : ''),
+        secLine());
     }
     const how = h('p', { class: 'sm muted' }, 'Как поставить: OpenWrt — Сеть → DHCP и DNS; Keenetic — Интернет → DNS. Подробно — ',
       h('a', { href: wikiDns(), target: '_blank', rel: 'noopener', text: 'в справке, раздел «DNS»' }), '. Интерфейс DNS роутера не меняет.');
     if (!best.length && !quick) {
-      return notice('warn', 'Защищённый DNS не проходит', 'Провайдер закрыл и DoT, и DoH к проверенным серверам — сменить DNS на роутере не получится.');
+      return allClosed && pickRows.length ? closedPanel(pickRows) : notice('warn', 'Защищённый DNS не проходит', 'Провайдер закрыл и DoT, и DoH к проверенным серверам — сменить DNS на роутере не получится.');
     }
     return h('section', { class: 'panel dns-adv bad' }, h('div', { class: 'panel-h' }, h('h2', { text: 'Что делать' })),
       h('p', { text: 'DNS роутера на часть сайтов отдаёт заглушку — никакая стратегия nfqws2 это не исправит. Поставьте в роутере защищённый DNS: быстрее всех у вас отвечают эти, без перехвата и подмены.' }),
       best.length ? h('div', { class: 'dnsx-best' }, best.map((r, i) => h('div', { class: 'dnsx-tile' + (i ? '' : ' top') },
         h('b', { text: r.name }), h('span', { class: 'big num', text: bestMs(r) + ' мс' }), h('span', { class: 'sm muted', text: `${bestHow(r)} · ${r.ip || 'по имени'}` }))))
         : h('p', {}, 'Быстрее всех ответил ', h('b', { text: `${quick.x.name} по ${quick.p}` }), ` (${quick.ms} мс).`),
+      secLine(),
       how);
   }
 

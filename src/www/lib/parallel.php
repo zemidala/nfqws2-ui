@@ -78,6 +78,18 @@ function parTry(array $chunk, ?array &$nfq, array $baseArgs, array $filter, int 
       parTry(array_slice($chunk, $half), $nfq, $baseArgs, $filter, $repeats, $host, $http));
   }
   $sh = TEST_DIR . '/slot.sh';
+  $dot = isDotTarget($host);
+  [$bare] = targetSplit($host);
+  if ($dot) {
+    file_put_contents($sh, implode("\n", [
+      'P=$1; U=$2; R=$3; O=$4; : > "$O"; i=0',
+      'while [ $i -lt $R ]; do i=$((i+1))',
+      '  set -- $(curl -4 -sk' . probeTlsOpt() . probePinOpt($bare, false, DOT_PORT) . ' --no-alpn -o /dev/null --local-port $P --connect-timeout 4 -m 6 -w "%{time_appconnect}" "$U" 2>/dev/null; echo " $?")',
+      '  t=$1; rc=$2',
+      '  case "$t" in ""|0|0.000000) [ "$rc" = 0 ] && rc=35; echo "$rc 0 0 0 0" >> "$O"; break;; esac',
+      '  echo "0 200 $t 0 $t" >> "$O"',
+      'done', '']));
+  } else {
   // одна дорожка: до R запросов, после первой неудачи — стоп; маленькая страница — ещё и проверка объёма отправкой
   file_put_contents($sh, implode("\n", [
     'P=$1; U=$2; R=$3; O=$4; : > "$O"; i=0',
@@ -91,10 +103,11 @@ function parTry(array $chunk, ?array &$nfq, array $baseArgs, array $filter, int 
     '  [ "$rc" = 0 ] || break',
     '  case "$v" in "28 "*) [ "${v#28 }" != "0.000000" ] && break;; esac',   // отправка повисла после рукопожатия — заморозка
     'done', '']));
+  }
   if (!is_file(TEST_DIR . '/volume.bin') || filesize(TEST_DIR . '/volume.bin') !== VOLUME_BYTES) {
     file_put_contents(TEST_DIR . '/volume.bin', random_bytes(VOLUME_BYTES));
   }
-  $url = ($http ? 'http://' : 'https://') . $host . '/';
+  $url = $dot ? 'https://' . $bare . ':' . DOT_PORT . '/' : ($http ? 'http://' : 'https://') . $host . '/';
   $cmd = 'UA=' . escapeshellarg('Mozilla/5.0 (X11; Linux x86_64) AppleWebKit/537.36 Chrome/130 Safari/537.36') . '; export UA; ';
   foreach (array_keys(array_values($chunk)) as $k) {
     [$lo, $hi] = parPorts($k);
@@ -285,7 +298,7 @@ function testJob(): void
   // выглядят одинаково — проверяется туннель, а не nfqws2
   $podkop = [];
   foreach (in_array($job['type'], ['pick', 'multi', 'wide', 'cfg'], true) && !$auto ? ($job['hosts'] ?? [$job['host']]) : [] as $h) {
-    $pk = podkopRoute($h);
+    $pk = podkopRoute(targetSplit($h)[0]);
     if ($pk && !empty($pk['proxy'])) {
       $podkop[] = $h;
     }

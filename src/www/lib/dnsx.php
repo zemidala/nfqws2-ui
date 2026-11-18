@@ -338,7 +338,7 @@ function dnsxJob(): void
     if ($stopped()) {
       break;
     }
-    $row = ['name' => $name, 'ip' => $ip, 'dot' => null, 'doh' => null, 'udp' => null, 'sub' => null,
+    $row = ['name' => $name, 'ip' => $ip, 'host' => $dot !== '' ? $dot : (string)parse_url($doh, PHP_URL_HOST), 'dot' => null, 'doh' => null, 'udp' => null, 'sub' => null,
       'wait' => array_filter(['dot' => $dot !== '', 'doh' => $doh !== ''])] + (empty($list[$i]['own']) ? [] : ['mine' => true]);
     if ($ip !== '') {
       $best = null;
