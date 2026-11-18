@@ -26,7 +26,7 @@ for (const [w, hgt] of [[390, 844], [1366, 900]]) {
   test(`Keenetic: кнопка на плитке и окно «Поставить в роутер», ${w}`, async ({ app, page }) => {
     await page.setViewportSize({ width: w, height: hgt });
     await mock(app, KEE);
-    await app.open('#/tests/dns');
+    await app.open('#/tests/dns', { variant: 'a' });
     const tiles = page.locator('.dnsx-tile');
     await expect(tiles).toHaveCount(3);
     await expect(tiles.getByRole('button', { name: 'Поставить в роутер' })).toHaveCount(3);

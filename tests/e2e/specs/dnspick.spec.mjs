@@ -26,7 +26,7 @@ for (const [w, hgt] of [[390, 844], [1366, 900]]) {
   test(`DNS закрыт целиком: блок «Что делать» ведёт в подбор для DNS, ${w}`, async ({ app, page }) => {
     await page.setViewportSize({ width: w, height: hgt });
     await mockDns(app, quick({ hosts: [], ips: [] }), allClosed);
-    await app.open('#/tests/dns');
+    await app.open('#/tests/dns', { variant: 'a' });
     const adv = page.locator('.dns-adv', { has: page.getByRole('heading', { name: 'Защищённый DNS закрыт провайдером' }) });
     await expect(adv).toBeVisible();
     await expect(adv).toContainText('подбор проверит стратегии на самых быстрых серверах, Google, Cloudflare и Quad9, по DoH и по DoT.');
@@ -70,7 +70,7 @@ for (const [w, hgt] of [[390, 844], [1366, 900]]) {
   test(`подбор для DNS: серверы вписаны, DoH и DoT, без протокола и списка, ${w}`, async ({ app, page }) => {
     await page.setViewportSize({ width: w, height: hgt });
     await app.mock((b) => b.cmd === 'test_status' ? { state: 'idle' } : undefined);
-    await app.open('#/tests/pick?dns=dns.google@8.8.8.8,cloudflare-dns.com@1.1.1.1');
+    await app.open('#/tests/pick?dns=dns.google@8.8.8.8,cloudflare-dns.com@1.1.1.1', { variant: 'a' });
     const main = page.locator('main');
     await expect(main.getByRole('radio', { name: 'Несколько сайтов или список' })).toHaveAttribute('aria-checked', 'true');
     await expect(main.getByRole('textbox', { name: 'Сайты, по одному в строке' })).toHaveValue('dns.google\ncloudflare-dns.com');
