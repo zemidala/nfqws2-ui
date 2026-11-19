@@ -221,7 +221,7 @@ function blobAutoArgs(array $args): array
 function testNfqwsStart(array $args, ?string $debugFile = null): ?array
 {
   $argv = array_merge([NFQWS_BIN, '--qnum=' . TEST_QNUM, '--user=nobody'], $debugFile ? ['--debug=@' . $debugFile] : [], blobAutoArgs($args), $args);
-  $p = proc_open(implode(' ', array_map('escapeshellarg', $argv)) . ' >' . TEST_DIR . '/nfqws.out 2>&1', [], $pipes);
+  $p = proc_open('exec ' . implode(' ', array_map('escapeshellarg', $argv)) . ' >' . TEST_DIR . '/nfqws.out 2>&1', [], $pipes);
   if (!is_resource($p)) {
     return null;
   }
@@ -240,9 +240,23 @@ function testNfqwsStop(?array $h): void
     return;
   }
   // proc_open запускает через sh: убиваем и оболочку, и сам nfqws2
-  exec('pkill -f ' . escapeshellarg('nfqws2 --qnum=' . TEST_QNUM) . ' 2>/dev/null');
+  $pids = testNfqwsPids();
+  if ($pids) {
+    exec('kill ' . implode(' ', $pids) . ' 2>/dev/null');
+  }
   proc_terminate($h['proc'], 15);
   proc_close($h['proc']);
+}
+
+function testNfqwsPids(): array
+{
+  $pids = [];
+  foreach (glob('/proc/[0-9]*/cmdline') ?: [] as $f) {
+    if (str_starts_with((string)@file_get_contents($f), NFQWS_BIN . "\0--qnum=" . TEST_QNUM . "\0")) {
+      $pids[] = (int)basename(dirname($f));
+    }
+  }
+  return $pids;
 }
 
 function testStatus(): array
