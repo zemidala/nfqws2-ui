@@ -17,7 +17,7 @@ const MAY_MISS = [
   /^page: button «Сортировать по столбцу «(Проверен|MAC|Адрес|Сейчас)»»$/,   // columns a phone does not show
   /^page: button «Открывается ли сайт и каким профилем он пойдёт»$/,   // a list line's name itself checks the site
   /^page: button «(Сервер|DoH|DoT|UDP|Подмена \(UDP N\))»$/,   // DNS table header; on a phone the rows are cards
-  /^page: button «[A-Z0-9_]+N»$/,            // the config's outline; on a phone the editor is the whole page
+  /^page: button «[A-Z0-9_]+(?:● ?)?N»$/,    // the config's outline; on a phone the editor is the whole page
   /^page: button «Забыть»$/,                 // «Обучение»: a phone has it in the opened row (checked below)
 ];
 
