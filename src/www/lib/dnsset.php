@@ -10,7 +10,7 @@ const DNSSET_STALE = 660;
 function dnsSetNdmc(string $cmd): array
 {
   $o = [];
-  exec('LD_LIBRARY_PATH=/lib:/usr/lib /bin/ndmc -c ' . escapeshellarg($cmd) . ' 2>&1', $o, $rc);
+  exec('LD_LIBRARY_PATH=/lib:/usr/lib ' . (ndmcPath() ?? '/bin/ndmc') . ' -c ' . escapeshellarg($cmd) . ' 2>&1', $o, $rc);
   $text = trim(preg_replace('/\e\[[0-9;]*[A-Za-z]|\[K/', '', implode("\n", $o)));
   return ['ok' => $rc === 0 && !preg_match('/error\[\d+\]/i', $text), 'text' => $text, 'lines' => explode("\n", $text)];
 }
@@ -40,7 +40,7 @@ function dnsSetDnsmasqServers(): array
 
 function dnsSetKind(): array
 {
-  if (is_file('/bin/ndmc')) {
+  if (ndmcPath() !== null) {
     return ['kind' => 'keenetic'];
   }
   if (!is_file('/etc/openwrt_release')) {

@@ -186,8 +186,10 @@ async function viewDns(main) {
     return rows.length ? rows : [{ host: 'dns.google', ip: '8.8.8.8' }, { host: 'cloudflare-dns.com', ip: '1.1.1.1' }, { host: 'dns.quad9.net', ip: '9.9.9.9' }];
   }
   function whyDialog(r) {
-    const text = WHY[info?.why] || (info?.kind === 'openwrt' && !r.doh_url ? 'У этого сервера нет DoH, а на OpenWrt ставится только DoH.'
+    const text = WHY[info?.why] || (info?.error ? `Не удалось узнать, как устроен DNS роутера: ${info.error.replace(/\.+$/, '')}. Обновите страницу.`
       : r.mine ? 'Свой сервер ставится вручную: OpenWrt — Сеть → DHCP и DNS; Keenetic — Интернет → DNS.'
+      : info?.kind === 'openwrt' && !r.doh_url ? 'У этого сервера нет DoH, а на OpenWrt ставится только DoH.'
+      : info?.kind === 'keenetic' && !r.dot_name && !r.doh_url ? 'У этого сервера нет DoT и DoH, а на Keenetic ставится только DoT или DoH.'
       : 'Поставить сервер отсюда можно на Keenetic и на OpenWrt; на этом роутере — вручную, в его настройках DNS.');
     modal(`Поставить ${r.name} в роутер`, h('div', { class: 'stack modal-b' }, h('p', { text })), null);
   }
@@ -383,7 +385,7 @@ async function viewDns(main) {
 
   const [a0, b0] = [await api('dns_get').catch(() => ({})), await api('dnsx_get').catch(() => ({}))];
   q = a0; x = b0;
-  info = await api('dns_set_info').catch(() => null);
+  info = await api('dns_set_info').catch((e) => ({ error: e.message }));
   if (info?.job?.state === 'working') watchSet();
   ownIn.value = (a0.own_servers || []).join(', ');
   onlyIn.checked = !!a0.own_only;

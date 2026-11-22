@@ -154,13 +154,23 @@ function dnsVerdict(array $ips, array $ref): string
   return $ref ? 'other' : 'unknown';   // big networks hand out different addresses to different resolvers
 }
 
+function ndmcPath(): ?string
+{
+  foreach (['/bin/ndmc', '/usr/bin/ndmc'] as $p) {
+    if (is_file($p)) {
+      return $p;
+    }
+  }
+  return null;
+}
+
 function routerDnsUpstreams(): array
 {
   $hosts = [];
   $ips = [];
   $o = [];
-  if (is_file('/bin/ndmc')) {
-    exec('LD_LIBRARY_PATH=/lib:/usr/lib /bin/ndmc -c ' . escapeshellarg('show dns-proxy') . ' 2>/dev/null', $o);
+  if (($ndmc = ndmcPath()) !== null) {
+    exec('LD_LIBRARY_PATH=/lib:/usr/lib ' . $ndmc . ' -c ' . escapeshellarg('show dns-proxy') . ' 2>/dev/null', $o);
     foreach ($o as $l) {
       if (!preg_match('/^\s*dns_server\s*=\s*\S+\s+\S+\s*#\s*(\S+)/', $l, $m)) {
         continue;

@@ -64,6 +64,30 @@ test('podkop: кнопка видна и объясняет, почему пос
   await expect(m.getByRole('button', { name: 'Поставить' })).toHaveCount(0);
 });
 
+const xPlain = { ...x, servers: x.servers.map((s, i) => (i ? s : { ...s, host: undefined, dot_name: undefined, doh_url: undefined, dot: undefined, doh: undefined })) };
+for (const w of [390, 1366]) {
+  test(`Keenetic, у сервера нет DoT и DoH: окно называет причину, ${w}`, async ({ app, page }) => {
+    await page.setViewportSize({ width: w, height: 900 });
+    await app.mock((b) => b.cmd === 'dns_get' ? q : b.cmd === 'dnsx_get' ? xPlain : b.cmd === 'dns_set_info' ? KEE : undefined);
+    await app.open('#/tests/dns');
+    await page.locator('.dnsx-tile', { hasText: 'Cloudflare' }).getByRole('button', { name: 'Поставить в роутер' }).click();
+    const m = page.getByRole('dialog', { name: 'Поставить Cloudflare в роутер' });
+    await expect(m).toContainText('У этого сервера нет DoT и DoH, а на Keenetic ставится только DoT или DoH.');
+    await expect(m).not.toContainText('можно на Keenetic и на OpenWrt');
+    expect(await auditLayout(page)).toEqual([]);
+  });
+
+  test(`сведения о DNS роутера не получены: окно говорит об ошибке, ${w}`, async ({ app, page }) => {
+    await page.setViewportSize({ width: w, height: 900 });
+    await mock(app, { __status: 500, body: { error: 'Ошибка PHP: проверка' } });
+    await app.open('#/tests/dns');
+    await page.locator('.dnsx-tile').first().getByRole('button', { name: 'Поставить в роутер' }).click();
+    const m = page.getByRole('dialog');
+    await expect(m).toContainText('Не удалось узнать, как устроен DNS роутера: Ошибка PHP: проверка. Обновите страницу.');
+    expect(await auditLayout(page)).toEqual([]);
+  });
+}
+
 test('подбор для DNS виден всегда: кнопка на странице и режим в подборе', async ({ app, page }) => {
   await app.mock((b) => b.cmd === 'dns_get' ? {} : b.cmd === 'dnsx_get' ? {} : b.cmd === 'test_status' ? { state: 'idle' } : undefined);
   await app.open('#/tests/dns', { variant: 'a' });
