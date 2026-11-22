@@ -124,8 +124,11 @@ const CRON_YIELD_FILE = '/tmp/nfqws-ui-cron-yield.json';
 function pageBusy(): bool
 {
   foreach (glob('/proc/[0-9]*', GLOB_ONLYDIR) ?: [] as $d) {
-    if ((int)basename($d) !== getmypid() && trim((string)@file_get_contents("$d/comm")) === 'php-cgi'
-      && str_contains("\0" . @file_get_contents("$d/environ") . "\0", "\0SCRIPT_FILENAME=" . API_FILE . "\0")) {
+    if ((int)basename($d) === getmypid() || trim((string)@file_get_contents("$d/comm")) !== 'php-cgi'
+      || !preg_match('/(?:^|\0)SCRIPT_FILENAME=([^\0]+)/', (string)@file_get_contents("$d/environ"), $m)) {
+      continue;
+    }
+    if ($m[1] === API_FILE || @realpath($m[1]) === API_FILE) {
       return true;
     }
   }
@@ -168,7 +171,7 @@ function cronYield(bool $wait): ?string
   } else {
     $d['streak'] = 0;
   }
-  @file_put_contents(CRON_YIELD_FILE, json_encode($d));
+  putSafe(CRON_YIELD_FILE, json_encode($d));
   return $skip ? $why : null;
 }
 

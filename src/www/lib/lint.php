@@ -133,7 +133,7 @@ function phpCurlError(): ?string
   // почему не загрузился: PHP пишет это при старте (нет библиотеки, другая версия), а без display_startup_errors молчит
   $bin = PHP_BINARY !== '' && is_executable(PHP_BINARY) ? PHP_BINARY : 'php-cgi';
   [, $out] = runTimeout(['sh', '-c', 'exec env -i PATH=' . JOB_PATH . ' ' . escapeshellarg($bin) . ' -d display_startup_errors=1 -d display_errors=1 -m 2>&1'], 5);
-  if (preg_match('/^curl$/mi', strip_tags($out))) {
+  if (trim($out) === '' || preg_match('/^curl$/mi', strip_tags($out))) {
     return null;
   }
   foreach (explode("\n", strip_tags($out)) as $l) {

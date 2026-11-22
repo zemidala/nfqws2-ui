@@ -200,6 +200,7 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
   nfqLogsTrim();
   if ($cli === 'daily') {
     snapshotCreate('ежедневный', true);
+    remotePush();   // раз в сутки — дослать то, что не ушло (NAS был выключен)
   }
   if (cronYield($cli === 'daily') !== null) {
     exit(0);
@@ -211,7 +212,6 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
   // иначе после обновления интерфейса метка «↑» появлялась только наутро
   nfqUpdateCheck(false);
   if ($cli === 'daily') {
-    remotePush();   // раз в сутки — дослать то, что не ушло (NAS был выключен)
     if (uiSettings()['subs']) {
       subsRun();
     }
