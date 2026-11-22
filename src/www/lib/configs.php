@@ -116,6 +116,62 @@ function lowMem(): bool
   return preg_match('/^MemTotal:\s+(\d+)/m', (string)@file_get_contents('/proc/meminfo'), $m) === 1 && (int)$m[1] / 1024 <= LOWMEM_TOTAL_MB;
 }
 
+const CRON_YIELD_MB = 24;
+const CRON_YIELD_MAX = 2;
+const CRON_YIELD_WAIT = 300;
+const CRON_YIELD_FILE = '/tmp/nfqws-ui-cron-yield.json';
+
+function pageBusy(): bool
+{
+  foreach (glob('/proc/[0-9]*', GLOB_ONLYDIR) ?: [] as $d) {
+    if ((int)basename($d) !== getmypid() && trim((string)@file_get_contents("$d/comm")) === 'php-cgi'
+      && str_contains("\0" . @file_get_contents("$d/environ") . "\0", "\0SCRIPT_FILENAME=" . API_FILE . "\0")) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function cronYieldWhy(): ?string
+{
+  if (!function_exists('curl_init')) {
+    return 'curl';
+  }
+  if (!lowMem()) {
+    return null;
+  }
+  if (($f = memFreeMb()) !== null && $f < CRON_YIELD_MB) {
+    return 'mem';
+  }
+  return pageBusy() ? 'page' : null;
+}
+
+function cronYieldData(): array
+{
+  $d = json_decode((string)@file_get_contents(CRON_YIELD_FILE), true);
+  $log = array_values(array_filter(is_array($d['log'] ?? null) ? $d['log'] : [],
+    fn($e) => is_array($e) && (int)($e[0] ?? 0) > time() - 86400));
+  return ['streak' => (int)($d['streak'] ?? 0), 'log' => $log];
+}
+
+function cronYield(bool $wait): ?string
+{
+  $d = cronYieldData();
+  $why = cronYieldWhy();
+  for ($t = time(); $wait && ($why === 'mem' || $why === 'page') && time() - $t < CRON_YIELD_WAIT; $why = cronYieldWhy()) {
+    sleep(15);
+  }
+  $skip = $why === 'curl' || ($why !== null && !$wait && $d['streak'] < CRON_YIELD_MAX);
+  if ($skip) {
+    $d['streak'] += $why === 'curl' ? 0 : 1;
+    $d['log'][] = [time(), $why];
+  } else {
+    $d['streak'] = 0;
+  }
+  @file_put_contents(CRON_YIELD_FILE, json_encode($d));
+  return $skip ? $why : null;
+}
+
 function cfgJob(array $job, array &$status, ?array &$nfq, string $iface): void
 {
   $repeats = max(1, min(5, (int)($job['repeats'] ?? 3)));

@@ -133,6 +133,9 @@ function phpCurlError(): ?string
   // почему не загрузился: PHP пишет это при старте (нет библиотеки, другая версия), а без display_startup_errors молчит
   $bin = PHP_BINARY !== '' && is_executable(PHP_BINARY) ? PHP_BINARY : 'php-cgi';
   [, $out] = runTimeout(['sh', '-c', 'exec env -i PATH=' . JOB_PATH . ' ' . escapeshellarg($bin) . ' -d display_startup_errors=1 -d display_errors=1 -m 2>&1'], 5);
+  if (preg_match('/^curl$/mi', strip_tags($out))) {
+    return null;
+  }
   foreach (explode("\n", strip_tags($out)) as $l) {
     if (stripos($l, 'curl') !== false && preg_match('/warning|error|unable|cannot/i', $l)) {
       return trim(preg_replace('/\s+/', ' ', $l));
@@ -141,8 +144,19 @@ function phpCurlError(): ?string
   return 'модуль curl для PHP не загружен';
 }
 
-function phpCurlHint(string $err): string
+const PHP_CURL_MEM = 'Модуль curl для PHP установлен, но в этот раз не загрузился — похоже, роутеру не хватило памяти. '
+  . 'Повторите действие; если ошибка возвращается часто, включите на роутере подкачку (swap).';
+
+function phpCurlMem(?string $err): bool
 {
+  return !function_exists('curl_init') && ($err === null || preg_match('/cannot allocate memory|out of memory|failed to map segment/i', $err) === 1);
+}
+
+function phpCurlHint(?string $err): string
+{
+  if (phpCurlMem($err)) {
+    return PHP_CURL_MEM;
+  }
   if (phpCurlOld($err)) {
     return 'Модуль curl для PHP собран под более новую версию PHP, чем стоит на роутере, и не загружается — без него диагноз, подбор, '
       . 'мониторинг и проверка обновлений не работают (PHP ответил: «' . $err . '»). Нажмите «Обновить PHP» в «Проблемах» на «Обзоре» '
@@ -186,8 +200,8 @@ function phpCurlInstall(): array
 
 function curlRequire(): void
 {
-  if (($e = phpCurlError()) !== null) {
-    fail(phpCurlHint($e));
+  if (!function_exists('curl_init')) {
+    fail(phpCurlHint(phpCurlError()));
   }
   if (($e = curlCmdError()) !== null) {
     fail(curlCmdHint($e));

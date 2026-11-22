@@ -332,7 +332,7 @@ function reportText(array $sites, bool $hide, string $build): string
   $L[] = '';
   $L[] = '== PHP, пакеты, память ==';
   $L[] = 'PHP ' . PHP_VERSION . ' (' . (PHP_INT_SIZE * 8) . ' бит), memory_limit ' . ini_get('memory_limit') . ', модуль curl: '
-    . ($st['php_curl'] === null ? 'загружен' : 'НЕТ — ' . $st['php_curl']) . ', программа curl: ' . ($st['curl'] === null ? 'работает' : 'НЕТ — ' . $st['curl']);
+    . ($st['php_curl'] !== null ? 'НЕТ — ' . $st['php_curl'] : (function_exists('curl_init') ? 'загружен' : 'установлен, но в этом запросе не загрузился (похоже, не хватило памяти)')) . ', программа curl: ' . ($st['curl'] === null ? 'работает' : 'НЕТ — ' . $st['curl']);
   $L[] = 'модули PHP: ' . implode(' ', array_map('strtolower', get_loaded_extensions()));
   $pk = [];
   foreach (['php8', 'php8-cgi', 'php8-mod-curl', 'libcurl', 'libcurl4', 'curl', 'libpcre2', 'libxml2', 'lighttpd'] as $n) {
@@ -344,6 +344,21 @@ function reportText(array $sites, bool $hide, string $build): string
   $mi = (string)@file_get_contents('/proc/meminfo');
   $mb = fn($k) => preg_match('/^' . $k . ':\s+(\d+)/m', $mi, $m) ? round((int)$m[1] / 1024) . ' МБ' : '?';
   $L[] = 'память: всего ' . $mb('MemTotal') . ', доступно ' . $mb('MemAvailable') . ', подкачка свободна ' . $mb('SwapFree');
+  $phpLog = (string)@file_get_contents(PHP_LOG);
+  $n = 0;
+  foreach (explode("\n", $phpLog) as $l) {
+    if (preg_match('/^\[([^\]]+)\].*undefined function curl_/', $l, $m) && (int)strtotime($m[1]) > time() - 86400) {
+      $n++;
+    }
+  }
+  if ($n > 0) {
+    $L[] = 'модуль curl не загрузился при запуске PHP за сутки: ' . $n . ' раз (по журналу PHP)';
+  }
+  $why = array_count_values(array_column(cronYieldData()['log'], 1));
+  if ($why) {
+    $L[] = 'проходов cron пропущено за сутки: ' . array_sum($why) . ' (мало памяти ' . ($why['mem'] ?? 0)
+      . ', открыта страница ' . ($why['page'] ?? 0) . ', без модуля curl ' . ($why['curl'] ?? 0) . ')';
+  }
   $fs = [];
   foreach (array_unique([ROOT !== '' ? '/opt' : '/overlay', '/tmp']) as $d) {
     if (is_dir($d) && ($f = @disk_free_space($d)) !== false) {
@@ -351,7 +366,7 @@ function reportText(array $sites, bool $hide, string $build): string
     }
   }
   $L[] = 'свободно на диске: ' . ($fs ? implode(', ', $fs) : '?');
-  $php = array_slice(array_filter(explode("\n", (string)@file_get_contents(PHP_LOG))), -20);
+  $php = array_slice(array_filter(explode("\n", $phpLog)), -20);
   $L[] = '';
   $L[] = '== Ошибки PHP (последние ' . count($php) . ') ==';
   foreach ($php as $l) {

@@ -22,7 +22,7 @@ function fatalText(): ?string
     return null;
   }
   if (!function_exists('curl_init') && strpos($e['message'], 'curl_') !== false) {
-    return phpCurlHint(phpCurlError() ?? '');
+    return phpCurlHint(phpCurlError());
   }
   return 'Ошибка PHP: ' . $e['message'] . ' (' . basename($e['file']) . ':' . $e['line'] . ')';
 }
@@ -198,6 +198,12 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
   learnKeep();         // what «learn» learned: the /tmp copy next to nfqws2.conf, so it survives a reboot
   historyScan('auto');
   nfqLogsTrim();
+  if ($cli === 'daily') {
+    snapshotCreate('ежедневный', true);
+  }
+  if (cronYield($cli === 'daily') !== null) {
+    exit(0);
+  }
   monitorRun(false);
   autoTick();
   notifyFlush();   // то, что не ушло в прошлые проходы
@@ -205,7 +211,6 @@ if ($cli !== false && !isset($_SERVER['REQUEST_METHOD'])) {
   // иначе после обновления интерфейса метка «↑» появлялась только наутро
   nfqUpdateCheck(false);
   if ($cli === 'daily') {
-    snapshotCreate('ежедневный', true);
     remotePush();   // раз в сутки — дослать то, что не ушло (NAS был выключен)
     if (uiSettings()['subs']) {
       subsRun();

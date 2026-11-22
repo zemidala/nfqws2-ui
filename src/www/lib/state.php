@@ -257,7 +257,7 @@ function state(): array
     'leftovers' => array_column(pkgLeftovers(), 'name'),
     'nfq_update' => (function () { $u = nfqUpdateInfo(); return ['latest' => $u['latest'], 'available' => $u['available'], 'running' => $u['running'], 'rollback' => $u['rollback']]; })(),
     'curl' => curlCmdError(),
-    'php_curl' => ($pc = phpCurlError()),
+    'php_curl' => ($pc = phpCurlMem($e = phpCurlError()) ? null : $e),
     'php_upgrade' => phpCurlOld($pc) ? (pkgApk() ? PHP_UPGRADE_APK : PHP_UPGRADE_OPKG) : null,
     'pkg_apk' => pkgApk(),
     'lint' => lintCurrent(),
