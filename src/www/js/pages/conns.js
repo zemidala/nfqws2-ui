@@ -114,10 +114,11 @@ async function viewConns(main) {
       return;
     }
     const flows = s.flows || [];
-    const nores = flows.filter((f) => f.noans);
+    const podUdp = (f) => f.podkop && f.proto === 'udp';
+    const nores = flows.filter((f) => f.noans && !podUdp(f));
     const stalled = flows.filter((f) => !f.noans && f.stalled);
     const unseen = flows.filter((f) => f.seen === false);
-    const udpBad = flows.filter((f) => f.proto === 'udp' && f.noans === f.n);
+    const udpBad = flows.filter((f) => f.proto === 'udp' && !f.podkop && f.noans === f.n);
     // filter buttons with their counts (mockup local/design/bbb.html, Б); an empty one is not shown, «Мимо nfqws2» —
     // once the recording is annotated, before that nobody knows
     const tabs = [['all', 'Все', flows], ['noans', 'Без ответа', nores], ['stalled', 'Замерли', stalled], ['unseen', 'Мимо nfqws2', s.running ? [] : unseen]];
