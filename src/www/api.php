@@ -95,7 +95,7 @@ const CACHE_VER = 6;  // увеличить при изменении разбо
 // The server is split into sections in lib/ (one file each). They are loaded in this order: a later one may use
 // constants of an earlier one. API_FILE — this file: background jobs start it again (php-cgi -f API_FILE)
 define('API_FILE', __FILE__);
-const LIB = ['core', 'snapshots', 'service', 'conf', 'lists', 'check', 'devices', 'exclude', 'lint', 'adapt', 'listcheck', 'fixes', 'monitor', 'subs', 'tests', 'parallel', 'multi', 'configs', 'freeze', 'picks', 'auto', 'refine', 'diag', 'dns', 'dnsx', 'dnsset', 'conns', 'pcap', 'update', 'state', 'report', 'learn', 'share'];
+const LIB = ['core', 'snapshots', 'service', 'conf', 'lists', 'check', 'devices', 'exclude', 'lint', 'adapt', 'listcheck', 'fixes', 'monitor', 'subs', 'tests', 'parallel', 'multi', 'configs', 'freeze', 'voice', 'picks', 'auto', 'refine', 'diag', 'dns', 'dnsx', 'dnsset', 'conns', 'pcap', 'update', 'state', 'report', 'learn', 'share'];
 // Sections to load, in LIB order; null — all of them. Loaded once each
 function libLoad(?array $names = null): void
 {
@@ -1027,6 +1027,26 @@ switch ($cmd) {
     curlRequire();
     launchJob(['type' => 'freeze', 'host' => $only ? 'свои адреса' : 'опорные сети', 'sets' => [], 'extra' => $extra, 'ips' => $ips, 'only' => $only]);
     respond(['ok' => true]);
+
+  case 'voice_start':
+    if (testRunning()) {
+      fail('Сейчас идёт подбор или другая проверка — дождитесь окончания');
+    }
+    if (diagBusy()) {
+      fail('Сейчас идёт диагноз сайта — он использует те же проверочные правила. Повторите через несколько секунд.');
+    }
+    $server = trim((string)($in['server'] ?? '')) ?: VOICE_SERVER;
+    if (!preg_match('/^(\d{1,3}(?:\.\d{1,3}){3}):(\d{1,5})$/', $server, $m) || !isIp4($m[1]) || ipReserved($m[1]) || (int)$m[2] < 1 || (int)$m[2] > 65535) {
+      fail('Сервер голоса: нужен внешний адрес IPv4 с портом, например ' . VOICE_SERVER);
+    }
+    launchJob(['type' => 'voice', 'host' => 'голос Discord', 'sets' => [], 'server' => $server, 'pick' => !empty($in['pick']), 'own' => ownFromRequest($in['own'] ?? null)]);
+    respond(['ok' => true]);
+
+  case 'voice_get':
+    respond(voiceLast());
+
+  case 'voice_blob':
+    respond(voiceBlobInstall((string)($in['host'] ?? '')));
 
   case 'freeze_get':
     // идёт проба — её состояние, иначе итог прошлой

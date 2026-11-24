@@ -99,3 +99,11 @@
 /* «Что пробовать»: two columns, each box exactly under the one above; one column on a phone */
 .pick-sets { display: grid; grid-template-rows: repeat(3, auto); grid-auto-flow: column; grid-auto-columns: max-content; gap: 6px 32px; align-items: start; min-width: 0; }
 @media (max-width: 759px) { .pick-sets { grid-template-rows: none; grid-auto-flow: row; grid-auto-columns: auto; } }
+.vc-checks { display: grid; margin: 0; padding: 0; list-style: none; }
+.vc-checks li { display: grid; grid-template-columns: 24px minmax(0, 180px) minmax(0, 1fr); gap: 4px 12px; align-items: start; padding: 12px 0; border-top: 1px solid var(--line); }
+.vc-checks li:first-child { border-top: 0; padding-top: 0; }
+.vc-checks .lvl { margin-top: 0; }
+.vc-checks b { font-weight: 600; }
+.vc-checks .r { display: grid; gap: 2px; }
+.vc-act { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+@media (max-width: 600px) { .vc-checks li { grid-template-columns: 24px minmax(0, 1fr); } .vc-checks .r { grid-column: 2; } }

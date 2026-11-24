@@ -141,6 +141,7 @@ async function viewConns(main) {
     // a CDN address may carry several names: the first is from the device's own greeting when it had one
     const name = (f) => f.names?.[0];
     const pickable = (f) => !s.running && name(f) && f.proto === 'tcp' && [80, 443].includes(f.dport) && bad(f) && !f.podkop;
+    const voiceRow = (f) => !s.running && f.proto === 'udp' && !f.podkop && bad(f) && (f.l7 === 'discord' || /^(CLOUDFLARENET|DISCORD)/.test(f.as_name || '') && ((f.dport >= 19294 && f.dport <= 19344) || f.dport >= 50000));
     const pickLink = (f) => { const u = pickHref(name(f)); return f.dport === 80 ? u + (u.includes('?') ? '&' : '?') + 'proto=http' : u; };
     // the site's name over its address; without a name — the network, without that — the address alone
     const tbl = h('div', { class: 'conn-box' }, h('table', { class: 'conn-b' },
@@ -154,7 +155,8 @@ async function viewConns(main) {
           h('td', { title: `отправлено ${plural(f.op, 'пакет', 'пакета', 'пакетов')} / получено ${plural(f.rp, 'пакет', 'пакета', 'пакетов')}`, text: `${kb(f.ob)} / ${kb(f.rb)}` }),
           // what nfqws2 does with it had a column of its own; now it is the status's hint
           h('td', { title: s.running ? null : 'nfqws2: ' + nfqText(f)[0] }, h('span', { class: 'c-st ' + vc, text: vt })),
-          h('td', {}, pickable(f) ? h('a', { class: 'c-btn', href: pickLink(f), title: `Подбор стратегии для ${name(f)}`, text: 'Подобрать' }) : '—'));
+          h('td', {}, pickable(f) ? h('a', { class: 'c-btn', href: pickLink(f), title: `Подбор стратегии для ${name(f)}`, text: 'Подобрать' })
+            : voiceRow(f) ? h('a', { class: 'c-btn', href: `${PAGES.voice[0]}?server=${f.dst}:${f.dport}`, title: 'Проверить голос Discord через этот сервер', text: 'Проверить голос' }) : '—'));
       }))));
     // the full capture: for the experienced, folded away
     const pcapBox = !s.running && s.pcap ? h('details', { class: 'conn-x' }, h('summary', {}, icon('chev'), 'Для опытных'),

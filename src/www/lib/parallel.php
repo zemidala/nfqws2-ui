@@ -392,6 +392,11 @@ function testJob(): void
     return;
   }
 
+  if ($job['type'] === 'voice') {
+    voiceJob($job, $status, $nfq, $iface, $baseArgs);
+    return;
+  }
+
   if ($job['type'] === 'wide') {
     wideJob($job, $status, $nfq, $iface, $baseArgs);
     return;

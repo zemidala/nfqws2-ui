@@ -744,6 +744,25 @@ return array (
     'update_status' => array (
       0 => 'update',
     ),
+    'voice_blob' => array (
+      0 => 'tests',
+      1 => 'voice',
+      2 => 'diag',
+    ),
+    'voice_get' => array (
+      0 => 'tests',
+      1 => 'parallel',
+      2 => 'voice',
+    ),
+    'voice_start' => array (
+      0 => 'check',
+      1 => 'tests',
+      2 => 'parallel',
+      3 => 'voice',
+      4 => 'auto',
+      5 => 'diag',
+      6 => 'report',
+    ),
     'wide_start' => array (
       0 => 'tests',
       1 => 'parallel',

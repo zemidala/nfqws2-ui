@@ -15,7 +15,7 @@ const PAGES = {
   backup: ['#/settings/backup', 'Резервные копии'], hist: ['#/settings/hist', 'История изменений'], log: ['#/log', 'Журнал'],
   look: ['#/settings/look', 'Оформление'], about: ['#/settings/about', 'О программе'],
   // ещё не сделаны: в меню видны, но заблокированы и помечены «скоро»
-  diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], comm: ['#/tests/community', 'Стратегии сообщества'], frz: ['#/tests/freeze', 'Обрыв на 16 КБ'], dns: ['#/tests/dns', 'DNS-серверы'], conns: ['#/tests/conns', 'Соединения устройства'], learn: ['#/tests/learn', 'Что выучил роутер'],cfg: ['#/tests/configs', 'Чужой конфиг'], auto: ['#/tests/auto', 'Автоподбор'], asn: ['#/asn', 'Список по ASN'], report: ['#/settings/report', 'Отчёт для помощи'],
+  diag: ['#/diag', 'Диагноз блокировки'], phist: ['#/tests/history', 'История подборов'], comm: ['#/tests/community', 'Стратегии сообщества'], frz: ['#/tests/freeze', 'Обрыв на 16 КБ'], dns: ['#/tests/dns', 'DNS-серверы'], conns: ['#/tests/conns', 'Соединения устройства'], voice: ['#/tests/voice', 'Голос Discord'], learn: ['#/tests/learn', 'Что выучил роутер'],cfg: ['#/tests/configs', 'Чужой конфиг'], auto: ['#/tests/auto', 'Автоподбор'], asn: ['#/asn', 'Список по ASN'], report: ['#/settings/report', 'Отчёт для помощи'],
 };
 // Новые функции — метка «новое». КАЖДАЯ новая функция интерфейса записывается сюда:
 // [страница из PAGES или «страница:функция», версия, в которой появилась, подпись для сообщения «Обновлено до…»].
@@ -66,6 +66,7 @@ const FEATURES = [
   ['learn:convert', '1.31.0', 'Кнопка «Перевести на обучение» у профиля с circular'],
   ['comm:share', '1.31.0', '«Поделиться» без аккаунта GitHub, «Помогать базе» и счётчик «Ваш вклад»'],
   ['dns:only', '1.31.0', '«DNS-серверы»: галочка «Только свои» — проверить свои серверы без публичных'],
+  ['voice', '1.35.0', '«Голос Discord»: роутер проверяет голос без звонка и, если провайдер его режет, подбирает и включает настройку'],
   ['pick:dns', '1.34.0', '«Подбор стратегии»: режим «DNS-серверы» — стратегия для DoH и DoT, если провайдер их режет'],
   ['dns:set', '1.34.0', '«DNS-серверы»: «Поставить в роутер» — защищённый DNS в Keenetic или через https-dns-proxy на OpenWrt, с проверкой и откатом'],
   ['dns:pick', '1.34.0', '«DNS-серверы»: если провайдер закрыл DoT и DoH — подбор стратегии для DNS и отдельный профиль для него'],
@@ -136,16 +137,16 @@ const SOON_HINT = 'Ещё в разработке — появится в одн
 const SYS_PAGES = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 const SYS_NAV = ['basic', 'base', 'raw', 'backup', 'hist', 'log', 'report', 'look', 'about'];
 // Компоновка «Боковое меню»: группы и их страницы
-const MENU = [[null, ['over']], ['Проверка сайта', ['diag', 'frz', 'dns', 'conns', 'pick', 'trace', 'phist', 'comm', 'cfg']], ['Наблюдение', ['mon', 'auto', 'learn', 'tg']], ['Обход', ['prof', 'lists', 'dev', 'asn']], ['Система', SYS_NAV]];
+const MENU = [[null, ['over']], ['Проверка сайта', ['diag', 'frz', 'dns', 'conns', 'voice', 'pick', 'trace', 'phist', 'comm', 'cfg']], ['Наблюдение', ['mon', 'auto', 'learn', 'tg']], ['Обход', ['prof', 'lists', 'dev', 'asn']], ['Система', SYS_NAV]];
 // Упрощённый вид (галочка в «Оформлении»): шесть разделов, страницы раздела — вкладками над страницей (как в TOP_TABS)
-const MENU_SIMPLE = [['over', 'Обзор', 'home', ['over']], ['pick', 'Проверка сайта', 'tests', ['diag', 'frz', 'dns', 'conns', 'pick', 'trace', 'phist', 'comm', 'cfg', 'site']], ['mon', 'Наблюдение', 'pulse', ['mon', 'auto', 'learn', 'tg']],
+const MENU_SIMPLE = [['over', 'Обзор', 'home', ['over']], ['pick', 'Проверка сайта', 'tests', ['diag', 'frz', 'dns', 'conns', 'voice', 'pick', 'trace', 'phist', 'comm', 'cfg', 'site']], ['mon', 'Наблюдение', 'pulse', ['mon', 'auto', 'learn', 'tg']],
   ['prof', 'Профили', 'layers', ['prof', 'dev']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]];
 // Верхние вкладки компоновок: страница по клику, подпись, значок, страницы вкладки, «только на узком экране»
 const TOP_TABS = {
   menu: [],
-  tabs: [['over', 'Обзор', 'home', ['over'], true], ['pick', 'Проверка', 'tests', ['diag', 'frz', 'dns', 'conns', 'pick', 'trace', 'phist', 'comm', 'cfg', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'auto', 'learn', 'tg']],
+  tabs: [['over', 'Обзор', 'home', ['over'], true], ['pick', 'Проверка', 'tests', ['diag', 'frz', 'dns', 'conns', 'voice', 'pick', 'trace', 'phist', 'comm', 'cfg', 'site']], ['mon', 'Мониторинг', 'pulse', ['mon', 'auto', 'learn', 'tg']],
     ['prof', 'Профили', 'layers', ['prof', 'dev']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
-  site: [['over', 'Обзор', 'home', ['over']], ['mon', 'Сайты', 'pulse', ['mon', 'diag', 'frz', 'dns', 'conns', 'pick', 'trace', 'phist', 'comm', 'cfg', 'auto', 'learn', 'tg', 'site']],
+  site: [['over', 'Обзор', 'home', ['over']], ['mon', 'Сайты', 'pulse', ['mon', 'diag', 'frz', 'dns', 'conns', 'voice', 'pick', 'trace', 'phist', 'comm', 'cfg', 'auto', 'learn', 'tg', 'site']],
     ['prof', 'Профили', 'layers', ['prof', 'dev']], ['lists', 'Списки', 'sites', ['lists', 'asn']], ['basic', 'Система', 'settings', SYS_NAV]],
 };
 // Нижняя панель телефона — одна для всех компоновок; остальное — в меню
@@ -171,7 +172,7 @@ function pageOf(r = parseRoute()) {
   if (r.tab === 'diag') return 'diag';
   if (r.tab === 'asn') return 'asn';
   if (r.tab === 'devices') return 'dev';
-  if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace', history: 'phist', community: 'comm', freeze: 'frz', dns: 'dns', conns: 'conns', configs: 'cfg', auto: 'auto', learn: 'learn' }[r.arg] || 'pick';
+  if (r.tab === 'tests') return { monitor: 'mon', notify: 'tg', trace: 'trace', history: 'phist', community: 'comm', freeze: 'frz', dns: 'dns', conns: 'conns', voice: 'voice', configs: 'cfg', auto: 'auto', learn: 'learn' }[r.arg] || 'pick';
   if (r.tab === 'settings') return SYS_PAGES.includes(r.arg) ? r.arg : ['readme', 'changelog'].includes(r.arg) ? 'about' : 'prof';
   return 'over';
 }
@@ -506,13 +507,19 @@ const restartTip = () => restartChecks()
 const restartLabel = () => restartChecks() ? 'Перезапустить с проверкой' : 'Перезапустить';
 
 async function safeRestart() {
-  if (!restartChecks()) return service('restart');
+  if (!restartChecks()) {
+    await service('restart');
+    return !!S.state?.running;
+  }
+  let ok = false;
   await svcBusy('restart', async () => {
     const r = await guarded(() => api('safe_restart', { minutes: 3 }));
     if (!r) return;
+    ok = true;
     toast(r.fixed ? `nfqws2 перезапущен (${r.fixed}). Проверяю сайты…` : 'nfqws2 перезапущен. Проверяю сайты…', r.fixed ? { long: true } : undefined);
     await loadState().catch(() => {});
   });
+  return ok;
 }
 
 async function rollbackToWorking() {

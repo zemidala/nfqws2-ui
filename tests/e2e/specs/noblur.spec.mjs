@@ -5,9 +5,10 @@
 // - in every text field and own dropdown the capitals «НН08» have the same empty room above and below, ±1 px.
 import { test, expect } from '../fixtures.mjs';
 
-const PAGES = ['#/', '#/diag', '#/tests/freeze', '#/tests/dns', '#/tests/conns', '#/tests', '#/tests/trace', '#/tests/history', '#/tests/community',
+const PAGES = ['#/', '#/diag', '#/tests/freeze', '#/tests/dns', '#/tests/conns', '#/tests/voice', '#/tests', '#/tests/trace', '#/tests/history', '#/tests/community',
   '#/tests/configs', '#/tests/monitor', '#/tests/auto', '#/tests/learn', '#/tests/notify', '#/settings', '#/settings/p1', '#/sites', '#/sites/user.list',
-  '#/devices', '#/asn', '#/settings/basic', '#/settings/raw', '#/settings/backup', '#/settings/hist', '#/log', '#/settings/report', '#/settings/look', '#/settings/about'];
+  '#/devices', '#/asn', '#/settings/basic', '#/settings/raw', '#/settings/backup', '#/settings/hist', '#/log', '#/settings/report', '#/settings/look', '#/settings/about']
+  .filter((p) => !process.env.PW_PAGES || process.env.PW_PAGES.split(',').includes(p));
 
 const fractions = () => {
   const frac = (n) => Math.abs(n - Math.round(n)) > 0.02;

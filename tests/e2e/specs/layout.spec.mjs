@@ -3,7 +3,7 @@
 import { test, expect } from '../fixtures.mjs';
 import { auditLayout } from 'pw-lib/layout.mjs';
 
-const PAGES = ['#/', '#/diag', '#/tests/freeze', '#/tests/dns', '#/tests/conns', '#/devices', '#/tests/configs', '#/tests/pick', '#/tests/trace', '#/tests/history', '#/tests/community', '#/tests/monitor',
+const PAGES = ['#/', '#/diag', '#/tests/freeze', '#/tests/dns', '#/tests/conns', '#/tests/voice', '#/devices', '#/tests/configs', '#/tests/pick', '#/tests/trace', '#/tests/history', '#/tests/community', '#/tests/monitor',
   '#/tests/auto', '#/tests/notify', '#/settings', '#/settings/p1', '#/sites', '#/sites/user.list', '#/asn', '#/settings/basic', '#/settings/base',
   '#/settings/raw', '#/settings/backup', '#/settings/hist', '#/log', '#/settings/report', '#/settings/look', '#/settings/about'];
 // полосы вкладок над страницей прокручиваются вбок намеренно

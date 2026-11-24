@@ -6,7 +6,7 @@ import { auditContrast } from 'pw-lib/contrast.mjs';
 import { mkdirSync, writeFileSync } from 'node:fs';
 import path from 'node:path';
 
-const PAGES = process.env.PW_CONTRAST_PAGES ? process.env.PW_CONTRAST_PAGES.split(',') : ['#/', '#/diag', '#/tests/freeze', '#/tests/dns', '#/devices', '#/tests/configs', '#/tests/pick', '#/tests/trace', '#/tests/history', '#/tests/community', '#/tests/monitor',
+const PAGES = process.env.PW_CONTRAST_PAGES ? process.env.PW_CONTRAST_PAGES.split(',') : ['#/', '#/diag', '#/tests/freeze', '#/tests/dns', '#/tests/voice', '#/devices', '#/tests/configs', '#/tests/pick', '#/tests/trace', '#/tests/history', '#/tests/community', '#/tests/monitor',
   '#/tests/auto', '#/tests/notify', '#/settings', '#/settings/p1', '#/sites', '#/sites/user.list', '#/asn', '#/settings/basic', '#/settings/base',
   '#/settings/raw', '#/settings/backup', '#/settings/hist', '#/log', '#/settings/report', '#/settings/look', '#/settings/about'];
 const OUT = path.join(import.meta.dirname, '..', 'test-results', 'contrast');
