@@ -22,7 +22,7 @@ async function viewConns(main) {
   // site names come from the device's packets (tcpdump on the router); without tcpdump — an offer to install it
   const namesChk = h('input', { type: 'checkbox', checked: prefs.names !== false, onchange: () => keep('names', namesChk.checked) });
   const namesBox = h('div', {});
-  let tab = 'all', rec = false, devices = [], tcpdump = false;
+  let tab = 'all', rec = false, devices = [], tcpdump = false, tcpLog = '';
   main.append(
     h('div', { class: 'vh' }, h('h1', { text: 'Соединения устройства' })),
     h('p', { class: 'muted dns-lead', text: 'Куда ходит программа на устройстве вашей сети и приходят ли ответы. Нужно, когда сайт открывается, а приложение работает плохо: голос в Discord обрывается, игра не входит в мир. Запись только читает таблицу соединений роутера и ничего не меняет.' }),
@@ -37,7 +37,8 @@ async function viewConns(main) {
       ? h('label', { class: 'chk' }, namesChk, 'Определять имена сайтов', h('span', { class: 'muted', text: ' — по пакетам устройства во время записи (tcpdump)' }), newTag('conns:names'))
       : h('div', { class: 'notice info' }, icon('info'), h('div', { class: 'grow' }, h('b', { text: 'Имена сайтов не определяются: нет tcpdump' }),
         h('div', { class: 't', text: 'Без него в таблице только адреса и сети. tcpdump ставится из репозитория пакетов роутера и работает только во время записи.' })),
-      btn('Установить tcpdump', installTcpdump, 'small', 'download'), newTag('conns:names')));
+      btn('Установить tcpdump', installTcpdump, 'small', 'download'), newTag('conns:names')),
+      !tcpdump && tcpLog ? h('pre', { class: 'box sm', style: 'max-height:120px;margin-top:var(--sp-2)', text: tcpLog }) : '');
   }
   async function installTcpdump(e) {
     const b = e.currentTarget;
@@ -46,6 +47,7 @@ async function viewConns(main) {
     const r = await guarded(() => api('tcpdump_install'));
     if (r && !r.ok) toast('tcpdump не установился: ' + (r.error || ''), { err: true });
     tcpdump = !!r?.ok;
+    tcpLog = r && !r.ok ? r.log || '' : '';
     drawNames();
   }
   async function loadDevices(sel) {
