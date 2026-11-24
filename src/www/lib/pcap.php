@@ -16,8 +16,7 @@ const CONN_NAMES_MB = 2;
 
 function tcpdumpBin(): ?string
 {
-  $p = trim((string)shell_exec('PATH=' . JOB_PATH . ' command -v tcpdump 2>/dev/null'));
-  return $p !== '' ? $p : null;
+  return binPath('tcpdump');
 }
 
 // The interface the router reaches the device through (br-lan, br0…)

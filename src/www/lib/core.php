@@ -26,6 +26,16 @@ function respond(array $data, int $code = 200): void
   exit();
 }
 
+function binPath(string $name): ?string
+{
+  foreach (array_unique(array_merge(explode(':', JOB_PATH), explode(':', (string)getenv('PATH')))) as $d) {
+    if ($d !== '' && is_file("$d/$name") && is_executable("$d/$name")) {
+      return "$d/$name";
+    }
+  }
+  return null;
+}
+
 function normalizeText(string $s): string
 {
   $s = str_replace(["\r\n", "\r"], "\n", $s);

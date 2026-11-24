@@ -265,10 +265,10 @@ function remoteCfg(): array
 function remoteTool(): ?string
 {
   foreach (['dbclient' => 'dropbear', 'ssh' => 'openssh'] as $bin => $kind) {
-    exec('command -v ' . $bin . ' 2>/dev/null', $o, $rc);
-    if ($rc === 0) {
+    $p = binPath($bin);
+    if ($p !== null) {
       // на OpenWrt ssh — это сам dropbear
-      return $kind === 'openssh' && is_link(trim($o[0] ?? '')) && strpos((string)readlink(trim($o[0])), 'dropbear') !== false ? 'dropbear' : $kind;
+      return $kind === 'openssh' && is_link($p) && strpos((string)readlink($p), 'dropbear') !== false ? 'dropbear' : $kind;
     }
     $o = [];
   }

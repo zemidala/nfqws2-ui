@@ -246,7 +246,7 @@ function dotQuery(string $name, string $ip): ?array
 {
   static $bin = false;
   if ($bin === false) {
-    $bin = trim((string)shell_exec('command -v openssl 2>/dev/null')) ?: null;
+    $bin = binPath('openssl');
   }
   if (!$bin) {
     return null;

@@ -92,7 +92,7 @@ function devicesCmds(): array
 {
   $vars = confRawVars((string)@file_get_contents(CONF_FILE));
   $cmds = ['iptables'];
-  if (($vars['IPV6_ENABLED'] ?? '0') === '1' && trim((string)shell_exec('command -v ip6tables 2>/dev/null')) !== '') {
+  if (($vars['IPV6_ENABLED'] ?? '0') === '1' && binPath('ip6tables') !== null) {
     $cmds[] = 'ip6tables';
   }
   return [$cmds, tokens($vars['ISP_INTERFACE'] ?? '')];
