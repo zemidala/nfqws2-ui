@@ -122,19 +122,28 @@ const setDirty = (v) => { S.dirty = v; S.dirtyHash = location.hash; };
 // Page files come on demand: a view → its files (PAGE_NEEDS, made by scripts/pagemap.php). Each file loads once,
 // with the build number of the page so the browser never mixes builds. A failed load is tried again next time
 const pageLoads = {};
+const pageErrs = {};
+window.addEventListener('error', (e) => {
+  const m = /js\/pages\/([\w-]+)\.js/.exec(e.filename || '');
+  if (m) pageErrs[m[1]] = `${e.message}, строка ${e.lineno}`;
+});
 function loadPageFile(name) {
   return pageLoads[name] ??= new Promise((ok, bad) => {
     const s = document.createElement('script');
     s.src = `js/pages/${name}.js?v=${encodeURIComponent(BUILD)}`;
     s.async = false;   // several files run in the order asked, while they download together
-    s.onload = ok;
+    delete pageErrs[name];
+    s.onload = () => {
+      if (!pageErrs[name]) { ok(); return; }
+      bad(new Error(`Файл js/pages/${name}.js загрузился, но браузер не смог его выполнить (${pageErrs[name]}). Обычно файл повреждён при установке — проверьте свободное место на роутере (df -h) и переустановите интерфейс.`));
+    };
     s.onerror = () => { delete pageLoads[name]; s.remove(); bad(new Error(`Файл js/pages/${name}.js не загрузился — проверьте связь с роутером и обновите страницу.`)); };
     document.head.append(s);
   });
 }
 async function pageView(name) {
   await Promise.all((PAGE_NEEDS[name] || []).map(loadPageFile));
-  if (typeof window[name] !== 'function') throw new Error(`Нет функции ${name} — обновите страницу.`);
+  if (typeof window[name] !== 'function') throw new Error(`Нет функции ${name}: файлы ${(PAGE_NEEDS[name] || []).map((f) => `js/pages/${f}.js`).join(', ') || '(не указаны)'} загрузились, но её не объявили. Обновите страницу; если не помогло — проверьте свободное место на роутере (df -h) и переустановите интерфейс.`);
   return window[name];
 }
 
