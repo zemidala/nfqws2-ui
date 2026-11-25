@@ -42,7 +42,11 @@ async function route(refresh = false) {
   const views = { '': viewOverview, sites: 'viewSites', tests: 'viewTests', settings: 'viewSettings', log: 'viewLog', site: 'viewSite', diag: 'viewDiag', asn: 'viewAsn', devices: 'viewDevices' };
   let view = views[r.tab] || viewOverview;
   if (typeof view === 'string') {
-    try { view = await pageView(view); } catch (e) { main.replaceChildren(notice('bad', 'Страница не загрузилась', e.message)); return; }
+    try { view = await pageView(view); } catch (e) {
+      if (await reloadIfStale().catch(() => false)) return;
+      main.replaceChildren(notice('bad', 'Страница не загрузилась', e.message));
+      return;
+    }
     if (seq !== routeSeq) return;
   }
   // новое на этой странице: метки внутри видны весь этот заход, после отрисовки страница считается открытой
