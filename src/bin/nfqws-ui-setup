@@ -210,6 +210,9 @@ php_block() { # $1 — https (1) или нет
 	    index-file.names = ( "index.html" )
 	    server.error-handler-404 = "/nfqws-ui/index.html"
 	    url.rewrite-once = ( "^/(.*)" => "/nfqws-ui/\$1" )
+	    \$HTTP["url"] =~ "^/(nfqws-ui/)?(index\\.html)?(\\?.*)?\$" {
+	        setenv.add-response-header = ( "Cache-Control" => "no-cache" )
+	    }
 	EOF
 }
 
@@ -226,6 +229,9 @@ generate() {
 		    index-file.names := ( "index.html" )
 		    server.error-handler-404 := "/nfqws-ui/index.html"
 		    url.rewrite-once := ( "^/(.*)" => "/nfqws-ui/\$1" )
+		    \$HTTP["url"] =~ "^/(nfqws-ui/)?(index\\.html)?(\\?.*)?\$" {
+		        setenv.add-response-header = ( "Cache-Control" => "no-cache" )
+		    }
 		}
 
 		# Старый интерфейс nfqws-keenetic-web
