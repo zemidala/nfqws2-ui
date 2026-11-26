@@ -95,7 +95,7 @@ const CACHE_VER = 6;  // увеличить при изменении разбо
 // The server is split into sections in lib/ (one file each). They are loaded in this order: a later one may use
 // constants of an earlier one. API_FILE — this file: background jobs start it again (php-cgi -f API_FILE)
 define('API_FILE', __FILE__);
-const LIB = ['core', 'snapshots', 'service', 'conf', 'lists', 'check', 'devices', 'exclude', 'lint', 'adapt', 'listcheck', 'fixes', 'monitor', 'subs', 'tests', 'parallel', 'multi', 'configs', 'freeze', 'voice', 'picks', 'auto', 'refine', 'diag', 'dns', 'dnsx', 'dnsset', 'conns', 'pcap', 'update', 'state', 'report', 'learn', 'share'];
+const LIB = ['core', 'snapshots', 'service', 'conf', 'lists', 'check', 'devices', 'exclude', 'lint', 'adapt', 'listcheck', 'fixes', 'monitor', 'subs', 'tests', 'parallel', 'multi', 'configs', 'freeze', 'voice', 'youtube', 'picks', 'auto', 'refine', 'diag', 'dns', 'dnsx', 'dnsset', 'conns', 'pcap', 'update', 'state', 'report', 'learn', 'share'];
 // Sections to load, in LIB order; null — all of them. Loaded once each
 function libLoad(?array $names = null): void
 {
@@ -1044,6 +1044,20 @@ switch ($cmd) {
 
   case 'voice_get':
     respond(voiceLast());
+
+  case 'yt_start':
+    if (testRunning()) {
+      fail('Сейчас идёт подбор или другая проверка — дождитесь окончания');
+    }
+    if (diagBusy()) {
+      fail('Сейчас идёт диагноз сайта — он использует те же проверочные правила. Повторите через несколько секунд.');
+    }
+    curlRequire();
+    launchJob(['type' => 'youtube', 'host' => 'YouTube', 'sets' => [], 'pick' => !empty($in['pick'])]);
+    respond(['ok' => true]);
+
+  case 'yt_get':
+    respond(ytLast());
 
   case 'voice_blob':
     respond(voiceBlobInstall((string)($in['host'] ?? '')));

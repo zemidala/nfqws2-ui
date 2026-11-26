@@ -768,5 +768,18 @@ return array (
       1 => 'parallel',
       2 => 'auto',
     ),
+    'yt_get' => array (
+      0 => 'check',
+      1 => 'tests',
+      2 => 'parallel',
+      3 => 'youtube',
+      4 => 'diag',
+      5 => 'conns',
+    ),
+    'yt_start' => array (
+      0 => 'tests',
+      1 => 'parallel',
+      2 => 'auto',
+    ),
   ),
 );
