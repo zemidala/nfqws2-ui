@@ -338,7 +338,7 @@ function luaCatalog(): array
         // every top-level function: fool=<name> calls any of them
         if (preg_match('/^function ([a-z_][a-z0-9_]*)\s*\(/i', $line, $m)) {
           $gfuncs[] = $m[1];
-          if (preg_match('/^function [a-z_][a-z0-9_]*\s*\(\s*[a-z_][a-z0-9_]*\s*,\s*[a-z_][a-z0-9_]*\s*\)/i', $line)) {
+          if (preg_match('/^function [a-z_][a-z0-9_]*\s*\(\s*(?:ctx|_)\s*,\s*(?:desync|d)\s*\)/i', $line)) {
             $gfiles[$m[1]] ??= $base;
           }
         }

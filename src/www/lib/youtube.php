@@ -6,6 +6,7 @@ const YT_HOSTS = ['www.youtube.com', 'redirector.googlevideo.com', 'i.ytimg.com'
 const YT_NAME_RE = '/(^|\.)(googlevideo\.com|youtube\.com|ytimg\.com|ggpht\.com)$/';
 const YT_NODES_MAX = 8;
 const YT_LIST_MAX = 128;
+const YT_LIST_TARGETS = 24;
 const YT_SPEED_SECS = 15;
 const YT_SPEED_MIN_KB = 100;
 const YT_GOOD = 3;
@@ -152,7 +153,7 @@ function ytTargets(): array
   foreach (ytRecorded()['nodes'] as $n) {
     $t[$n['ip']] ??= $n;
   }
-  foreach (ytListIps() as $ip) {
+  foreach (array_slice(ytListIps(), 0, YT_LIST_TARGETS) as $ip) {
     $t[$ip] ??= ['host' => 'redirector.googlevideo.com', 'ip' => $ip, 'from' => 'list'];
   }
   return ['podkop' => false, 'list' => array_values($t)];
@@ -196,10 +197,20 @@ function ytJob(array $job, array &$status, ?array &$nfq, string $iface, array $b
   $status['done'] = 1;
   testSaveStatus($status);
   testRules('bypass', $iface);
-  foreach ($targets as &$t) {
+  $stop = fn() => is_file(TEST_DIR . '/stop');
+  foreach ($targets as $i => &$t) {
+    if ($stop()) {
+      break;
+    }
+    $status['current'] = sprintf('без обхода: %s (%d из %d)', $t['host'], $i + 1, count($targets));
+    testSaveStatus($status);
     $t['base'] = ytHandshake($t['host'], $t['ip']);
   }
   unset($t);
+  if ($stop()) {
+    $finish('stopped');
+    return;
+  }
 
   $status['phase'] = 'config';
   $status['current'] = 'YouTube через ваш конфиг';
@@ -220,14 +231,23 @@ function ytJob(array $job, array &$status, ?array &$nfq, string $iface, array $b
     testSaveStatus($status);
     return;
   }
-  foreach ($targets as &$t) {
+  foreach ($targets as $i => &$t) {
+    if ($stop()) {
+      break;
+    }
+    $status['current'] = sprintf('через ваш конфиг: %s (%d из %d)', $t['host'], $i + 1, count($targets));
+    testSaveStatus($status);
     $t['conf'] = ytHandshake($t['host'], $t['ip']);
   }
   unset($t);
-  $pageConf = $page ? current(array_filter($targets, fn($t) => $t['ip'] === $page['ip']))['conf'] : null;
+  $pageConf = $page && !$stop() ? current(array_filter($targets, fn($t) => $t['ip'] === $page['ip']))['conf'] ?? null : null;
   $status['speed'] = $pageConf && $pageConf['ok'] ? ['conf' => ytSpeed($page['ip'])] : null;
   testNfqwsStop($nfq);
   $nfq = null;
+  if ($stop()) {
+    $finish('stopped');
+    return;
+  }
   $status['done'] = 3;
 
   $listed = ytListIps();
@@ -235,7 +255,7 @@ function ytJob(array $job, array &$status, ?array &$nfq, string $iface, array $b
   $blocked = array_values(array_filter($targets, fn($t) => !$t['conf']['ok']));
   $status['targets'] = $targets;
   $status['blocked'] = array_column($blocked, 'ip');
-  $status['harm'] = !array_filter($blocked, fn($t) => !$t['base']['ok']);
+  $status['harm'] = $blocked && !array_filter($blocked, fn($t) => !$t['base']['ok']);
   $freeze = !empty($status['speed']['conf']['freeze']);
 
   if (!$blocked) {
@@ -300,7 +320,7 @@ function ytJob(array $job, array &$status, ?array &$nfq, string $iface, array $b
   $fastOnes = array_values(array_filter($good, fn($r) => !$r['slow'])) ?: $good;
   $ms = array_filter(array_map(fn($r) => $r['speed']['ms'] ?? null, $fastOnes));
   $limit = $ms ? min($ms) * 1.5 : PHP_INT_MAX;
-  $best = current(array_filter($fastOnes, fn($r) => ($r['speed']['ms'] ?? 0) <= $limit)) ?: $fastOnes[0];
+  $best = current(array_filter($fastOnes, fn($r) => ($r['speed']['ms'] ?? PHP_INT_MAX) <= $limit)) ?: $fastOnes[0];
   if (is_file(TEST_DIR . '/stop')) {
     $finish('stopped');
     return;
@@ -313,6 +333,12 @@ function ytJob(array $job, array &$status, ?array &$nfq, string $iface, array $b
   foreach ($nfq ? $blocked : [] as $b) {
     $confirm = $confirm && ytHandshake($b['host'], $b['ip'])['ok'];
   }
+  $keep = [];
+  foreach ($confirm && !$status['harm'] ? array_diff($listed, $status['stale'], $status['blocked']) : [] as $ip) {
+    if (!$stop() && ytHandshake('redirector.googlevideo.com', $ip)['ok']) {
+      $keep[] = $ip;
+    }
+  }
   $again = $confirm && $page ? ytSpeed($page['ip']) : null;
   testNfqwsStop($nfq);
   $nfq = null;
@@ -323,7 +349,6 @@ function ytJob(array $job, array &$status, ?array &$nfq, string $iface, array $b
   }
   $best['confirm_speed'] = $again;
   $status['best'] = $best;
-  $keep = array_diff($listed, $status['stale']);
   $status['profile'] = ['tokens' => ytProfileTokens($best['steps']), 'list' => YT_LIST, 'ips' => array_slice(array_values(array_unique(array_merge($status['blocked'], $keep))), 0, YT_LIST_MAX)];
   $finish('found');
 }
@@ -342,5 +367,5 @@ function ytLast(): array
       return $s + $extra;
     }
   }
-  return (is_array($f) ? $f : ['state' => 'idle']) + ['type' => 'youtube'] + $extra;
+  return array_merge(is_array($f) ? $f : ['state' => 'idle'], ['type' => 'youtube'], $extra);
 }
