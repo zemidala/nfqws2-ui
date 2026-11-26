@@ -186,7 +186,16 @@ function voiceJob(array $job, array &$status, ?array &$nfq, string $iface, array
   testRules('bypass', $iface);
   $status['baseline'] = voiceProbe($ip, $port, VOICE_PROBE_SECS);
   foreach ($tcpIp ? VOICE_TCP_PORTS : [] as $p) {
+    if (is_file(TEST_DIR . '/stop')) {
+      break;
+    }
+    $status['current'] = "подключение без обхода, TCP $p";
+    testSaveStatus($status);
     $tcp['ports'][$p] = ['base' => voiceTcpProbe($tcpIp, $p)];
+  }
+  if (is_file(TEST_DIR . '/stop')) {
+    $finish('stopped');
+    return;
   }
   $status['done'] = 1;
 
@@ -218,11 +227,21 @@ function voiceJob(array $job, array &$status, ?array &$nfq, string $iface, array
   $status['config'] = $udpCovered ? voiceProbe($ip, $port, VOICE_PROBE_SECS)
     : ['ok' => false, 'uncovered' => true, 'got' => 0, 'reason' => "порт $port не входит в UDP_PORTS, nfqws2 голос не обрабатывает"];
   foreach ($tcp['ports'] as $p => &$t) {
+    if (is_file(TEST_DIR . '/stop')) {
+      $t['conf'] = $t['base'];
+      continue;
+    }
+    $status['current'] = "подключение через ваш конфиг, TCP $p";
+    testSaveStatus($status);
     $t['conf'] = $t['covered'] ? voiceTcpProbe($tcpIp, $p) : $t['base'];
   }
   unset($t);
   testNfqwsStop($nfq);
   $nfq = null;
+  if (is_file(TEST_DIR . '/stop')) {
+    $finish('stopped');
+    return;
+  }
   $tcp['closed'] = array_keys(array_filter($tcp['ports'], fn($t) => !$t['conf']));
   $status['tcp'] = $tcp;
   $status['done'] = 2;
