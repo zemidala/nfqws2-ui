@@ -55,6 +55,35 @@ function ytHandshake(string $host, string $ip): array
   }];
 }
 
+function ytTcpOpen(string $ip): bool
+{
+  [$lo, $hi] = array_map('intval', explode(':', TEST_PORTS));
+  for ($i = 0; $i < 2; $i++) {
+    $o = [];
+    exec('curl -4 -s -o /dev/null --local-port ' . mt_rand($lo, $hi - 50) . '-' . $hi . ' --connect-timeout 4 -m 5 -w "%{time_connect}" '
+      . escapeshellarg("http://$ip:443/") . ' 2>/dev/null', $o);
+    if ((float)trim(implode('', $o)) > 0) {
+      return true;
+    }
+  }
+  return false;
+}
+
+function ytCurrentSteps(): ?array
+{
+  foreach (array_column(expectedProfiles(confValues()), 'tokens') as $pt) {
+    if (!in_array('--name=' . YT_PROFILE, $pt, true)) {
+      continue;
+    }
+    if (in_array('--skip', $pt, true) || array_filter($pt, fn($t) => preg_match('/^--(filter-(?!tcp=)|hostlist|ipset-exclude)/', $t))) {
+      return null;
+    }
+    $steps = array_values(array_filter($pt, fn($t) => !preg_match('/^--(name|filter-tcp|ipset|ipset-ip)=/', $t)));
+    return $steps ?: null;
+  }
+  return null;
+}
+
 function ytSpeed(string $ip): array
 {
   $r = ytCurl(YT_PAGE, $ip, '-o /dev/null', YT_SPEED_SECS);
@@ -171,7 +200,7 @@ function ytJob(array $job, array &$status, ?array &$nfq, string $iface, array $b
     $status['finished'] = time();
     $status['current'] = null;
     testSaveStatus($status);
-    putSafe(YT_FILE, json_encode(array_intersect_key($status, array_flip(['state', 'started', 'finished', 'verdict', 'targets', 'speed', 'results', 'best', 'blocked', 'stale', 'foreign', 'profile', 'harm', 'pick'])), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    putSafe(YT_FILE, json_encode(array_intersect_key($status, array_flip(['state', 'started', 'finished', 'verdict', 'targets', 'speed', 'results', 'best', 'blocked', 'stale', 'unreach', 'foreign', 'profile', 'harm', 'pick'])), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
   };
 
   $status['phase'] = 'targets';
@@ -250,17 +279,27 @@ function ytJob(array $job, array &$status, ?array &$nfq, string $iface, array $b
   }
   $status['done'] = 3;
 
+  foreach ($targets as &$t) {
+    if (!$t['base']['ok'] && !$t['conf']['ok'] && !$stop()) {
+      $status['current'] = "проверяю, открывается ли TCP: {$t['host']} ({$t['ip']})";
+      testSaveStatus($status);
+      $t['tcp'] = ytTcpOpen($t['ip']);
+    }
+  }
+  unset($t);
   $listed = ytListIps();
   $status['stale'] = array_values(array_map(fn($t) => $t['ip'], array_filter($targets, fn($t) => in_array($t['ip'], $listed, true) && $t['base']['ok'])));
-  $blocked = array_values(array_filter($targets, fn($t) => !$t['conf']['ok']));
+  $status['unreach'] = array_values(array_map(fn($t) => $t['ip'], array_filter($targets, fn($t) => ($t['tcp'] ?? true) === false)));
+  $blocked = array_values(array_filter($targets, fn($t) => !$t['conf']['ok'] && ($t['tcp'] ?? true) !== false));
   $status['targets'] = $targets;
   $status['blocked'] = array_column($blocked, 'ip');
   $status['harm'] = $blocked && !array_filter($blocked, fn($t) => !$t['base']['ok']);
   $freeze = !empty($status['speed']['conf']['freeze']);
 
   if (!$blocked) {
-    $allBase = !array_filter($targets, fn($t) => !$t['base']['ok']);
-    $finish($freeze ? 'freeze' : ($allBase ? 'open' : 'works'));
+    $allBase = !array_filter($targets, fn($t) => !$t['base']['ok'] && ($t['tcp'] ?? true) !== false);
+    $anyConf = (bool)array_filter($targets, fn($t) => $t['conf']['ok']);
+    $finish($freeze ? 'freeze' : (!$anyConf ? 'unreach' : ($allBase ? 'open' : 'works')));
     return;
   }
   if (!$status['pick'] || $status['foreign'] || is_file(TEST_DIR . '/stop')) {
@@ -269,6 +308,11 @@ function ytJob(array $job, array &$status, ?array &$nfq, string $iface, array $b
   }
 
   $cands = $status['harm'] ? [['name' => 'pass, без обхода', 'steps' => ['--lua-desync=pass'], 'slow' => false]] : ytCandidates();
+  $current = $status['harm'] ? null : ytCurrentSteps();
+  if ($current) {
+    $cands = array_merge([['name' => 'настройка профиля «' . YT_PROFILE . '»', 'steps' => $current, 'slow' => false, 'current' => true]],
+      array_values(array_filter($cands, fn($c) => $c['steps'] !== $current)));
+  }
   $status['phase'] = 'pick';
   $status['results'] = [];
   $status['total'] = $status['done'] + count($cands) + 1;
@@ -320,30 +364,43 @@ function ytJob(array $job, array &$status, ?array &$nfq, string $iface, array $b
   $fastOnes = array_values(array_filter($good, fn($r) => !$r['slow'])) ?: $good;
   $ms = array_filter(array_map(fn($r) => $r['speed']['ms'] ?? null, $fastOnes));
   $limit = $ms ? min($ms) * 1.5 : PHP_INT_MAX;
-  $best = current(array_filter($fastOnes, fn($r) => ($r['speed']['ms'] ?? PHP_INT_MAX) <= $limit)) ?: $fastOnes[0];
-  if (is_file(TEST_DIR . '/stop')) {
-    $finish('stopped');
-    return;
-  }
+  $order = array_merge(array_filter($good, fn($r) => !empty($r['current'])), array_filter($fastOnes, fn($r) => ($r['speed']['ms'] ?? PHP_INT_MAX) <= $limit), $fastOnes, $good);
+  $seen = [];
+  $order = array_values(array_filter($order, function ($r) use (&$seen) {
+    $k = implode(' ', $r['steps']);
+    return !isset($seen[$k]) && ($seen[$k] = true);
+  }));
   $status['phase'] = 'confirm';
-  $status['current'] = 'повторная проверка: ' . $best['name'];
-  testSaveStatus($status);
-  $nfq = testNfqwsStart(array_merge($baseArgs, ['--filter-tcp=443'], $best['steps']));
-  $confirm = (bool)$nfq;
-  foreach ($nfq ? $blocked : [] as $b) {
-    $confirm = $confirm && ytHandshake($b['host'], $b['ip'])['ok'];
-  }
-  $keep = [];
-  foreach ($confirm && !$status['harm'] ? array_diff($listed, $status['stale'], $status['blocked']) : [] as $ip) {
-    if (!$stop() && ytHandshake('redirector.googlevideo.com', $ip)['ok']) {
-      $keep[] = $ip;
+  $status['total'] = $status['done'] + min(2, count($order));
+  $best = null;
+  foreach (array_slice($order, 0, 2) as $cand) {
+    if ($stop()) {
+      $finish('stopped');
+      return;
+    }
+    $status['current'] = 'повторная проверка: ' . $cand['name'];
+    testSaveStatus($status);
+    $nfq = testNfqwsStart(array_merge($baseArgs, ['--filter-tcp=443'], $cand['steps']));
+    $confirm = (bool)$nfq;
+    foreach ($nfq ? $blocked : [] as $b) {
+      $confirm = $confirm && ytHandshake($b['host'], $b['ip'])['ok'];
+    }
+    $keep = [];
+    foreach ($confirm && !$status['harm'] ? array_diff($listed, $status['stale'], $status['blocked'], $status['unreach']) : [] as $ip) {
+      if (!$stop() && ytHandshake('redirector.googlevideo.com', $ip)['ok']) {
+        $keep[] = $ip;
+      }
+    }
+    $again = $confirm && $page ? ytSpeed($page['ip']) : null;
+    testNfqwsStop($nfq);
+    $nfq = null;
+    $status['done']++;
+    if ($confirm && !($again && !$again['ok'])) {
+      $best = $cand;
+      break;
     }
   }
-  $again = $confirm && $page ? ytSpeed($page['ip']) : null;
-  testNfqwsStop($nfq);
-  $nfq = null;
-  $status['done']++;
-  if (!$confirm || ($again && !$again['ok'])) {
+  if (!$best) {
     $finish('none');
     return;
   }

@@ -119,4 +119,5 @@
   .yt-addr li.h { display: none; }
   .yt-addr .host, .yt-addr .ip { grid-column: 1 / -1; }
   .yt-addr .st::before { content: attr(data-l); color: var(--muted); }
+  .yt-addr .st { flex-wrap: wrap; column-gap: 4px; }
 }
