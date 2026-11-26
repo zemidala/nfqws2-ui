@@ -78,7 +78,7 @@ const PROTECTED_LISTS = ['user.list', 'exclude.list', 'auto.list', 'ipset.list',
 
 const GLOBAL_OPTS = ['user', 'uid', 'qnum', 'fastpath-workaround', 'lua-init', 'lua-gc', 'blob', 'debug',
   'bind-fix4', 'bind-fix6', 'daemon', 'pidfile', 'ctrack-timeouts', 'ctrack-disable', 'ipcache-lifetime',
-  'ipcache-hostname', 'reasm-disable', 'writeable', 'dry-run', 'intercept', 'wsize', 'wssize'];
+  'ipcache-hostname', 'reasm-disable', 'writable', 'dry-run', 'intercept', 'wsize', 'wssize'];
 
 // Блобы, которые nfqws2 объявляет сам (zapret2 nfq2/nfqws.c, ApplyDefaultBlobs)
 const BUILTIN_BLOBS = ['fake_default_tls', 'fake_default_http', 'fake_default_quic'];
