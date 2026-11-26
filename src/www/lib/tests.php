@@ -27,6 +27,11 @@ const STD_TLS = [
   ['fakedsplit tcp_md5', ['--lua-desync=fakedsplit:pos=midsld:tcp_md5']],
   ['fakeddisorder tcp_md5', ['--lua-desync=fakeddisorder:pos=midsld:tcp_md5']],
   ['hostfakesplit google.com', ['--lua-desync=hostfakesplit:host=google.com:tcp_md5:tcp_ts_up']],
+  ['fake ozon.ru + multisplit', ['--lua-desync=fake:blob=fake_default_tls:tls_mod=rnd,dupsid,sni=ozon.ru:tcp_md5', '--lua-desync=multisplit:pos=1,midsld']],
+  ['fake vk.com + multisplit', ['--lua-desync=fake:blob=fake_default_tls:tls_mod=rnd,dupsid,sni=vk.com:tcp_md5', '--lua-desync=multisplit:pos=1,midsld']],
+  ['fake ya.ru x4 tcp_ts + multisplit', ['--lua-desync=fake:blob=fake_default_tls:tls_mod=rnd,dupsid,sni=ya.ru:repeats=4:tcp_ts=-600000:tcp_ts_up', '--lua-desync=multisplit:pos=1,midsld']],
+  ['hostfakesplit ozon.ru x4', ['--lua-desync=hostfakesplit:host=ozon.ru:tcp_ts=-600000:tcp_ts_up:tcp_md5:repeats=4']],
+  ['multisplit seqovl=568 STUN', ['--lua-desync=multisplit:pos=1,midsld:seqovl=568:seqovl_pattern=0x000100002112a442766f6963652d636865636b21']],
 ];
 const STD_HTTP = [
   ['http_methodeol', ['--lua-desync=http_methodeol']],
