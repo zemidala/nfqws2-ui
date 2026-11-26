@@ -305,6 +305,7 @@ function luaCatalog(): array
     $funcs = [];
     $globals = [];
     $gfuncs = [];
+    $gfiles = [];
     $fileKeys = [];
     foreach ($files as $base => $file) {
       $lines = file(str_ends_with($file, '.gz') ? "compress.zlib://$file" : $file, FILE_IGNORE_NEW_LINES) ?: [];
@@ -337,6 +338,7 @@ function luaCatalog(): array
         // every top-level function: fool=<name> calls any of them
         if (preg_match('/^function ([a-z_][a-z0-9_]*)\s*\(/i', $line, $m)) {
           $gfuncs[] = $m[1];
+          $gfiles[$m[1]] ??= $base;
         }
         if (preg_match('/^function ([a-z_][a-z0-9_]*)\(ctx,\s*desync\)/', $line, $m)) {
           $f = ['file' => $base, 'doc' => [], 'std' => [], 'args' => [], 'required' => [], 'nfqws1' => null, 'payload_def' => null];
@@ -393,7 +395,7 @@ function luaCatalog(): array
       $funcs['learn']['args'] += $funcs['circular']['args'];
       $funcs['learn']['file_keys'] = array_values(array_unique(array_merge($funcs['learn']['file_keys'], $funcs['circular']['file_keys'])));
     }
-    return ['functions' => $funcs, 'std' => $std, 'globals' => array_values(array_unique($globals)), 'gfuncs' => array_values(array_unique($gfuncs))];
+    return ['functions' => $funcs, 'std' => $std, 'globals' => array_values(array_unique($globals)), 'gfuncs' => array_values(array_unique($gfuncs)), 'gfiles' => $gfiles];
   });
 }
 

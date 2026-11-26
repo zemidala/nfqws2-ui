@@ -625,6 +625,14 @@ function lintDesync(string $var, int $i, string $val, array $funcs, array $lua, 
 {
   $parts = explode(':', $val);
   $fn = array_shift($parts);
+  if (!isset($funcs[$fn]) && isset($lua['gfiles'][$fn])) {
+    $file = $lua['gfiles'][$fn];
+    if (!isset($loadedLua[$file])) {
+      $add($var, $i, 'error', "Функция {$fn} из {$file}, а этот файл не подключён через --lua-init",
+        ['op' => 'append', 'var' => 'NFQWS_BASE_ARGS', 'tok' => '--lua-init=@' . LUA_DIR . "/{$file}", 'label' => "Подключить {$file}"]);
+    }
+    return;
+  }
   if (!isset($funcs[$fn])) {
     $s = levenshteinBest($fn, array_keys($funcs));
     $add($var, $i, 'error', "Нет такой lua-функции «{$fn}»" . ($s ? " — может быть, {$s}?" : ''), $s ? ['op' => 'replace', 'to' => '--lua-desync=' . implode(':', array_merge([$s], $parts)), 'label' => "Заменить на $s"] : null);
