@@ -34,7 +34,7 @@ function placeSide() {
 // Колонка состояния справа — на страницах-формах, проверках и таблицах, когда для неё хватает ширины
 // (показывает CSS по ширине области содержимого). Во «Вкладках» не нужна: обзор и так слева.
 // Списки, профили, конфиг, журнал и мониторинг отдают всю ширину своему содержимому, «Обзор» — карточкам.
-const RAIL_PAGES = ['diag', 'frz', 'dns', 'conns', 'voice', 'cfg', 'pick', 'trace', 'phist', 'comm', 'auto', 'learn', 'tg', 'asn', 'basic', 'base', 'hist', 'report', 'look', 'about', 'site'];
+const RAIL_PAGES = ['diag', 'frz', 'dns', 'conns', 'voice', 'yt', 'cfg', 'pick', 'trace', 'phist', 'comm', 'auto', 'learn', 'tg', 'asn', 'basic', 'base', 'hist', 'report', 'look', 'about', 'site'];
 // Where the page is drawn. With the status column the page goes into .mcol and the column stays put: moving between
 // two such pages redraws only the middle, the column is not torn down and built again after the page has loaded.
 // main comes empty for every page (route): the rail is put together anew, its blocks (SIDE.*) move over as they are

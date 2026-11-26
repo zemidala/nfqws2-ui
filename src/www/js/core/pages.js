@@ -5,10 +5,10 @@
 const PAGE_NEEDS = {
   viewAsn: ['asn'],
   viewDevices: ['devices'],
-  viewDiag: ['about', 'auto', 'backups', 'basics', 'community', 'configs', 'conns', 'diag', 'dns', 'freeze', 'learn', 'picks', 'profile', 'raw', 'report', 'settings', 'tests', 'voice'],
+  viewDiag: ['about', 'auto', 'backups', 'basics', 'community', 'configs', 'conns', 'diag', 'dns', 'freeze', 'learn', 'picks', 'profile', 'raw', 'report', 'settings', 'tests', 'voice', 'youtube'],
   viewLog: ['journal'],
   viewSettings: ['about', 'backups', 'basics', 'profile', 'raw', 'report', 'settings'],
-  viewSite: ['about', 'auto', 'backups', 'basics', 'community', 'configs', 'conns', 'diag', 'dns', 'freeze', 'learn', 'picks', 'profile', 'raw', 'report', 'settings', 'tests', 'voice'],
+  viewSite: ['about', 'auto', 'backups', 'basics', 'community', 'configs', 'conns', 'diag', 'dns', 'freeze', 'learn', 'picks', 'profile', 'raw', 'report', 'settings', 'tests', 'voice', 'youtube'],
   viewSites: ['lists'],
-  viewTests: ['about', 'auto', 'backups', 'basics', 'community', 'configs', 'conns', 'dns', 'freeze', 'learn', 'picks', 'profile', 'raw', 'report', 'settings', 'tests', 'voice'],
+  viewTests: ['about', 'auto', 'backups', 'basics', 'community', 'configs', 'conns', 'dns', 'freeze', 'learn', 'picks', 'profile', 'raw', 'report', 'settings', 'tests', 'voice', 'youtube'],
 };

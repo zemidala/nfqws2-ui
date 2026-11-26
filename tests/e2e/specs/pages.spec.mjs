@@ -3,7 +3,7 @@
 import { test, expect } from '../fixtures.mjs';
 
 const PAGES = [
-  ['#/', 'Обзор'], ['#/diag', 'Диагноз'], ['#/tests/freeze', 'Обрыв'], ['#/tests/dns', 'DNS-серверы'], ['#/tests/conns', 'Соединения устройства'], ['#/tests/voice', 'Голос Discord'],['#/devices', 'Устройства'],['#/tests/configs', 'Чужой конфиг'], ['#/tests/pick', 'Подбор'], ['#/tests/trace', 'Трассировка'],
+  ['#/', 'Обзор'], ['#/diag', 'Диагноз'], ['#/tests/freeze', 'Обрыв'], ['#/tests/dns', 'DNS-серверы'], ['#/tests/conns', 'Соединения устройства'], ['#/tests/voice', 'Голос Discord'], ['#/tests/youtube', 'YouTube'],['#/devices', 'Устройства'],['#/tests/configs', 'Чужой конфиг'], ['#/tests/pick', 'Подбор'], ['#/tests/trace', 'Трассировка'],
   ['#/tests/history', 'История подборов'], ['#/tests/community', 'сообщества'], ['#/tests/monitor', 'Мониторинг'], ['#/tests/auto', 'Автоподбор'],
   ['#/tests/notify', 'Уведомления'], ['#/settings', 'Профили'], ['#/sites', 'Списки'], ['#/asn', 'ASN'], ['#/settings/basic', 'Основное'],
   ['#/settings/base', 'Параметры запуска'], ['#/settings/raw', 'Конфиг'], ['#/settings/backup', 'Резервные копии'], ['#/settings/hist', 'История изменений'],

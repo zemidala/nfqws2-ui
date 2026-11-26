@@ -170,7 +170,7 @@ function ytJob(array $job, array &$status, ?array &$nfq, string $iface, array $b
     $status['finished'] = time();
     $status['current'] = null;
     testSaveStatus($status);
-    putSafe(YT_FILE, json_encode(array_intersect_key($status, array_flip(['state', 'started', 'finished', 'verdict', 'targets', 'speed', 'results', 'best', 'blocked', 'stale', 'foreign', 'profile'])), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    putSafe(YT_FILE, json_encode(array_intersect_key($status, array_flip(['state', 'started', 'finished', 'verdict', 'targets', 'speed', 'results', 'best', 'blocked', 'stale', 'foreign', 'profile', 'harm', 'pick'])), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
   };
 
   $status['phase'] = 'targets';
@@ -235,7 +235,7 @@ function ytJob(array $job, array &$status, ?array &$nfq, string $iface, array $b
   $blocked = array_values(array_filter($targets, fn($t) => !$t['conf']['ok']));
   $status['targets'] = $targets;
   $status['blocked'] = array_column($blocked, 'ip');
-  $harm = (bool)array_filter($blocked, fn($t) => $t['base']['ok']);
+  $status['harm'] = !array_filter($blocked, fn($t) => !$t['base']['ok']);
   $freeze = !empty($status['speed']['conf']['freeze']);
 
   if (!$blocked) {
@@ -243,16 +243,12 @@ function ytJob(array $job, array &$status, ?array &$nfq, string $iface, array $b
     $finish($freeze ? 'freeze' : ($allBase ? 'open' : 'works'));
     return;
   }
-  if ($harm && count(array_filter($blocked, fn($t) => !$t['base']['ok'])) === 0) {
-    $finish('harm');
-    return;
-  }
-  if (!$status['pick'] || is_file(TEST_DIR . '/stop')) {
+  if (!$status['pick'] || $status['foreign'] || is_file(TEST_DIR . '/stop')) {
     $finish('blocked');
     return;
   }
 
-  $cands = ytCandidates();
+  $cands = $status['harm'] ? [['name' => 'pass, без обхода', 'steps' => ['--lua-desync=pass'], 'slow' => false]] : ytCandidates();
   $status['phase'] = 'pick';
   $status['results'] = [];
   $status['total'] = $status['done'] + count($cands) + 1;
@@ -305,6 +301,10 @@ function ytJob(array $job, array &$status, ?array &$nfq, string $iface, array $b
   $ms = array_filter(array_map(fn($r) => $r['speed']['ms'] ?? null, $fastOnes));
   $limit = $ms ? min($ms) * 1.5 : PHP_INT_MAX;
   $best = current(array_filter($fastOnes, fn($r) => ($r['speed']['ms'] ?? 0) <= $limit)) ?: $fastOnes[0];
+  if (is_file(TEST_DIR . '/stop')) {
+    $finish('stopped');
+    return;
+  }
   $status['phase'] = 'confirm';
   $status['current'] = 'повторная проверка: ' . $best['name'];
   testSaveStatus($status);
@@ -323,7 +323,8 @@ function ytJob(array $job, array &$status, ?array &$nfq, string $iface, array $b
   }
   $best['confirm_speed'] = $again;
   $status['best'] = $best;
-  $status['profile'] = ['tokens' => ytProfileTokens($best['steps']), 'list' => YT_LIST, 'ips' => array_slice(array_values(array_unique(array_merge($listed, $status['blocked']))), 0, YT_LIST_MAX)];
+  $keep = array_diff($listed, $status['stale']);
+  $status['profile'] = ['tokens' => ytProfileTokens($best['steps']), 'list' => YT_LIST, 'ips' => array_slice(array_values(array_unique(array_merge($status['blocked'], $keep))), 0, YT_LIST_MAX)];
   $finish('found');
 }
 

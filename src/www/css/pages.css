@@ -107,3 +107,16 @@
 .vc-checks .r { display: grid; gap: 2px; }
 .vc-act { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
 @media (max-width: 600px) { .vc-checks li { grid-template-columns: 24px minmax(0, 1fr); } .vc-checks .r { grid-column: 2; } }
+.yt-addr { display: grid; margin: 0; padding: 0; list-style: none; width: 100%; }
+.yt-addr li { display: grid; grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr); gap: 4px 12px; align-items: center; padding: 8px 0; border-top: 1px solid var(--line); font-size: var(--fs-sm); line-height: 20px; }
+.yt-addr li.h { color: var(--muted); border-top: 0; padding-top: 0; font-weight: 500; }
+.yt-addr .host { display: grid; min-width: 0; }
+.yt-addr .host code { overflow-wrap: anywhere; }
+.yt-addr .st { display: flex; gap: 8px; align-items: center; min-width: 0; }
+.yt-addr .st .lvl { flex: none; margin-top: 0; }
+@media (max-width: 600px) {
+  .yt-addr li { grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); }
+  .yt-addr li.h { display: none; }
+  .yt-addr .host, .yt-addr .ip { grid-column: 1 / -1; }
+  .yt-addr .st::before { content: attr(data-l); color: var(--muted); }
+}

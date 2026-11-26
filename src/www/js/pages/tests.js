@@ -381,6 +381,7 @@ async function viewTests(main, r, bare = false) {
   if (r.arg === 'dns') return viewDns(main);
   if (r.arg === 'conns') return viewConns(main);
   if (r.arg === 'voice') return viewVoice(main, r);
+  if (r.arg === 'youtube') return viewYoutube(main, r);
   if (r.arg === 'learn') return viewLearn(main);
   if (r.arg === 'configs') return viewCfg(main);
   const tab = ['trace', 'monitor', 'notify'].includes(r.arg) ? r.arg : 'pick';
@@ -584,9 +585,10 @@ async function viewTests(main, r, bare = false) {
     startBtn.disabled = running;
     lastStatus = s;
     // поле «Сайт» показывает сайт, для которого показаны результаты, пока его не начали править
-    if (s.host && s.type !== 'multi' && !host.dataset.edited && host.value !== s.host) host.value = s.host;
+    const other = ['youtube', 'voice'].includes(s.type);
+    if (s.host && s.type !== 'multi' && !other && !host.dataset.edited && host.value !== s.host) host.value = s.host;
     // для рекомендации нужно знать, через какой профиль сайт идёт сейчас
-    if (!running && s.host && s.type !== 'trace' && s.type !== 'multi' && (!routeInfo || routeInfo.host !== s.host) && routeLoading !== s.host) {
+    if (!running && s.host && s.type !== 'trace' && s.type !== 'multi' && !other && (!routeInfo || routeInfo.host !== s.host) && routeLoading !== s.host) {
       routeLoading = s.host;
       api('check', { host: s.host }).then((r) => { routeInfo = r; routeLoading = null; if (out.isConnected) drawStatus(lastStatus); }).catch(() => { routeLoading = null; });
     }
@@ -596,6 +598,7 @@ async function viewTests(main, r, bare = false) {
     if (s.state === 'idle') { put(); return; }
     if (s.type === 'freeze') { put(keyed(running ? notice('info', 'Идёт проба «Обрыв на 16 КБ»', 'Подбор можно запустить, когда она закончится.', h('a', { class: 'btn small', href: PAGES.frz[0] }, 'Открыть')) : null, 'other')); return; }
     if (s.type === 'cfg') { put(keyed(running ? notice('info', 'Идёт проверка чужих конфигов', 'Подбор можно запустить, когда она закончится.', h('a', { class: 'btn small', href: PAGES.cfg[0] }, 'Открыть')) : null, 'other')); return; }
+    if (other) { put(keyed(running ? notice('info', s.type === 'youtube' ? 'Идёт проверка YouTube' : 'Идёт проверка голоса Discord', 'Подбор можно запустить, когда она закончится.', h('a', { class: 'btn small', href: PAGES[s.type === 'youtube' ? 'yt' : 'voice'][0] }, 'Открыть')) : null, 'other')); return; }
     if ((s.type === 'trace') !== (tab === 'trace') && !running) { put(); return; }
     const head = running ? h('section', { class: 'panel', 'data-key': 'run' },
       h('div', { class: 'row' }, h('span', { class: 'spin' }), h('b', { text: `${s.type === 'trace' ? 'Трассировка' : s.type === 'multi' ? 'Подбор для' : 'Тест'} ${s.host}` }), h('span', { class: 'grow' }),
