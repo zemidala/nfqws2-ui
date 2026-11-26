@@ -1,6 +1,7 @@
 'use strict';
 
 const VOICE_PROFILE = 'Discord-голос';
+const VOICE_PROFILE_TCP = 'Discord-голос-TCP';
 const VOICE_UDP = [[19294, 19344], [50000, 65535]];
 
 async function viewVoice(main, r) {
@@ -39,28 +40,49 @@ async function viewVoice(main, r) {
       : c.ok ? row('ok', 'Через ваш конфиг', passText(c) + (p ? `, профиль #${p.index} «${profName(p)}»` : '')) : row('error', 'Через ваш конфиг', (b?.ok ? 'ломает голос: ' : 'не проходит: ') + (c.reason && !c.got ? c.reason : cutText(c)));
     const x = best(s);
     const tried = (s.results || []).length;
+    const done = s.state === 'done';
     const r3 = running && ['pick', 'confirm'].includes(s.phase) ? row('run', 'Настройка для голоса', `пробую ${s.current || '…'} — ${s.done} из ${s.total}`)
       : s.state === 'stopped' ? row('info', 'Настройка для голоса', tried ? `проверка остановлена после ${plural(tried, 'настройки', 'настроек', 'настроек')}` : 'не подбиралась')
       : s.state === 'error' ? row('error', 'Настройка для голоса', 'проверка прервалась')
-      : s.verdict === 'open' ? row('ok', 'Настройка для голоса', 'не нужна')
-      : s.verdict === 'works' ? row('ok', 'Настройка для голоса', 'не нужна — конфиг уже справляется')
-      : s.verdict === 'found' && x ? row('ok', 'Настройка для голоса', `${x.name} — поток шёл ${x.long.secs} с без обрыва`)
-      : s.verdict === 'none' ? row('error', 'Настройка для голоса', `ни одна из ${tried} не помогла`)
+      : done && s.udp_need === false || ['open', 'works'].includes(s.verdict) ? row('ok', 'Настройка для голоса', b?.ok ? 'не нужна' : 'не нужна — конфиг уже справляется')
+      : x ? row('ok', 'Настройка для голоса', `${x.name} — поток шёл ${x.long.secs} с без обрыва`)
+      : s.verdict === 'none' && tried ? row('error', 'Настройка для голоса', `ни одна из ${tried} не помогла`)
       : ['blocked', 'harm'].includes(s.verdict) ? row('info', 'Настройка для голоса', 'не подбиралась')
       : row('info', 'Настройка для голоса', 'подбирается, если голос режут');
-    return h('ul', { class: 'vc-checks' }, r1, r2, r3);
+    return h('ul', { class: 'vc-checks' }, r1, r2, r3, tcpRow(s, running, row));
+  }
+
+  function tcpRow(s, running, row) {
+    const t = s.tcp, T = 'Подключение (TCP)';
+    if (running && s.phase === 'tcp') return row('run', T, `пробую ${String(s.current || '…').replace(/^подключение \(TCP \d+\): /, '')} — ${s.done} из ${s.total}`);
+    if (!t) return row(running ? 'run' : 'info', T, running ? 'проверяю…' : 'не проверялось');
+    if (!t.ip) return row('info', T, 'не проверялось: discord.media идёт через podkop или не находится');
+    const ports = Object.keys(t.ports || {}).map(Number);
+    const baseClosed = ports.filter((p) => !t.ports[p].base);
+    const list = (a) => a.join(', ');
+    if (!t.closed?.length) {
+      return row('ok', T, baseClosed.length ? `discord.media: ${list(baseClosed)} без обхода закрыт, через ваш конфиг открывается` : `discord.media: порты ${list(ports)} открыты и без обхода`);
+    }
+    const byConf = t.closed.filter((p) => t.ports[p].base), byIsp = t.closed.filter((p) => !t.ports[p].base);
+    const head = 'discord.media: ' + [byIsp.length ? `${list(byIsp)} — закрыт без обхода и через конфиг` : null, byConf.length ? `${list(byConf)} — закрывает ваш конфиг` : null].filter(Boolean).join('; ');
+    if (t.best) return row('ok', T, `${head}. Подобрано: ${t.best.name}`);
+    if (t.results?.length) return row('error', T, `${head}. Ни одна из ${t.results.length} настроек не помогла`);
+    return row('error', T, head);
   }
 
   function note(s) {
     const p = voiceProf(s);
     const t = {
-      idle: 'Проверка займёт около 20 секунд. Если провайдер режет голос, роутер сам подберёт настройку — это ещё около двух минут.',
+      idle: 'Проверка займёт около 30 секунд. Если провайдер режет голос или подключение к голосовому серверу, роутер сам подберёт настройку — это ещё пара минут.',
       works: `Провайдер режет голосовой поток, но ваш конфиг его пропускает${p ? ` (профиль #${p.index} «${profName(p)}»)` : ''}. Если в звонке всё равно 5000 мс, напишите в группу: проверка видит только начало соединения.`,
       open: (p ? `Голос проходит и без обхода, и через ваш конфиг (профиль #${p.index} «${profName(p)}»).` : 'Без обхода голосовой поток идёт без обрыва, nfqws2 для него не нужен.') + ' Если в звонке проблемы, причина в другом: регион сервера, сеть устройства.',
       none: `Ни одна из ${(s.results || []).length} настроек не удержала голосовой поток. Возможно, провайдер режет голос по адресу, тогда поможет только туннель (podkop, VPN). Напишите в группу — набор настроек будет пополняться.`,
       blocked: 'Провайдер режет голосовой поток, и ваш конфиг его не пропускает. Подбор найдёт настройку, это около двух минут.',
       harm: 'Провайдер голос не режет, а через ваш конфиг поток замирает: стратегия UDP-профиля ему мешает. Подбор найдёт настройку, которая не мешает, это около двух минут.',
-      found: s.harm ? 'Провайдер голос не режет — его ломает ваш конфиг. Профиль «Discord-голос» заберёт пакеты голоса себе с настройкой, которая проходит.' : null,
+      found: s.harm ? 'Провайдер голос не режет — его ломает ваш конфиг. Профиль «Discord-голос» заберёт пакеты голоса себе с настройкой, которая проходит.'
+        : s.udp_need === false ? 'Голосовой поток проходит, но закрыто подключение к голосовому серверу по TCP: из-за этого Discord висит на «Подключении к RTC».' : null,
+      tcp_blocked: 'Голосовой поток проходит, но закрыто подключение к голосовому серверу по TCP: из-за этого Discord висит на «Подключении к RTC». Подбор найдёт настройку.',
+      tcp_none: `Голосовой поток проходит, а подключение к голосовому серверу по TCP не открыла ни одна из ${(s.tcp?.results || []).length} настроек. Напишите в группу — набор будет пополняться.`,
       unreachable: 'Сервер не ответил ни разу — ни без обхода, ни через конфиг. Проверьте адрес в «Сервер для проверки» или повторите позже.',
       stopped: 'Проверка остановлена.',
       error: s.error || 'Проверка прервалась. Повторите; если не выходит — пришлите «Отчёт для помощи».',
@@ -88,13 +110,16 @@ async function viewVoice(main, r) {
     const runBlock = running ? [h('div', { class: 'row' }, h('span', { class: 'spin' }), h('b', { text: 'Проверяю голос Discord' }), h('span', { class: 'grow' }),
       h('span', { class: 'sm muted num', text: s.total ? `${s.done} из ${s.total}` : 'запуск…' }), btn('Остановить', () => api('test_stop'), 'small danger', 'stop')),
       s.total ? h('div', { class: 'progress', style: 'height:6px;border-radius:99px;background:var(--soft);overflow:hidden' }, h('i', { style: `display:block;height:100%;width:${Math.round(s.done / s.total * 100)}%;background:var(--accent)` })) : null,
-      h('p', { class: 'sm muted', text: `Сейчас: ${s.current || 'запуск'}. ${s.pick && ['pick', 'confirm'].includes(s.phase) ? 'Всего около двух минут.' : 'Около 20 секунд.'}` })] : [];
+      h('p', { class: 'sm muted', text: `Сейчас: ${s.current || 'запуск'}. ${s.pick && ['pick', 'confirm', 'tcp'].includes(s.phase) ? 'Подбор занимает пару минут.' : 'Около 30 секунд.'}` })] : [];
+    const canEnable = s.state === 'done' && ['found', 'none'].includes(s.verdict) && !!(x || s.tcp?.best);
     const acts = running ? null : h('div', { class: 'vc-act' },
       s.state === 'idle' ? btn('Проверить голос', () => start(true), 'primary', 'play')
-        : s.verdict === 'found' && x ? [btn('Включить для голоса Discord', () => enable(x, s), 'primary', 'ok'), btn('Проверить ещё раз', () => start(true), '', 'refresh')]
-        : ['blocked', 'harm'].includes(s.verdict) && s.state === 'done' ? [btn('Подобрать настройку', () => start(true), 'primary', 'play'), btn('Проверить ещё раз', () => start(false), '', 'refresh')]
+        : canEnable ? [btn('Включить для голоса Discord', () => enable(x, s), 'primary', 'ok'), btn('Проверить ещё раз', () => start(true), '', 'refresh')]
+        : ['blocked', 'harm', 'tcp_blocked'].includes(s.verdict) && s.state === 'done' ? [btn('Подобрать настройку', () => start(true), 'primary', 'play'), btn('Проверить ещё раз', () => start(false), '', 'refresh')]
         : btn('Проверить ещё раз', () => start(true), '', 'refresh'));
-    const profNote = !running && s.verdict === 'found' && x ? h('p', { class: 'sm muted', text: 'Добавится профиль «Discord-голос» первым: UDP 19294–19344 и 50000–65535, только пакеты голоса Discord. Перед изменением делается снимок, nfqws2 перезапустится с проверкой и после этого голос проверится ещё раз.' }) : null;
+    const what = [x ? 'профиль «Discord-голос» первым: UDP 19294–19344 и 50000–65535, только пакеты голоса Discord' : null,
+      s.tcp?.best ? `профиль «${VOICE_PROFILE_TCP}» для discord.media на портах ${s.tcp.closed.join(', ')}` : null].filter(Boolean);
+    const profNote = !running && canEnable ? h('p', { class: 'sm muted', text: `Добавится ${what.join(', и ')}. Перед изменением делается снимок, nfqws2 перезапустится с проверкой и после этого голос проверится ещё раз.` }) : null;
     morphKids(box, [...runBlock.map((el, i) => keyed(el, 'run' + i)), keyed(rows(s, running), 'rows'), keyed(running ? null : note(s), 'note'),
       keyed(acts, 'acts'), keyed(profNote, 'prof'), keyed(running ? null : triedList(s), 'tried')].filter(Boolean));
   }
@@ -118,26 +143,38 @@ async function viewVoice(main, r) {
     poll();
   }
 
+  const portsAdd = (cur, want) => {
+    const list = (cur || '').split(',').map((t) => t.trim()).filter(Boolean);
+    const have = list.map((t) => t.split(/[:-]/).map(Number)).map(([a, b]) => [a, b || a]);
+    const add = want.filter(([a, b]) => !have.some(([x1, x2]) => a >= x1 && b <= x2)).map(([a, b]) => a === b ? `${a}` : `${a}:${b}`);
+    return add.length ? [...list, ...add].join(',') : null;
+  };
+
   async function enable(x, s) {
     await loadConf();
     const v = S.conf.vars;
     const vars = {};
-    const part = ['--name=' + VOICE_PROFILE, '--filter-udp=19294-19344,50000-65535', '--filter-l7=discord,stun', '--payload=discord_ip_discovery,stun', ...x.steps];
+    const tcp = s.tcp?.best ? s.tcp : null;
+    const parts = [x ? ['--name=' + VOICE_PROFILE, '--filter-udp=19294-19344,50000-65535', '--filter-l7=discord,stun', '--payload=discord_ip_discovery,stun', ...x.steps] : null,
+      tcp ? ['--name=' + VOICE_PROFILE_TCP, '--filter-tcp=' + tcp.closed.join(','), '--filter-l7=tls', '--hostlist-domains=discord.media', '--payload=tls_client_hello', ...tcp.best.steps] : null].filter(Boolean);
+    const names = parts.map((p) => p[0]);
     const cur = v.NFQWS_ARGS_CUSTOM.trim() ? splitParts(tokensOf(v.NFQWS_ARGS_CUSTOM)) : [];
-    const rest = cur.filter((p) => !p.includes('--name=' + VOICE_PROFILE));
-    vars.NFQWS_ARGS_CUSTOM = joinParts([part, ...rest]);
-    const udp = (v.UDP_PORTS || '').split(',').map((t) => t.trim()).filter(Boolean);
-    const have = udp.map((t) => t.split(/[:-]/).map(Number)).map(([a, b]) => [a, b || a]);
-    const add = VOICE_UDP.filter(([a, b]) => !have.some(([x1, x2]) => a >= x1 && b <= x2)).map(([a, b]) => `${a}:${b}`);
-    if (add.length) vars.UDP_PORTS = [...udp, ...add].join(',');
+    const rest = cur.filter((p) => !names.some((n) => p.includes(n)));
+    vars.NFQWS_ARGS_CUSTOM = joinParts([...parts, ...rest]);
+    const udpAdd = x ? portsAdd(v.UDP_PORTS, VOICE_UDP) : null;
+    const tcpAdd = tcp ? portsAdd(v.TCP_PORTS, tcp.closed.map((p) => [p, p])) : null;
+    if (udpAdd) vars.UDP_PORTS = udpAdd;
+    if (tcpAdd) vars.TCP_PORTS = tcpAdd;
     const replaced = rest.length !== cur.length;
-    if (!await ask(`${replaced ? 'Заменить' : 'Добавить'} профиль «${VOICE_PROFILE}» с настройкой «${x.name}»?\n\nОн встанет первым (#1) и возьмёт только пакеты голоса Discord на UDP 19294–19344 и 50000–65535.${add.length ? ' Эти порты добавятся в UDP_PORTS.' : ''}\n\nПосле сохранения nfqws2 перезапустится с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, всё вернётся как было. Потом голос проверится ещё раз.`, replaced ? 'Заменить профиль' : 'Включить')) return;
-    if (x.blob_host) {
+    const lines = [x ? `«${VOICE_PROFILE}» (${x.name}): только пакеты голоса Discord на UDP 19294–19344 и 50000–65535.` : null,
+      tcp ? `«${VOICE_PROFILE_TCP}» (${tcp.best.name}): только discord.media на TCP ${tcp.closed.join(', ')}.` : null].filter(Boolean);
+    if (!await ask(`${replaced ? 'Заменить' : 'Добавить'} ${parts.length > 1 ? 'профили' : 'профиль'} для голоса Discord?\n\n${lines.join('\n')} ${parts.length > 1 ? 'Они встанут первыми' : 'Он встанет первым'} в списке профилей.${udpAdd || tcpAdd ? ' Недостающие порты добавятся в UDP_PORTS и TCP_PORTS.' : ''}\n\nПосле сохранения nfqws2 перезапустится с проверкой: если сайты перестанут открываться или вы не подтвердите за 3 минуты, всё вернётся как было. Потом голос проверится ещё раз.`, replaced ? 'Заменить' : 'Включить')) return;
+    if (x?.blob_host) {
       const b = await guarded(() => api('voice_blob', { host: x.blob_host }));
       if (!b) return;
       if (!tokensOf(v.NFQWS_BASE_ARGS).some((t) => t.startsWith(`--blob=${b.name}:`))) vars.NFQWS_BASE_ARGS = [...tokensOf(v.NFQWS_BASE_ARGS), b.decl].join('\n');
     }
-    if (!await saveVars(vars, `голос Discord: ${x.name}`)) return;
+    if (!await saveVars(vars, `голос Discord: ${[x?.name, tcp?.best.name].filter(Boolean).join(', ')}`)) return;
     if (!await safeRestart()) return;
     if (await guarded(() => api('voice_start', { server: serverIn.value.trim(), pick: false })) && box.isConnected) poll();
   }

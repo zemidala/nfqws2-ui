@@ -9,6 +9,9 @@ const VOICE_GAP_MS = 50;
 const VOICE_CONFIRM = 2;
 const VOICE_CONFIRM_TRIES = 4;
 const VOICE_STUN = '0x000100002112a442766f6963652d636865636b21';
+const VOICE_TCP_HOST = 'discord.media';
+const VOICE_TCP_SNI = 'frankfurt1.discord.media';
+const VOICE_TCP_PORTS = [443, 2053, 2083, 2087, 2096, 8443];
 const VOICE_QUIC_NAMES = ['rutube.ru', 'lemana.pro', 'vk.com', 'ya.ru'];
 define('VOICE_FILE', UI_CONF_DIR . '/voice.json');
 
@@ -144,9 +147,9 @@ function voiceProbe(string $ip, int $port, int $secs): array
   return $r + ['ok' => true, 'reason' => null];
 }
 
-function voicePortCovered(int $port): bool
+function voicePortCovered(int $port, string $var = 'UDP_PORTS'): bool
 {
-  foreach (explode(',', (string)(confValues()['UDP_PORTS'] ?? '')) as $r) {
+  foreach (explode(',', (string)(confValues()[$var] ?? '')) as $r) {
     $ab = array_map('intval', preg_split('/[:-]/', trim($r)));
     if (trim($r) !== '' && $port >= $ab[0] && $port <= ($ab[1] ?? $ab[0])) {
       return true;
@@ -164,29 +167,39 @@ function voiceJob(array $job, array &$status, ?array &$nfq, string $iface, array
   $own = $job['own'] ?? [];
   $status['total'] = 2 + ($status['pick'] ? count(voiceCandidates($baseArgs, array_combine(VOICE_QUIC_NAMES, array_map(fn($h) => [voiceBlobName($h)], VOICE_QUIC_NAMES)), $own)) + VOICE_CONFIRM : 0);
   $finish = function (string $verdict) use (&$status) {
+    $status['total'] = $status['done'];
     $stopped = is_file(TEST_DIR . '/stop');
     $status['verdict'] = $stopped ? 'stopped' : $verdict;
     $status['state'] = $stopped ? 'stopped' : 'done';
     $status['finished'] = time();
     $status['current'] = null;
     testSaveStatus($status);
-    putSafe(VOICE_FILE, json_encode(array_intersect_key($status, array_flip(['state', 'started', 'finished', 'server', 'verdict', 'harm', 'baseline', 'config', 'results'])), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
+    putSafe(VOICE_FILE, json_encode(array_intersect_key($status, array_flip(['state', 'started', 'finished', 'server', 'verdict', 'harm', 'baseline', 'config', 'results', 'tcp', 'udp_need', 'tcp_need'])), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES));
   };
+
+  $tcpIp = voiceTcpIp();
+  $tcp = ['ip' => $tcpIp, 'ports' => []];
 
   $status['phase'] = 'baseline';
   $status['current'] = 'голос без обхода';
   testSaveStatus($status);
   testRules('bypass', $iface);
   $status['baseline'] = voiceProbe($ip, $port, VOICE_PROBE_SECS);
+  foreach ($tcpIp ? VOICE_TCP_PORTS : [] as $p) {
+    $tcp['ports'][$p] = ['base' => voiceTcpProbe($tcpIp, $p)];
+  }
   $status['done'] = 1;
 
   $status['phase'] = 'config';
   $status['current'] = 'голос через ваш конфиг';
   testSaveStatus($status);
   testRules('queue', $iface);
-  if (!voicePortCovered($port)) {
-    $status['config'] = ['ok' => false, 'uncovered' => true, 'got' => 0, 'reason' => "порт $port не входит в UDP_PORTS, nfqws2 голос не обрабатывает"];
-  } else {
+  $udpCovered = voicePortCovered($port);
+  foreach ($tcp['ports'] as $p => &$t) {
+    $t['covered'] = voicePortCovered($p, 'TCP_PORTS');
+  }
+  unset($t);
+  if ($udpCovered || array_filter($tcp['ports'], fn($t) => $t['covered'])) {
     $args = $baseArgs;
     foreach (array_column(expectedProfiles(confValues()), 'tokens') as $k => $pt) {
       if ($k > 0) {
@@ -201,18 +214,36 @@ function voiceJob(array $job, array &$status, ?array &$nfq, string $iface, array
       testSaveStatus($status);
       return;
     }
-    $status['config'] = voiceProbe($ip, $port, VOICE_PROBE_SECS);
-    testNfqwsStop($nfq);
-    $nfq = null;
   }
+  $status['config'] = $udpCovered ? voiceProbe($ip, $port, VOICE_PROBE_SECS)
+    : ['ok' => false, 'uncovered' => true, 'got' => 0, 'reason' => "порт $port не входит в UDP_PORTS, nfqws2 голос не обрабатывает"];
+  foreach ($tcp['ports'] as $p => &$t) {
+    $t['conf'] = $t['covered'] ? voiceTcpProbe($tcpIp, $p) : $t['base'];
+  }
+  unset($t);
+  testNfqwsStop($nfq);
+  $nfq = null;
+  $tcp['closed'] = array_keys(array_filter($tcp['ports'], fn($t) => !$t['conf']));
+  $status['tcp'] = $tcp;
   $status['done'] = 2;
-  if ($status['config']['ok'] || ($status['baseline']['ok'] && !empty($status['config']['uncovered']))) {
+  $udpOk = $status['config']['ok'] || ($status['baseline']['ok'] && !empty($status['config']['uncovered']));
+  $status['udp_need'] = !$udpOk;
+  $status['tcp_need'] = (bool)$tcp['closed'];
+  if ($udpOk && !$tcp['closed']) {
     $finish($status['baseline']['ok'] ? 'open' : 'works');
     return;
   }
-  $status['harm'] = $status['baseline']['ok'];
+  $status['harm'] = !$udpOk && $status['baseline']['ok'];
   if (!$status['pick'] || is_file(TEST_DIR . '/stop')) {
-    $finish($status['harm'] ? 'harm' : ($status['baseline']['got'] === 0 && empty($status['config']['got']) ? 'unreachable' : 'blocked'));
+    $finish($udpOk ? 'tcp_blocked' : ($status['harm'] ? 'harm' : ($status['baseline']['got'] === 0 && empty($status['config']['got']) ? 'unreachable' : 'blocked')));
+    return;
+  }
+  if ($tcp['closed']) {
+    $status['total'] = ($udpOk ? $status['done'] : $status['total']) + count(STD_TLS);
+    voiceTcpPick($status, $nfq, $baseArgs, $tcpIp, $tcp['closed']);
+  }
+  if ($udpOk) {
+    $finish(!empty($status['tcp']['best']) ? 'found' : 'tcp_none');
     return;
   }
 
@@ -222,7 +253,8 @@ function voiceJob(array $job, array &$status, ?array &$nfq, string $iface, array
   $blobs = voiceQuicBlobs($baseArgs);
   $baseArgs = array_merge($baseArgs, array_values(array_filter(array_column($blobs, 1))));
   $cands = voiceCandidates($baseArgs, $blobs, $own);
-  $status['total'] = 2 + count($cands) + VOICE_CONFIRM;
+  $status['total'] = $status['done'] + count($cands) + VOICE_CONFIRM;
+  $status['phase'] = 'pick';
   $status['results'] = [];
   foreach ($cands as $c) {
     if (is_file(TEST_DIR . '/stop')) {
@@ -264,6 +296,60 @@ function voiceJob(array $job, array &$status, ?array &$nfq, string $iface, array
   unset($r);
   $status['total'] = $status['done'];
   $finish(array_filter($status['results'], fn($r) => $r['ok'] && isset($r['long'])) ? 'found' : 'none');
+}
+
+function voiceTcpIp(): ?string
+{
+  $d = diagDns(VOICE_TCP_HOST);
+  foreach ($d['status'] === 'podkop' ? [] : $d['ips'] ?? [] as $ip) {
+    if (isIp4($ip) && !ipReserved($ip) && !str_starts_with($ip, '198.18.') && !str_starts_with($ip, '198.19.')) {
+      return $ip;
+    }
+  }
+  return null;
+}
+
+function voiceTcpProbe(string $ip, int $port): bool
+{
+  [$lo, $hi] = array_map('intval', explode(':', TEST_PORTS));
+  $h = VOICE_TCP_SNI;
+  exec('curl -4 -sk -o /dev/null --local-port ' . mt_rand($lo, $hi - 50) . '-' . $hi . " --connect-timeout 4 -m 6 --resolve $h:$port:" . escapeshellarg($ip)
+    . " -w '%{time_appconnect}' " . escapeshellarg("https://$h:$port/") . ' 2>/dev/null', $o, $rc);
+  return (float)trim(implode('', $o)) > 0;
+}
+
+function voiceTcpPick(array &$status, ?array &$nfq, array $baseArgs, string $ip, array $closed): void
+{
+  $status['phase'] = 'tcp';
+  $status['tcp']['results'] = [];
+  $port = $closed[0];
+  foreach (STD_TLS as [$name, $steps]) {
+    if (is_file(TEST_DIR . '/stop')) {
+      return;
+    }
+    $status['current'] = "подключение (TCP $port): $name";
+    testSaveStatus($status);
+    $nfq = testNfqwsStart(array_merge($baseArgs, ['--filter-tcp=' . implode(',', $closed), '--filter-l7=tls', '--payload=tls_client_hello'], $steps));
+    $ok = false;
+    if ($nfq) {
+      $ok = true;
+      foreach ($closed as $p) {
+        for ($i = 0; $i < 2 && $ok; $i++) {
+          $ok = voiceTcpProbe($ip, $p);
+        }
+      }
+    }
+    testNfqwsStop($nfq);
+    $nfq = null;
+    $status['tcp']['results'][] = ['name' => $name, 'steps' => $steps, 'ok' => $ok];
+    $status['done']++;
+    if ($ok) {
+      $status['tcp']['best'] = ['name' => $name, 'steps' => $steps];
+      $status['total'] -= count(STD_TLS) - count($status['tcp']['results']);
+      testSaveStatus($status);
+      return;
+    }
+  }
 }
 
 function voiceLast(): array
