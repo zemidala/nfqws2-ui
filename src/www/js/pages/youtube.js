@@ -135,10 +135,15 @@ async function viewYoutube(main) {
         : again);
     const profNote = canEnable ? h('p', { class: 'sm muted', text: `Добавится профиль «${YT_PROFILE}» первым: TCP 443, только адреса из списка ${YT_LIST} (сейчас ${s.profile.ips.length}). Перед изменением делается снимок, nfqws2 перезапустится с проверкой, и адреса проверятся ещё раз. QUIC профиль не касается: если браузер ходит к YouTube по QUIC и ваш конфиг его не обрабатывает, ролики пойдут мимо профиля.` }) : null;
     const hint = !running && k !== 'tunnel' && !(s.recorded?.nodes || []).length
-      ? [notice('info', 'Узлов видео из записи нет', 'Проверены только постоянные адреса YouTube. Чтобы проверить серверы, с которых идёт видео: «Соединения устройства» → устройство → «Записать», включите ролик на 30 секунд, затем вернитесь сюда.'),
+      ? [notice('info', 'Узлов видео из записи нет', 'Проверены только постоянные адреса YouTube. Чтобы проверить серверы, с которых идёт видео: «Соединения устройства» → устройство → «Записать», включите ролик на 30 секунд, затем вернитесь сюда и нажмите «Проверить ещё раз».'),
         h('div', { class: 'vc-act' }, btn('Открыть «Соединения устройства»', () => { location.hash = PAGES.conns[0]; }, '', 'pulse'))] : [];
+    const checked = new Set((s.targets || []).map((t) => t.ip));
+    const fresh = (s.recorded?.nodes || []).filter((n) => !checked.has(n.ip));
+    const freshNote = !running && s.targets?.length && fresh.length
+      ? [notice('info', `В записи ${plural(fresh.length, 'узел', 'узла', 'узлов')} видео, ещё не проверены`, 'Проверка возьмёт их вместе с постоянными адресами YouTube.'),
+        h('div', { class: 'vc-act' }, btn('Проверить узлы', () => start(true), '', 'refresh'))] : [];
     morphKids(box, [...runBlock.map((el, i) => keyed(el, 'run' + i)), keyed(rows(s, k), 'rows'), keyed(running ? null : head(s, k), 'head'),
-      keyed(acts, 'acts'), keyed(profNote, 'prof'), ...hint.map((el, i) => keyed(el, 'hint' + i)), keyed(addrList(s), 'addr'), keyed(running ? null : triedList(s), 'tried')].filter(Boolean));
+      ...freshNote.map((el, i) => keyed(el, 'fresh' + i)), keyed(acts, 'acts'), keyed(profNote, 'prof'), ...hint.map((el, i) => keyed(el, 'hint' + i)), keyed(addrList(s), 'addr'), keyed(running ? null : triedList(s), 'tried')].filter(Boolean));
   }
 
   async function start(pick) {

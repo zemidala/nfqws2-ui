@@ -142,7 +142,7 @@ async function viewConns(main) {
     const name = (f) => f.names?.[0];
     const pickable = (f) => !s.running && name(f) && f.proto === 'tcp' && [80, 443].includes(f.dport) && bad(f) && !f.podkop;
     const voiceRow = (f) => !s.running && f.proto === 'udp' && !f.podkop && bad(f) && (f.l7 === 'discord' || /^(CLOUDFLARENET|DISCORD)/.test(f.as_name || '') && ((f.dport >= 19294 && f.dport <= 19344) || f.dport >= 50000));
-    const ytRow = (f) => pickable(f) && /(^|\.)(googlevideo\.com|youtube\.com|ytimg\.com|ggpht\.com)$/.test(name(f));
+    const ytRow = (f) => !s.running && f.proto === 'tcp' && f.dport === 443 && !f.podkop && /(^|\.)(googlevideo\.com|youtube\.com|ytimg\.com|ggpht\.com)$/.test(name(f) || '');
     const pickLink = (f) => { const u = pickHref(name(f)); return f.dport === 80 ? u + (u.includes('?') ? '&' : '?') + 'proto=http' : u; };
     // the site's name over its address; without a name — the network, without that — the address alone
     const tbl = h('div', { class: 'conn-box' }, h('table', { class: 'conn-b' },
