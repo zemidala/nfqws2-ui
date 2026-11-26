@@ -64,7 +64,14 @@ export const test = base.extend({
       },
       // вызов API интерфейса из браузера (с той же сессией)
       // (запросом Playwright: cookie та же, открытая страница не нужна, подмены ответов на него не действуют)
-      api: async (cmd, data = {}) => (await page.request.post(baseURL + 'api.php', { data: { cmd, ...data } })).json(),
+      api: async (cmd, data = {}) => {
+        const post = () => page.request.post(baseURL + 'api.php', { data: { cmd, ...data } });
+        try { return (await post()).json(); } catch (e) {
+          if (!/ECONNRESET|socket hang up/.test(String(e))) throw e;
+          await page.waitForTimeout(1000);
+          return (await post()).json();
+        }
+      },
       // own confirm window of the interface (ask()): wait for it, return its text and press the main button
       async yes() {
         const m = page.locator('.modal.ask').last();
